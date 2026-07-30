@@ -1395,9 +1395,13 @@ async def 명령어(ctx):
 `!도감` `!도감 장비/펫/몬스터` `!도감보상` `!튜토리얼`
 `!서버설정` `!퀴즈알림설정` `!퀴즈알림상태` `!퀴즈알림해제`
 
-🔹 **도박**
-`!탐색 왼쪽/오른쪽 배팅액`
-`!주파수 배팅액` `!룰렛 배팅액` `!파산신청`
+🔹 **도박 / 알바 / 실시간 암시장**
+`!탐색 왼쪽/오른쪽 배팅액` `!주파수 배팅액` `!룰렛 배팅액` `!파산신청`
+`!도박잔액` `!알바` `!코인` `!도박정보`
+`!시세` `!매수 일반 10` `!매도 일반 전부` `!자산` `!암시장기록`
+`!암시장알림설정 [@역할]` `!암시장알림상태` `!암시장알림해제`
+슬래시: `/도박잔액` `/알바` `/코인` `/암시장 시세/매수/매도/자산/기록/도움말/알림설정/알림상태/알림해제`
+※ 도박 배팅 범위는 100~10,000,000 식량이며, 시세는 전 서버 공통으로 1분마다 변동합니다.
 
 🔹 **관리자**
 `!가방조회 @유저` `!식량지급 @유저 금액`
@@ -4012,6 +4016,18 @@ from apocalypse_bot.commands.v33_story import register_v33_commands
 register_v33_commands(
     bot, get_user, check_registered, save_data, world_data,
     get_max_hp, add_title,
+)
+
+# V3.6: 실시간 변동 암시장 + 도박 안내
+from apocalypse_bot.commands.v36_gambling_market import register_v36_commands
+register_v36_commands(
+    bot, get_user, check_registered, save_data, world_data, progress_quest,
+)
+
+# V3.7: 도박 연출/잔액 통계 + 알바 + 희귀 코인 + 암시장 자동 알림
+from apocalypse_bot.commands.v37_gambling_experience import register_v37_commands
+register_v37_commands(
+    bot, get_user, check_registered, save_data, world_data, progress_quest,
 )
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
