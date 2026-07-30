@@ -1017,6 +1017,18 @@ def format_seconds(seconds):
 
 MATERIALS = ["철조각", "화약", "전자부품", "생체조직", "에너지코어", "고대파편"]
 
+# 던전 기본 재료 전용 드롭 테이블.
+# V2.1 모듈이 MATERIALS에 강화석 계열 재료를 추가하므로,
+# 고정 길이 weights와 공유 목록을 함께 사용하면 개수가 달라질 수 있다.
+DUNGEON_MATERIAL_DROP_WEIGHTS = {
+    "철조각": 35,
+    "화약": 25,
+    "전자부품": 20,
+    "생체조직": 12,
+    "에너지코어": 6,
+    "고대파편": 2,
+}
+
 CRAFT_RECIPES = {
     "응급키트": {"철조각": 2, "생체조직": 1},
     "수제석궁": {"철조각": 4, "전자부품": 1},
@@ -1066,11 +1078,14 @@ def random_materials(difficulty):
     }
     count = random.randint(*table[difficulty])
     gained = {}
+    material_names = list(DUNGEON_MATERIAL_DROP_WEIGHTS)
+    material_weights = list(DUNGEON_MATERIAL_DROP_WEIGHTS.values())
+
     for _ in range(count):
         material = random.choices(
-            MATERIALS,
-            weights=[35, 25, 20, 12, 6, 2],
-            k=1
+            material_names,
+            weights=material_weights,
+            k=1,
         )[0]
         gained[material] = gained.get(material, 0) + 1
     return gained
@@ -1477,7 +1492,8 @@ async def 명령어(ctx):
 🔹 **스토리 / 도감 / 서버 설정**
 `!스토리` `!스토리 시작` `!스토리 선택 번호` `!스토리 기록` `!스토리 재시작`
 `!도감` `!도감 장비/펫/몬스터` `!도감보상` `!튜토리얼`
-`!서버설정` `!퀴즈알림설정` `!퀴즈알림상태` `!퀴즈알림해제`
+`!서버설정` `!서버세팅 미리보기/실행/상태/취소`
+`!퀴즈알림설정` `!퀴즈알림상태` `!퀴즈알림해제`
 
 🔹 **BLACK CASINO / 도박 / 금융**
 `!카지노` `!카지노환전 구매/판매 금액` `!블랙잭` `!하이로우` `!슬롯` `!다이스` `!바카라`
@@ -4139,6 +4155,11 @@ from apocalypse_bot.commands.v40_finance import register_v40_finance_commands
 register_v40_finance_commands(
     bot, get_user, check_registered, save_data,
 )
+
+# V4.0.3: 관리자 전용 서버 자동 꾸미기
+# prefix 전용이라 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
+from apocalypse_bot.commands.v403_server_builder import register_v403_server_builder
+register_v403_server_builder(bot, world_data, save_data)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
