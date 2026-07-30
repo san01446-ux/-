@@ -25,7 +25,7 @@ load_dotenv()
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-DATA_FILE = os.getenv("DATA_FILE", "/var/data/survival_data.json")
+DATA_FILE = os.getenv("DATA_FILE", "survival_data.json")
 CORRECT_PASSWORD = "생존자"
 MAX_MESSAGE_LENGTH = 1900
 
@@ -61,13 +61,19 @@ world_data = data["world"]
 
 
 def save_data():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+    directory = os.path.dirname(DATA_FILE)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    temp_file = f"{DATA_FILE}.tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
         json.dump(
             {"users": user_data, "world": world_data},
             f,
             ensure_ascii=False,
             indent=4
         )
+    os.replace(temp_file, DATA_FILE)
 
 
 def default_user():
@@ -100,6 +106,7 @@ def default_user():
         "market_history": [],
         "pet": None,
         "pet_level": 1,
+        "pet_collection": {},
         "materials": {},
         "title": "신입 생존자",
         "titles": ["신입 생존자"],
@@ -234,6 +241,36 @@ def migrate_user(u):
         u["story"]["claimed_rewards"] = []
     if not isinstance(u.get("market_history"), list):
         u["market_history"] = []
+
+    # V3.5 펫 동료 시스템: 기존 단일 펫 데이터를 컬렉션 형태로 자동 이전합니다.
+    if not isinstance(u.get("pet_collection"), dict):
+        u["pet_collection"] = {}
+    active_pet = u.get("pet")
+    if active_pet:
+        record = u["pet_collection"].setdefault(active_pet, {})
+        record.setdefault("level", max(1, int(u.get("pet_level", 1) or 1)))
+        record.setdefault("exp", 0)
+        record.setdefault("friendship", 0)
+        record.setdefault("evolution", 0)
+        record.setdefault("last_feed", "")
+        record.setdefault("last_adventure", "")
+    for pet_name, record in list(u["pet_collection"].items()):
+        if not isinstance(record, dict):
+            record = {}
+            u["pet_collection"][pet_name] = record
+        record.setdefault("level", 1)
+        record.setdefault("exp", 0)
+        record.setdefault("friendship", 0)
+        record.setdefault("evolution", 0)
+        record.setdefault("last_feed", "")
+        record.setdefault("last_adventure", "")
+        record["level"] = max(1, int(record.get("level", 1) or 1))
+        record["exp"] = max(0, int(record.get("exp", 0) or 0))
+        record["friendship"] = max(0, int(record.get("friendship", 0) or 0))
+        record["evolution"] = max(0, min(2, int(record.get("evolution", 0) or 0)))
+    if active_pet and active_pet in u["pet_collection"]:
+        u["pet_level"] = u["pet_collection"][active_pet]["level"]
+
     if not isinstance(u.get("materials"), dict):
         u["materials"] = {}
     for material in ["강화석", "강화보호권", "옵션재설정권"]:
@@ -499,7 +536,7 @@ def calculate_user_power(u):
             power += bonus
 
     if u.get("pet"):
-        power += PET_DB[u["pet"]]["power"] + (u.get("pet_level", 1) - 1) * 2
+        power += get_pet_power(u)
 
     job_name = u.get("job")
     if job_name in JOBS:
@@ -698,14 +735,209 @@ GREETINGS = [
 # 펫 / 제작 / 업적 / 칭호
 # =========================================================
 PET_DB = {
-    "폐허쥐": {"price": 5000, "power": 3, "desc": "재료를 잘 찾아오는 작은 쥐"},
-    "정찰까마귀": {"price": 12000, "power": 7, "desc": "적의 위치를 먼저 발견"},
-    "군견제로": {"price": 25000, "power": 13, "desc": "군부대 출신의 충직한 군견"},
-    "변이살쾡이": {"price": 50000, "power": 22, "desc": "조용하고 치명적인 포식자"},
-    "미니드론": {"price": 90000, "power": 34, "desc": "자동 사격이 가능한 소형 드론"},
-    "어린하이드라": {"price": 200000, "power": 55, "desc": "재생 능력을 지닌 희귀 생물"},
-    "공허의새끼용": {"price": 500000, "power": 90, "desc": "공간 에너지를 먹고 자라는 용"},
+    "폐허쥐": {
+        "emoji": "🐀", "rarity": "일반", "price": 5000, "power": 3,
+        "desc": "재료 냄새를 기가 막히게 찾아내는 작은 생존 동료",
+        "skill": "수집 본능",
+        "skill_desc": "던전 승리 시 추가 재료를 발견할 확률이 증가합니다.",
+        "evolutions": ["폐허쥐", "철니 폐허쥐", "군체의 왕"],
+        "bonuses": {"material": 0.12},
+    },
+    "정찰까마귀": {
+        "emoji": "🐦‍⬛", "rarity": "고급", "price": 12000, "power": 7,
+        "desc": "높은 곳에서 적의 빈틈과 이동 경로를 먼저 찾아냅니다.",
+        "skill": "급소 탐지",
+        "skill_desc": "던전 전투의 치명타 확률이 증가합니다.",
+        "evolutions": ["정찰까마귀", "야간정찰 까마귀", "검은 감시자"],
+        "bonuses": {"crit": 0.04},
+    },
+    "군견제로": {
+        "emoji": "🐕", "rarity": "희귀", "price": 25000, "power": 13,
+        "desc": "군부대 출신의 충직한 군견. 전투 중 주인을 끝까지 지킵니다.",
+        "skill": "전투 지원",
+        "skill_desc": "던전 승리 확률이 소폭 증가합니다.",
+        "evolutions": ["군견제로", "강화군견 제로", "전쟁견 제로"],
+        "bonuses": {"victory": 0.04},
+    },
+    "변이살쾡이": {
+        "emoji": "🐈", "rarity": "영웅", "price": 50000, "power": 22,
+        "desc": "소리 없이 움직이며 치명적인 공격을 피하게 돕는 포식자",
+        "skill": "그림자 보행",
+        "skill_desc": "던전 전투의 회피 확률이 증가합니다.",
+        "evolutions": ["변이살쾡이", "그림자 살쾡이", "야수왕"],
+        "bonuses": {"dodge": 0.05},
+    },
+    "미니드론": {
+        "emoji": "🤖", "rarity": "전설", "price": 90000, "power": 34,
+        "desc": "전투 기록을 분석하고 가치 있는 보급품을 선별하는 소형 드론",
+        "skill": "보급 분석",
+        "skill_desc": "던전에서 획득하는 식량 보상이 증가합니다.",
+        "evolutions": ["미니드론", "전투드론", "오메가 드론"],
+        "bonuses": {"reward": 0.08},
+    },
+    "어린하이드라": {
+        "emoji": "🐍", "rarity": "신화", "price": 200000, "power": 55,
+        "desc": "재생 능력을 나누어 주인의 상처를 조금씩 회복시킵니다.",
+        "skill": "재생 세포",
+        "skill_desc": "던전 승리 후 잃은 HP를 일부 회복합니다.",
+        "evolutions": ["어린하이드라", "삼두 하이드라", "재생의 군주"],
+        "bonuses": {"heal": 4},
+    },
+    "공허의새끼용": {
+        "emoji": "🐉", "rarity": "초월", "price": 500000, "power": 90,
+        "desc": "공간 에너지를 먹고 자라며 전투와 탐색 전반을 강화하는 희귀 용",
+        "skill": "공허 공명",
+        "skill_desc": "치명타, 회피, 보상, 재료 발견과 회복을 모두 강화합니다.",
+        "evolutions": ["공허의새끼용", "공허의 비룡", "차원룡"],
+        "bonuses": {"crit": 0.03, "dodge": 0.03, "reward": 0.05, "material": 0.08, "heal": 3, "victory": 0.02},
+    },
 }
+
+PET_MAX_LEVEL = 50
+PET_MAX_EVOLUTION = 2
+PET_FEED_COOLDOWN_MINUTES = 30
+PET_ADVENTURE_COOLDOWN_MINUTES = 60
+PET_RARITY_ORDER = {"일반": 1, "고급": 2, "희귀": 3, "영웅": 4, "전설": 5, "신화": 6, "초월": 7}
+
+
+def _new_pet_record(level=1):
+    return {
+        "level": max(1, int(level or 1)),
+        "exp": 0,
+        "friendship": 0,
+        "evolution": 0,
+        "last_feed": "",
+        "last_adventure": "",
+    }
+
+
+def _parse_pet_time(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def ensure_pet_collection(u):
+    collection = u.setdefault("pet_collection", {})
+    if not isinstance(collection, dict):
+        collection = {}
+        u["pet_collection"] = collection
+
+    active = u.get("pet")
+    if active:
+        record = collection.setdefault(active, _new_pet_record(u.get("pet_level", 1)))
+        if not isinstance(record, dict):
+            record = _new_pet_record(u.get("pet_level", 1))
+            collection[active] = record
+        record["level"] = max(int(record.get("level", 1) or 1), int(u.get("pet_level", 1) or 1))
+
+    for name, record in list(collection.items()):
+        if not isinstance(record, dict):
+            record = _new_pet_record()
+            collection[name] = record
+        defaults = _new_pet_record(record.get("level", 1))
+        for key, value in defaults.items():
+            record.setdefault(key, value)
+        record["level"] = max(1, min(PET_MAX_LEVEL, int(record.get("level", 1) or 1)))
+        record["exp"] = max(0, int(record.get("exp", 0) or 0))
+        record["friendship"] = max(0, int(record.get("friendship", 0) or 0))
+        record["evolution"] = max(0, min(PET_MAX_EVOLUTION, int(record.get("evolution", 0) or 0)))
+
+    if active and active not in PET_DB:
+        u["pet"] = None
+        u["pet_level"] = 1
+    elif active and active in collection:
+        u["pet_level"] = collection[active]["level"]
+    return collection
+
+
+def get_pet_record(u, pet_name=None):
+    collection = ensure_pet_collection(u)
+    name = pet_name or u.get("pet")
+    if not name or name not in collection or name not in PET_DB:
+        return None, None
+    return name, collection[name]
+
+
+def get_pet_display_name(pet_name, record):
+    info = PET_DB.get(pet_name, {})
+    evolutions = info.get("evolutions", [pet_name])
+    stage = max(0, min(len(evolutions) - 1, int(record.get("evolution", 0) or 0)))
+    return evolutions[stage]
+
+
+def get_pet_power(u, pet_name=None):
+    name, record = get_pet_record(u, pet_name)
+    if not name:
+        return 0
+    info = PET_DB[name]
+    level = record["level"]
+    evolution = record["evolution"]
+    evolution_bonus = int(info["power"] * 0.35 * evolution) + evolution * 5
+    return info["power"] + (level - 1) * 2 + evolution_bonus
+
+
+def get_pet_bonuses(u):
+    name, record = get_pet_record(u)
+    empty = {"crit": 0.0, "dodge": 0.0, "reward": 0.0, "material": 0.0, "heal": 0, "victory": 0.0}
+    if not name:
+        return empty
+
+    level = record["level"]
+    evolution = record["evolution"]
+    scale = 1.0 + (level - 1) * 0.012 + evolution * 0.25
+    raw = PET_DB[name].get("bonuses", {})
+    result = empty.copy()
+    for key in ["crit", "dodge", "reward", "material", "victory"]:
+        result[key] = min(0.25, float(raw.get(key, 0)) * scale)
+    result["heal"] = max(0, int(float(raw.get("heal", 0)) * scale))
+    # 모든 펫은 성장에 따라 아주 작은 기본 회피 보너스를 얻습니다.
+    result["dodge"] = min(0.25, result["dodge"] + min(0.05, level * 0.001))
+    return result
+
+
+def pet_exp_required(level):
+    return 60 + max(1, int(level)) * 20
+
+
+def gain_pet_exp(u, amount):
+    name, record = get_pet_record(u)
+    if not name or amount <= 0:
+        return 0
+
+    record["exp"] += int(amount)
+    level_ups = 0
+    while record["level"] < PET_MAX_LEVEL:
+        required = pet_exp_required(record["level"])
+        if record["exp"] < required:
+            break
+        record["exp"] -= required
+        record["level"] += 1
+        level_ups += 1
+    if record["level"] >= PET_MAX_LEVEL:
+        record["level"] = PET_MAX_LEVEL
+        record["exp"] = 0
+    u["pet_level"] = record["level"]
+    return level_ups
+
+
+def pet_cooldown_remaining(record, key, minutes):
+    last = _parse_pet_time(record.get(key))
+    if not last:
+        return 0
+    remaining = int((last + timedelta(minutes=minutes) - datetime.now()).total_seconds())
+    return max(0, remaining)
+
+
+def format_seconds(seconds):
+    if seconds <= 0:
+        return "사용 가능"
+    minutes, seconds = divmod(seconds, 60)
+    return f"{minutes}분 {seconds}초"
+
 
 MATERIALS = ["철조각", "화약", "전자부품", "생체조직", "에너지코어", "고대파편"]
 
@@ -1148,7 +1380,9 @@ async def 명령어(ctx):
 `!파티사냥` `!파티탈퇴`
 
 🔹 **펫**
-`!펫상점` `!펫구매 펫이름` `!펫정보` `!펫훈련`
+`!펫` `!펫상점` `!펫구매 펫이름` `!펫목록` `!펫장착 펫이름`
+`!펫정보 [펫이름]` `!펫훈련` `!펫먹이` `!펫모험` `!펫진화`
+슬래시: `/펫 정보/상점/구매/목록/장착/훈련/먹이/모험/진화`
 
 🔹 **퀘스트 / 시즌패스 / 업적**
 `!일일퀘스트` `!퀘스트보상`
@@ -1179,7 +1413,11 @@ async def 정보(ctx):
     u = get_user(ctx.author.id)
     total_power = calculate_user_power(u)
     inv_count = len(u["inventory"])
-    pet = u["pet"] or "없음"
+    active_pet_name, active_pet_record = get_pet_record(u)
+    pet = (
+        f"{get_pet_display_name(active_pet_name, active_pet_record)} Lv.{active_pet_record['level']}"
+        if active_pet_name else "없음"
+    )
     job_name = u.get("job") or "미선택"
     job_emoji = JOBS.get(job_name, {}).get("emoji", "👤")
     refresh_vitals(u)
@@ -1199,7 +1437,7 @@ async def 정보(ctx):
         f"⚔️ 종합 전투력: **{total_power}**\n"
         f"🥫 식량: **{u['balance']:,}개**\n"
         f"🎒 장비 수: **{inv_count}개**\n"
-        f"🐾 펫: **{pet} Lv.{u['pet_level']}**\n"
+        f"🐾 펫: **{pet}**\n"
         f"🏆 던전 승리: **{u['stats']['dungeon_wins']}회**"
     )
 
@@ -1690,88 +1928,377 @@ async def 제작(ctx, *, 아이템이름: str):
 
 
 # =========================================================
-# 펫 시스템
+# 펫 동료 시스템 V3.5
 # =========================================================
-@bot.hybrid_command()
-async def 펫상점(ctx):
+async def _pet_shop_message(ctx):
     if not await check_registered(ctx):
         return
-
-    text = "🐾 **[펫 상점]**\n"
+    u = get_user(ctx.author.id)
+    owned = ensure_pet_collection(u)
+    lines = ["🐾 **[펫 동료 상점]**"]
     for name, info in PET_DB.items():
-        text += (
-            f"• **{name}** | {info['price']:,}개 "
-            f"| 전투력 +{info['power']} | {info['desc']}\n"
+        marker = "✅ 보유" if name in owned else f"🥫 {info['price']:,}개"
+        lines.append(
+            f"{info['emoji']} **{name}** · {info['rarity']} · {marker}\n"
+            f"└ 기본 전투력 +{info['power']} · **{info['skill']}**: {info['skill_desc']}"
         )
-    await send_pages(ctx.channel, text)
+    lines.append("\n구매: `!펫구매 펫이름` 또는 `/펫 구매`")
+    await send_pages(ctx.channel, "\n".join(lines))
 
 
-@bot.hybrid_command()
-async def 펫구매(ctx, *, 펫이름: str):
+async def _pet_buy(ctx, pet_name):
     if not await check_registered(ctx):
         return
-
     u = get_user(ctx.author.id)
-    pet = PET_DB.get(펫이름)
-
-    if not pet:
-        await ctx.send("⚠️ 존재하지 않는 펫입니다.")
-        return
-    if u["balance"] < pet["price"]:
-        await ctx.send(f"⚠️ 식량 **{pet['price']:,}개**가 필요합니다.")
+    pet_name = (pet_name or "").strip()
+    info = PET_DB.get(pet_name)
+    if not info:
+        await ctx.send("⚠️ 존재하지 않는 펫입니다. `!펫상점` 또는 `/펫 상점`을 확인하세요.")
         return
 
-    u["balance"] -= pet["price"]
-    u["pet"] = 펫이름
-    u["pet_level"] = 1
+    collection = ensure_pet_collection(u)
+    if pet_name in collection:
+        await ctx.send(f"⚠️ **{pet_name}**은(는) 이미 보유 중입니다. `!펫장착 {pet_name}`으로 동행시킬 수 있습니다.")
+        return
+    if u["balance"] < info["price"]:
+        await ctx.send(f"⚠️ 식량 **{info['price']:,}개**가 필요합니다. 현재 **{u['balance']:,}개**")
+        return
+
+    u["balance"] -= info["price"]
+    collection[pet_name] = _new_pet_record()
+    if not u.get("pet"):
+        u["pet"] = pet_name
+        u["pet_level"] = 1
+        equipped_text = "\n⭐ 첫 펫이라 자동으로 장착되었습니다."
+    else:
+        equipped_text = f"\n`!펫장착 {pet_name}` 또는 `/펫 장착`으로 교체할 수 있습니다."
+    codex = u.setdefault("collection_codex", {}).setdefault("pets", [])
+    if pet_name not in codex:
+        codex.append(pet_name)
     save_data()
-
-    await ctx.send(f"🐾 **{펫이름}**이(가) 동료가 되었습니다!")
-
-
-@bot.hybrid_command()
-async def 펫정보(ctx):
-    if not await check_registered(ctx):
-        return
-
-    u = get_user(ctx.author.id)
-    if not u["pet"]:
-        await ctx.send("⚠️ 보유한 펫이 없습니다. `!펫상점`을 확인하세요.")
-        return
-
-    pet = PET_DB[u["pet"]]
-    power = pet["power"] + (u["pet_level"] - 1) * 2
-
     await ctx.send(
-        f"🐾 **[{u['pet']}]**\n"
-        f"레벨: Lv.{u['pet_level']}\n"
-        f"전투력 보너스: +{power}\n"
-        f"설명: {pet['desc']}"
+        f"{info['emoji']} **{pet_name}**이(가) 새로운 동료가 되었습니다!\n"
+        f"고유 능력: **{info['skill']}** — {info['skill_desc']}"
+        f"{equipped_text}"
     )
 
 
-@bot.hybrid_command()
-async def 펫훈련(ctx):
+async def _pet_list_message(ctx):
     if not await check_registered(ctx):
         return
-
     u = get_user(ctx.author.id)
-    if not u["pet"]:
-        await ctx.send("⚠️ 먼저 펫을 구매하세요.")
+    collection = ensure_pet_collection(u)
+    if not collection:
+        await ctx.send("🐾 아직 보유한 펫이 없습니다. `!펫상점` 또는 `/펫 상점`을 확인하세요.")
         return
 
-    cost = u["pet_level"] * 3000
+    owned_count = sum(1 for name in collection if name in PET_DB)
+    lines = [f"🐾 **[{ctx.author.name}님의 펫 목록]** · {owned_count}/{len(PET_DB)}"]
+    for name in PET_DB:
+        if name not in collection:
+            continue
+        record = collection[name]
+        info = PET_DB[name]
+        active = "⭐" if u.get("pet") == name else "▫️"
+        display = get_pet_display_name(name, record)
+        lines.append(
+            f"{active} {info['emoji']} **{display}** · Lv.{record['level']} · 친밀도 {record['friendship']} "
+            f"· 전투력 +{get_pet_power(u, name)}"
+        )
+    lines.append("\n⭐ = 현재 동행 중 · 장착: `!펫장착 펫이름` 또는 `/펫 장착`")
+    await send_pages(ctx.channel, "\n".join(lines))
+
+
+async def _pet_equip(ctx, pet_name):
+    if not await check_registered(ctx):
+        return
+    u = get_user(ctx.author.id)
+    pet_name = (pet_name or "").strip()
+    collection = ensure_pet_collection(u)
+    if pet_name not in collection:
+        await ctx.send("⚠️ 보유하지 않은 펫입니다. `!펫목록` 또는 `/펫 목록`을 확인하세요.")
+        return
+    if pet_name not in PET_DB:
+        await ctx.send("⚠️ 현재 버전에서 사용할 수 없는 펫입니다.")
+        return
+    if u.get("pet") == pet_name:
+        await ctx.send(f"🐾 **{pet_name}**은(는) 이미 함께하고 있습니다.")
+        return
+    u["pet"] = pet_name
+    u["pet_level"] = collection[pet_name]["level"]
+    save_data()
+    await ctx.send(f"⭐ {PET_DB[pet_name]['emoji']} **{get_pet_display_name(pet_name, collection[pet_name])}**을(를) 동행 펫으로 장착했습니다.")
+
+
+async def _pet_info_message(ctx, pet_name=None):
+    if not await check_registered(ctx):
+        return
+    u = get_user(ctx.author.id)
+    pet_name = (pet_name or "").strip() or None
+    name, record = get_pet_record(u, pet_name)
+    if not name:
+        if pet_name:
+            await ctx.send("⚠️ 보유하지 않은 펫입니다. `!펫목록` 또는 `/펫 목록`을 확인하세요.")
+        else:
+            await ctx.send("⚠️ 현재 동행 중인 펫이 없습니다. `!펫상점` 또는 `/펫 상점`을 확인하세요.")
+        return
+
+    info = PET_DB[name]
+    required = pet_exp_required(record["level"]) if record["level"] < PET_MAX_LEVEL else 0
+    feed_left = pet_cooldown_remaining(record, "last_feed", PET_FEED_COOLDOWN_MINUTES)
+    adventure_left = pet_cooldown_remaining(record, "last_adventure", PET_ADVENTURE_COOLDOWN_MINUTES)
+    evolution_text = ["기본", "1차 진화", "최종 진화"][record["evolution"]]
+    exp_text = "MAX" if record["level"] >= PET_MAX_LEVEL else f"{record['exp']} / {required}"
+    active_text = "⭐ 현재 동행 중" if u.get("pet") == name else "보유 중 · 미장착"
+
+    await ctx.send(
+        f"{info['emoji']} **[{get_pet_display_name(name, record)}]** · {info['rarity']}\n"
+        f"상태: **{active_text}**\n"
+        f"레벨: **Lv.{record['level']} / {PET_MAX_LEVEL}** · 경험치 **{exp_text}**\n"
+        f"진화: **{evolution_text}** · 친밀도 **{record['friendship']}**\n"
+        f"전투력 보너스: **+{get_pet_power(u, name)}**\n"
+        f"고유 능력: **{info['skill']}** — {info['skill_desc']}\n"
+        f"🍖 먹이: **{format_seconds(feed_left)}** · 🧭 모험: **{format_seconds(adventure_left)}**\n"
+        f"설명: {info['desc']}"
+    )
+
+
+async def _pet_train(ctx):
+    if not await check_registered(ctx):
+        return
+    u = get_user(ctx.author.id)
+    name, record = get_pet_record(u)
+    if not name:
+        await ctx.send("⚠️ 먼저 펫을 장착하세요.")
+        return
+    if record["level"] >= PET_MAX_LEVEL:
+        await ctx.send(f"🏆 **{get_pet_display_name(name, record)}**은(는) 이미 최고 레벨입니다.")
+        return
+
+    rarity = PET_RARITY_ORDER.get(PET_DB[name]["rarity"], 1)
+    cost = 1000 + record["level"] * 900 + rarity * 300
     if u["balance"] < cost:
-        await ctx.send(f"⚠️ 펫 훈련 비용 **{cost:,}개**가 필요합니다.")
+        await ctx.send(f"⚠️ 훈련 비용 **식량 {cost:,}개**가 필요합니다. 현재 **{u['balance']:,}개**")
+        return
+
+    before_power = get_pet_power(u)
+    u["balance"] -= cost
+    record["level"] += 1
+    record["friendship"] += 2
+    u["pet_level"] = record["level"]
+    after_power = get_pet_power(u)
+    save_data()
+    await ctx.send(
+        f"🏋️ **[펫 훈련 완료]** {get_pet_display_name(name, record)} Lv.{record['level']} 달성!\n"
+        f"전투력 **+{before_power} → +{after_power}** · 친밀도 **+2** · 식량 **-{cost:,}**"
+    )
+
+
+async def _pet_feed(ctx):
+    if not await check_registered(ctx):
+        return
+    u = get_user(ctx.author.id)
+    name, record = get_pet_record(u)
+    if not name:
+        await ctx.send("⚠️ 먼저 펫을 장착하세요.")
+        return
+    remaining = pet_cooldown_remaining(record, "last_feed", PET_FEED_COOLDOWN_MINUTES)
+    if remaining:
+        await ctx.send(f"⏳ 다시 먹이를 줄 수 있을 때까지 **{format_seconds(remaining)}** 남았습니다.")
+        return
+
+    cost = 300 + record["level"] * 50
+    if u["balance"] < cost:
+        await ctx.send(f"⚠️ 먹이 비용 **식량 {cost:,}개**가 필요합니다.")
         return
 
     u["balance"] -= cost
-    u["pet_level"] += 1
+    friendship_gain = random.randint(5, 9)
+    exp_gain = random.randint(15, 25)
+    record["friendship"] += friendship_gain
+    record["last_feed"] = datetime.now().isoformat()
+    level_ups = gain_pet_exp(u, exp_gain)
+    save_data()
+    level_text = f"\n🎉 펫 레벨이 **{level_ups}단계** 올랐습니다!" if level_ups else ""
+    await ctx.send(
+        f"🍖 **{get_pet_display_name(name, record)}**에게 먹이를 주었습니다.\n"
+        f"친밀도 **+{friendship_gain}** · 펫 경험치 **+{exp_gain}** · 식량 **-{cost:,}**"
+        f"{level_text}"
+    )
+
+
+async def _pet_adventure(ctx):
+    if not await check_registered(ctx):
+        return
+    u = get_user(ctx.author.id)
+    name, record = get_pet_record(u)
+    if not name:
+        await ctx.send("⚠️ 먼저 펫을 장착하세요.")
+        return
+    remaining = pet_cooldown_remaining(record, "last_adventure", PET_ADVENTURE_COOLDOWN_MINUTES)
+    if remaining:
+        await ctx.send(f"⏳ 펫이 다시 모험을 떠날 때까지 **{format_seconds(remaining)}** 남았습니다.")
+        return
+
+    rarity = PET_RARITY_ORDER.get(PET_DB[name]["rarity"], 1)
+    evolution = record["evolution"]
+    food = random.randint(250, 650) + rarity * 100 + record["level"] * 15 + evolution * 300
+    material_name = random.choice(MATERIALS)
+    material_amount = random.randint(1, 2 + max(0, rarity // 3) + evolution)
+    exp_gain = random.randint(25, 45) + rarity * 3
+    friendship_gain = random.randint(2, 5)
+
+    u["balance"] += food
+    u.setdefault("stats", {}).setdefault("earned", 0)
+    u["stats"]["earned"] += food
+    u.setdefault("materials", {})
+    u["materials"][material_name] = u["materials"].get(material_name, 0) + material_amount
+    record["friendship"] += friendship_gain
+    record["last_adventure"] = datetime.now().isoformat()
+    level_ups = gain_pet_exp(u, exp_gain)
     save_data()
 
+    level_text = f"\n🎉 모험 중 펫 레벨이 **{level_ups}단계** 올랐습니다!" if level_ups else ""
     await ctx.send(
-        f"🐾 **[펫 훈련 완료]** {u['pet']} Lv.{u['pet_level']} 달성!"
+        f"🧭 **[펫 모험 귀환]** {get_pet_display_name(name, record)}이(가) 무사히 돌아왔습니다.\n"
+        f"🥫 식량 **+{food:,}개** · 🧰 {material_name} **+{material_amount}개**\n"
+        f"✨ 펫 경험치 **+{exp_gain}** · 친밀도 **+{friendship_gain}**"
+        f"{level_text}"
     )
+
+
+async def _pet_evolve(ctx):
+    if not await check_registered(ctx):
+        return
+    u = get_user(ctx.author.id)
+    name, record = get_pet_record(u)
+    if not name:
+        await ctx.send("⚠️ 먼저 펫을 장착하세요.")
+        return
+    stage = record["evolution"]
+    if stage >= PET_MAX_EVOLUTION:
+        await ctx.send(f"🌌 **{get_pet_display_name(name, record)}**은(는) 이미 최종 진화를 완료했습니다.")
+        return
+
+    requirements = [
+        {"level": 10, "friendship": 30, "cost": 20000},
+        {"level": 25, "friendship": 100, "cost": 80000},
+    ][stage]
+    missing = []
+    if record["level"] < requirements["level"]:
+        missing.append(f"레벨 {requirements['level']}")
+    if record["friendship"] < requirements["friendship"]:
+        missing.append(f"친밀도 {requirements['friendship']}")
+    if u["balance"] < requirements["cost"]:
+        missing.append(f"식량 {requirements['cost']:,}개")
+    if missing:
+        await ctx.send("⚠️ 진화 조건이 부족합니다: **" + " / ".join(missing) + "**")
+        return
+
+    before_name = get_pet_display_name(name, record)
+    before_power = get_pet_power(u)
+    u["balance"] -= requirements["cost"]
+    record["evolution"] += 1
+    after_name = get_pet_display_name(name, record)
+    after_power = get_pet_power(u)
+    save_data()
+    await ctx.send(
+        f"🌌 **[펫 진화 성공]**\n"
+        f"{PET_DB[name]['emoji']} **{before_name} → {after_name}**\n"
+        f"전투력 **+{before_power} → +{after_power}** · 식량 **-{requirements['cost']:,}개**"
+    )
+
+
+# 기존 최상위 ! 및 / 명령어 호환 유지
+@bot.hybrid_command(description="구매 가능한 펫과 고유 능력을 확인합니다.")
+async def 펫상점(ctx):
+    await _pet_shop_message(ctx)
+
+
+@bot.hybrid_command(description="새 펫을 구매해 컬렉션에 추가합니다.")
+async def 펫구매(ctx, *, 펫이름: str):
+    await _pet_buy(ctx, 펫이름)
+
+
+@bot.hybrid_command(description="현재 동행 중이거나 보유한 펫의 정보를 확인합니다.")
+async def 펫정보(ctx, *, 펫이름: str = None):
+    await _pet_info_message(ctx, 펫이름)
+
+
+@bot.hybrid_command(description="현재 동행 중인 펫을 한 단계 훈련합니다.")
+async def 펫훈련(ctx):
+    await _pet_train(ctx)
+
+
+# 새로운 펫 명령어는 !최상위 명령어와 /펫 하위 명령어를 모두 지원합니다.
+@bot.command(name="펫목록")
+async def pet_list_legacy(ctx):
+    await _pet_list_message(ctx)
+
+
+@bot.command(name="펫장착")
+async def pet_equip_legacy(ctx, *, 펫이름: str):
+    await _pet_equip(ctx, 펫이름)
+
+
+@bot.command(name="펫먹이")
+async def pet_feed_legacy(ctx):
+    await _pet_feed(ctx)
+
+
+@bot.command(name="펫모험")
+async def pet_adventure_legacy(ctx):
+    await _pet_adventure(ctx)
+
+
+@bot.command(name="펫진화")
+async def pet_evolve_legacy(ctx):
+    await _pet_evolve(ctx)
+
+
+@bot.hybrid_group(name="펫", fallback="정보", invoke_without_command=True, description="펫 동료를 수집하고 성장시킵니다.")
+async def pet_group(ctx, 펫이름: str = None):
+    await _pet_info_message(ctx, 펫이름)
+
+
+@pet_group.command(name="상점", description="구매 가능한 펫과 고유 능력을 확인합니다.")
+async def pet_group_shop(ctx):
+    await _pet_shop_message(ctx)
+
+
+@pet_group.command(name="구매", description="새 펫을 구매해 컬렉션에 추가합니다.")
+async def pet_group_buy(ctx, 펫이름: str):
+    await _pet_buy(ctx, 펫이름)
+
+
+@pet_group.command(name="목록", description="보유한 모든 펫과 성장 상태를 확인합니다.")
+async def pet_group_list(ctx):
+    await _pet_list_message(ctx)
+
+
+@pet_group.command(name="장착", description="보유한 펫을 동행 펫으로 교체합니다.")
+async def pet_group_equip(ctx, 펫이름: str):
+    await _pet_equip(ctx, 펫이름)
+
+
+@pet_group.command(name="훈련", description="현재 동행 중인 펫을 한 단계 훈련합니다.")
+async def pet_group_train(ctx):
+    await _pet_train(ctx)
+
+
+@pet_group.command(name="먹이", description="펫에게 먹이를 주어 친밀도와 경험치를 올립니다.")
+async def pet_group_feed(ctx):
+    await _pet_feed(ctx)
+
+
+@pet_group.command(name="모험", description="펫을 모험에 보내 식량과 재료를 획득합니다.")
+async def pet_group_adventure(ctx):
+    await _pet_adventure(ctx)
+
+
+@pet_group.command(name="진화", description="레벨과 친밀도 조건을 충족한 펫을 진화시킵니다.")
+async def pet_group_evolve(ctx):
+    await _pet_evolve(ctx)
 
 
 # =========================================================
@@ -1825,8 +2352,9 @@ async def 던전(ctx, 난이도: str = None):
     user_power = calculate_user_power(u)
     monster_power = max(1, int(d["base_power"] * random.uniform(0.85, 1.25)))
 
-    crit = random.random() < min(0.35, 0.08 + u["level"] * 0.003)
-    dodge = random.random() < min(0.30, 0.06 + (u["pet_level"] if u["pet"] else 0) * 0.01)
+    pet_bonus = get_pet_bonuses(u)
+    crit = random.random() < min(0.45, 0.08 + u["level"] * 0.003 + pet_bonus["crit"])
+    dodge = random.random() < min(0.40, 0.06 + pet_bonus["dodge"])
 
     effective_power = int(user_power * (1.7 if crit else 1.0))
     victory_chance = 0.15
@@ -1838,6 +2366,7 @@ async def 던전(ctx, 난이도: str = None):
 
     if dodge:
         victory_chance += 0.15
+    victory_chance += pet_bonus["victory"]
 
     victory_chance *= exploration_modifier(u)
     victory = random.random() < min(0.95, victory_chance)
@@ -1850,7 +2379,7 @@ async def 던전(ctx, 난이도: str = None):
     await asyncio.sleep(1.5)
 
     if victory:
-        reward = int(d["reward"] * random.uniform(0.85, 1.25))
+        reward = int(d["reward"] * random.uniform(0.85, 1.25) * (1.0 + pet_bonus["reward"]))
         u["balance"] += reward
         u["stats"]["earned"] += reward
         u["stats"]["dungeon_wins"] += 1
@@ -1861,6 +2390,10 @@ async def 던전(ctx, 난이도: str = None):
         add_season_points(u, {"약함": 5, "보통": 8, "강함": 12, "지옥": 20}[난이도])
 
         gained = random_materials(난이도)
+        pet_material = None
+        if random.random() < pet_bonus["material"]:
+            pet_material = random.choice(MATERIALS)
+            gained[pet_material] = gained.get(pet_material, 0) + 1
         give_materials(u, gained)
 
         drop_message = ""
@@ -1894,6 +2427,12 @@ async def 던전(ctx, 난이도: str = None):
             "약함": 5, "보통": 9, "강함": 14, "지옥": 20
         }[난이도])
         damage_taken, knocked_out = apply_damage(u, battle_damage)
+        pet_healed = 0
+        if pet_bonus["heal"] > 0 and u.get("hp", 0) > 0:
+            pet_healed = min(pet_bonus["heal"], max(0, get_max_hp(u) - u["hp"]))
+            u["hp"] += pet_healed
+        pet_exp = {"약함": 8, "보통": 12, "강함": 18, "지옥": 28}[난이도]
+        pet_level_ups = gain_pet_exp(u, pet_exp)
         condition_events = apply_dungeon_conditions(u, 난이도, True)
         unlocked = check_achievements(u)
         save_data()
@@ -1906,6 +2445,14 @@ async def 던전(ctx, 난이도: str = None):
             f"❤️ 전투 피해: **-{damage_taken}** | HP **{u['hp']} / {get_max_hp(u)}**\n"
             f"⚡ 스태미나: **-{stamina_cost}** | 현재 **{u['stamina']} / {get_max_stamina(u)}**"
         )
+        if pet_material:
+            msg += f"\n🐾 펫이 추가 재료 **{pet_material} 1개**를 발견했습니다."
+        if pet_healed:
+            msg += f"\n🐾 펫의 능력으로 HP **+{pet_healed}** 회복"
+        if u.get("pet"):
+            msg += f"\n✨ 펫 경험치 **+{pet_exp}**"
+            if pet_level_ups:
+                msg += f" · 레벨 **+{pet_level_ups}**"
         if condition_events:
             msg += "\n⚠️ " + " / ".join(condition_events)
         msg += f"\n🦠 감염도 **{u['infection']}%** | {condition_text(u)}"
@@ -1919,6 +2466,8 @@ async def 던전(ctx, 난이도: str = None):
         damage_taken, knocked_out = apply_damage(u, damage)
         u["balance"] -= penalty
         u["stats"]["dungeon_losses"] += 1
+        pet_exp = {"약함": 3, "보통": 5, "강함": 7, "지옥": 10}[난이도]
+        pet_level_ups = gain_pet_exp(u, pet_exp)
         condition_events = apply_dungeon_conditions(u, 난이도, False)
         save_data()
 
@@ -1933,6 +2482,7 @@ async def 던전(ctx, 난이도: str = None):
             f"⚡ 스태미나 **-{stamina_cost}** | 현재 **{u['stamina']} / {get_max_stamina(u)}**\n"
             f"현재 잔액: **{u['balance']:,}개**"
             f"{knockout_text}"
+            + (f"\n✨ 펫 경험치 **+{pet_exp}**" + (f" · 레벨 **+{pet_level_ups}**" if pet_level_ups else "") if u.get("pet") else "")
             + ("\n⚠️ " + " / ".join(condition_events) if condition_events else "")
             + f"\n🦠 감염도 **{u['infection']}%** | {condition_text(u)}"
         )

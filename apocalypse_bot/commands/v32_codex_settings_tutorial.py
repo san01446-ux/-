@@ -43,6 +43,9 @@ def register_v32_commands(
         for item in user.get("inventory", []):
             if item not in codex["items"]:
                 codex["items"].append(item)
+        for pet in user.get("pet_collection", {}).keys():
+            if pet and pet not in codex["pets"]:
+                codex["pets"].append(pet)
         pet = user.get("pet")
         if pet and pet not in codex["pets"]:
             codex["pets"].append(pet)

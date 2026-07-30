@@ -247,10 +247,30 @@ def register_admin_commands(
         if name not in pet_db:
             await ctx.send("⚠️ 존재하지 않는 펫입니다: " + ", ".join(pet_db.keys()))
             return
+        collection = user.setdefault("pet_collection", {})
+        record = collection.setdefault(name, {
+            "level": 1, "exp": 0, "friendship": 0, "evolution": 0,
+            "last_feed": "", "last_adventure": "",
+        })
+        if not isinstance(record, dict):
+            record = {
+                "level": 1, "exp": 0, "friendship": 0, "evolution": 0,
+                "last_feed": "", "last_adventure": "",
+            }
+            collection[name] = record
+        record.setdefault("level", max(1, int(user.get("pet_level", 1) or 1)))
+        record.setdefault("exp", 0)
+        record.setdefault("friendship", 0)
+        record.setdefault("evolution", 0)
+        record.setdefault("last_feed", "")
+        record.setdefault("last_adventure", "")
         user["pet"] = name
-        user["pet_level"] = max(1, int(user.get("pet_level", 1)))
+        user["pet_level"] = max(1, int(record.get("level", 1) or 1))
+        codex = user.setdefault("collection_codex", {}).setdefault("pets", [])
+        if name not in codex:
+            codex.append(name)
         save_data()
-        await ctx.send(f"✅ {대상.mention}에게 펫 **{name}**을 설정했습니다.")
+        await ctx.send(f"✅ {대상.mention}에게 펫 **{name}**을 지급하고 장착했습니다.")
 
     @bot.command(name="칭호지급")
     async def give_title(ctx, 대상: discord.Member, *, 칭호: str):
