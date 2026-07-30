@@ -94,7 +94,7 @@ def register_v21_commands(
         if material not in materials:
             materials.append(material)
 
-    @bot.command(name="패치노트", aliases=["업데이트"])
+    @bot.hybrid_command(name="패치노트", aliases=["업데이트"], description="아바돈의 최신 업데이트 내역을 확인합니다.")
     async def patch_notes(ctx):
         await ctx.send(
             "🔥 **V2.1 Apocalypse Reborn**\n"

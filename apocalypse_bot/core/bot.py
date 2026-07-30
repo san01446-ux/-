@@ -980,6 +980,18 @@ def get_server_boss(guild_id):
 @bot.event
 async def on_ready():
     print(f"로그인 완료: {bot.user} / 서버 {len(bot.guilds)}개")
+
+    if not getattr(bot, "_abaddon_slash_synced", False):
+        try:
+            synced = await bot.tree.sync()
+            bot._abaddon_slash_synced = True
+            print(
+                f"슬래시 명령어 동기화 완료: "
+                f"최상위 {len(synced)}개 / 전체 {sum(1 for _ in bot.tree.walk_commands())}개"
+            )
+        except Exception as exc:
+            print(f"[슬래시 명령어 동기화 실패] {type(exc).__name__}: {exc}")
+
     if not bot_presence.is_running():
         bot_presence.start()
 
@@ -1063,7 +1075,7 @@ async def on_command_error(ctx, error):
 # =========================================================
 # 가입 / 기본 정보
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 가입(ctx, *, 암호: str = ""):
     user_id = str(ctx.author.id)
 
@@ -1090,9 +1102,12 @@ async def 가입(ctx, *, 암호: str = ""):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 명령어(ctx):
     text = """📜 **[아포칼립스 생존 봇 명령어]**
+
+✅ 기존 `!명령어`와 새 `/명령어`를 모두 사용할 수 있습니다.
+ℹ️ 일부 슬래시 명령어는 Discord 제한 때문에 `/직업 목록`, `/의료 상태`, `/침공 공격`처럼 카테고리 안에 묶여 있습니다.
 
 🔹 **가입 / 정보**
 `!가입 생존자` `!정보` `!출석` `!출석보상`
@@ -1156,7 +1171,7 @@ async def 명령어(ctx):
 """
     await send_pages(ctx.channel, text)
 
-@bot.command()
+@bot.hybrid_command()
 async def 정보(ctx):
     if not await check_registered(ctx):
         return
@@ -1189,7 +1204,7 @@ async def 정보(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 지갑(ctx):
     if not await check_registered(ctx):
         return
@@ -1198,7 +1213,7 @@ async def 지갑(ctx):
     await ctx.send(f"🥫 보유 식량: **{u['balance']:,}개**{debt}")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 송금(ctx, 대상: discord.Member, 금액: int):
     if not await check_registered(ctx):
         return
@@ -1232,7 +1247,7 @@ async def 송금(ctx, 대상: discord.Member, 금액: int):
 # =========================================================
 # 출석 / 구걸 / 훈련
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 출석(ctx):
     if not await check_registered(ctx):
         return
@@ -1282,7 +1297,7 @@ async def 출석(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 출석보상(ctx):
     if not await check_registered(ctx):
         return
@@ -1296,7 +1311,7 @@ async def 출석보상(ctx):
         "7일·14일·30일째에는 시즌패스 포인트도 함께 쌓입니다."
     )
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 600, commands.BucketType.user)
 async def 돈주세요(ctx):
     if not await check_registered(ctx):
@@ -1314,7 +1329,7 @@ async def 돈주세요(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 훈련(ctx):
     if not await check_registered(ctx):
         return
@@ -1339,7 +1354,7 @@ async def 훈련(ctx):
 # =========================================================
 # 상점 / 구매 / 인벤토리
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 상점(ctx, 티어: str = None):
     if not await check_registered(ctx):
         return
@@ -1356,7 +1371,7 @@ async def 상점(ctx, 티어: str = None):
     await send_pages(ctx.channel, text)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 장비목록(ctx, 티어: str = None):
     if not await check_registered(ctx):
         return
@@ -1372,7 +1387,7 @@ async def 장비목록(ctx, 티어: str = None):
     await send_pages(ctx.channel, text)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 구매(ctx, *, 아이템이름: str):
     if not await check_registered(ctx):
         return
@@ -1407,7 +1422,7 @@ async def 구매(ctx, *, 아이템이름: str):
     await ctx.send(msg)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 인벤토리(ctx):
     if not await check_registered(ctx):
         return
@@ -1437,7 +1452,7 @@ async def 인벤토리(ctx):
     await send_pages(ctx.channel, text)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 장비(ctx):
     if not await check_registered(ctx):
         return
@@ -1461,7 +1476,7 @@ async def 장비(ctx):
     await ctx.send("\n".join(lines))
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 장착(ctx, *, 아이템이름: str):
     if not await check_registered(ctx):
         return
@@ -1479,7 +1494,7 @@ async def 장착(ctx, *, 아이템이름: str):
     await ctx.send(msg)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 해제(ctx, *, 슬롯또는아이템: str):
     if not await check_registered(ctx):
         return
@@ -1501,7 +1516,7 @@ async def 해제(ctx, *, 슬롯또는아이템: str):
     await ctx.send(f"📦 **{item}** 장착을 해제했습니다.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 버리기(ctx, *, 아이템이름: str):
     if not await check_registered(ctx):
         return
@@ -1521,7 +1536,7 @@ async def 버리기(ctx, *, 아이템이름: str):
     await ctx.send(f"🗑️ **{아이템이름}**을 버리고 식량 **{scrap:,}개**를 회수했습니다.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 감정(ctx, *, 아이템이름: str):
     if not await check_registered(ctx):
         return
@@ -1552,7 +1567,7 @@ async def 감정(ctx, *, 아이템이름: str):
 # =========================================================
 # 강화 시스템
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 강화(ctx, *, 아이템이름: str):
     if not await check_registered(ctx):
         return
@@ -1607,7 +1622,7 @@ async def 강화(ctx, *, 아이템이름: str):
 # =========================================================
 # 재료 / 제작
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 재료(ctx):
     if not await check_registered(ctx):
         return
@@ -1620,7 +1635,7 @@ async def 재료(ctx):
     await ctx.send("🧰 **[보유 재료]**\n" + "\n".join(lines))
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 제작목록(ctx):
     if not await check_registered(ctx):
         return
@@ -1633,7 +1648,7 @@ async def 제작목록(ctx):
     await send_pages(ctx.channel, text)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 제작(ctx, *, 아이템이름: str):
     if not await check_registered(ctx):
         return
@@ -1677,7 +1692,7 @@ async def 제작(ctx, *, 아이템이름: str):
 # =========================================================
 # 펫 시스템
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 펫상점(ctx):
     if not await check_registered(ctx):
         return
@@ -1691,7 +1706,7 @@ async def 펫상점(ctx):
     await send_pages(ctx.channel, text)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 펫구매(ctx, *, 펫이름: str):
     if not await check_registered(ctx):
         return
@@ -1714,7 +1729,7 @@ async def 펫구매(ctx, *, 펫이름: str):
     await ctx.send(f"🐾 **{펫이름}**이(가) 동료가 되었습니다!")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 펫정보(ctx):
     if not await check_registered(ctx):
         return
@@ -1735,7 +1750,7 @@ async def 펫정보(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 펫훈련(ctx):
     if not await check_registered(ctx):
         return
@@ -1762,7 +1777,7 @@ async def 펫훈련(ctx):
 # =========================================================
 # 던전 / 괴물 / 드롭 / 크리티컬 / 회피
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 괴물목록(ctx, 난이도: str = None):
     if not await check_registered(ctx):
         return
@@ -1779,7 +1794,7 @@ async def 괴물목록(ctx, 난이도: str = None):
     await send_pages(ctx.channel, text)
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 180, commands.BucketType.user)
 async def 던전(ctx, 난이도: str = None):
     if not await check_registered(ctx):
@@ -1926,7 +1941,7 @@ async def 던전(ctx, 난이도: str = None):
 # =========================================================
 # 서버 레이드
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 레이드(ctx):
     if not await check_registered(ctx):
         return
@@ -1939,7 +1954,7 @@ async def 레이드(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 60, commands.BucketType.user)
 async def 레이드공격(ctx):
     if not await check_registered(ctx):
@@ -2039,7 +2054,7 @@ def _grant_world_boss_drop(u, boss, rank):
     return material, material_amount, item
 
 
-@bot.command(name="월드보스", aliases=["보스현황"])
+@bot.hybrid_command(name="월드보스", aliases=["보스현황"])
 async def 월드보스(ctx):
     if not await check_registered(ctx):
         return
@@ -2062,7 +2077,7 @@ async def 월드보스(ctx):
     )
 
 
-@bot.command(name="보스랭킹", aliases=["월드보스랭킹"])
+@bot.hybrid_command(name="보스랭킹", aliases=["월드보스랭킹"])
 async def 보스랭킹(ctx):
     if not await check_registered(ctx):
         return
@@ -2075,7 +2090,7 @@ async def 보스랭킹(ctx):
     await ctx.send(f"🏆 **{boss['name']} 피해 랭킹**\n" + "\n".join(lines))
 
 
-@bot.command(name="월드보스공격", aliases=["보스공격"])
+@bot.hybrid_command(name="월드보스공격", aliases=["보스공격"])
 @commands.cooldown(1, 300, commands.BucketType.user)
 async def 월드보스공격(ctx):
     if not await check_registered(ctx):
@@ -2192,7 +2207,7 @@ async def _require_world_boss_admin(ctx):
     return False
 
 
-@bot.command(name="월드보스리셋", aliases=["월드보스소환"])
+@bot.hybrid_command(name="월드보스리셋", aliases=["월드보스소환"])
 async def 월드보스리셋(ctx, *, 보스이름: str = None):
     if not await _require_world_boss_admin(ctx):
         return
@@ -2202,7 +2217,7 @@ async def 월드보스리셋(ctx, *, 보스이름: str = None):
     await ctx.send(f"🌍 **{boss['grade']} 월드보스 {boss['name']}**이(가) 소환되었습니다!\nHP: **{boss['max_hp']:,}** · 특성: **{boss['trait']}**")
 
 
-@bot.command(name="월드보스체력")
+@bot.hybrid_command(name="월드보스체력")
 async def 월드보스체력(ctx, 체력: int):
     if not await _require_world_boss_admin(ctx):
         return
@@ -2218,7 +2233,7 @@ async def 월드보스체력(ctx, 체력: int):
     await ctx.send(f"❤️ 월드보스 체력을 **{체력:,}**으로 설정했습니다.")
 
 
-@bot.command(name="월드보스종료")
+@bot.hybrid_command(name="월드보스종료")
 async def 월드보스종료(ctx):
     if not await _require_world_boss_admin(ctx):
         return
@@ -2234,7 +2249,7 @@ async def 월드보스종료(ctx):
 # =========================================================
 # 일일 퀘스트 / 업적 / 칭호
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 일일퀘스트(ctx):
     if not await check_registered(ctx):
         return
@@ -2253,7 +2268,7 @@ async def 일일퀘스트(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 퀘스트보상(ctx):
     if not await check_registered(ctx):
         return
@@ -2276,7 +2291,7 @@ async def 퀘스트보상(ctx):
     await ctx.send(f"🎁 퀘스트 보상 **{q['reward']:,}개** 수령 완료!")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 업적(ctx):
     if not await check_registered(ctx):
         return
@@ -2297,7 +2312,7 @@ async def 업적(ctx):
     await send_pages(ctx.channel, text)
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 칭호목록(ctx):
     if not await check_registered(ctx):
         return
@@ -2309,7 +2324,7 @@ async def 칭호목록(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 칭호(ctx, *, 칭호이름: str):
     if not await check_registered(ctx):
         return
@@ -2328,7 +2343,7 @@ async def 칭호(ctx, *, 칭호이름: str):
 # =========================================================
 # 시즌 랭킹
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 랭킹(ctx):
     if not await check_registered(ctx):
         return
@@ -2355,7 +2370,7 @@ async def 랭킹(ctx):
 # =========================================================
 # 도박 시스템
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 60, commands.BucketType.user)
 async def 탐색(ctx, 방향: str, 배팅액: int):
     if not await check_registered(ctx):
@@ -2388,7 +2403,7 @@ async def 탐색(ctx, 방향: str, 배팅액: int):
     await ctx.send(result)
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 60, commands.BucketType.user)
 async def 주파수(ctx, 배팅액: int):
     if not await check_registered(ctx):
@@ -2435,7 +2450,7 @@ async def 주파수(ctx, 배팅액: int):
 roulette_state = {}
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 60, commands.BucketType.user)
 async def 룰렛(ctx, 배팅액: int):
     if not await check_registered(ctx):
@@ -2475,7 +2490,7 @@ async def 룰렛(ctx, 배팅액: int):
     await ctx.send(result)
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 3600, commands.BucketType.user)
 async def 파산신청(ctx):
     if not await check_registered(ctx):
@@ -2507,7 +2522,7 @@ async def 파산신청(ctx):
 # =========================================================
 # 관리자 명령어
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 가방조회(ctx, 대상: discord.Member):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("❌ 관리자 전용 명령어입니다.")
@@ -2527,7 +2542,7 @@ async def 가방조회(ctx, 대상: discord.Member):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 식량지급(ctx, 대상: discord.Member, 금액: int):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("❌ 관리자 전용 명령어입니다.")
@@ -2548,7 +2563,7 @@ async def 식량지급(ctx, 대상: discord.Member, 금액: int):
     await ctx.send(f"✅ {대상.mention}에게 식량 **{금액:,}개** 지급.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 식량회수(ctx, 대상: discord.Member, 금액: int):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("❌ 관리자 전용 명령어입니다.")
@@ -2649,31 +2664,31 @@ async def perform_life_activity(ctx, activity):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 120, commands.BucketType.user)
 async def 채집(ctx):
     await perform_life_activity(ctx, "채집")
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 120, commands.BucketType.user)
 async def 낚시(ctx):
     await perform_life_activity(ctx, "낚시")
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 120, commands.BucketType.user)
 async def 벌목(ctx):
     await perform_life_activity(ctx, "벌목")
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 180, commands.BucketType.user)
 async def 광산(ctx):
     await perform_life_activity(ctx, "광산")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 자원(ctx):
     if not await check_registered(ctx):
         return
@@ -2693,7 +2708,7 @@ BASE_COSTS = {
 }
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 기지(ctx):
     if not await check_registered(ctx):
         return
@@ -2711,7 +2726,7 @@ async def 기지(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 기지건설(ctx):
     if not await check_registered(ctx):
         return
@@ -2744,7 +2759,7 @@ async def 기지건설(ctx):
     await ctx.send("🏠 **기지 건설 완료!** 이제 `!기지수확`으로 식량을 생산할 수 있습니다.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 기지강화(ctx):
     if not await check_registered(ctx):
         return
@@ -2777,7 +2792,7 @@ async def 기지강화(ctx):
     await ctx.send(f"🏗️ **기지 강화 성공! Lv.{base['level']}**")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 기지수확(ctx):
     if not await check_registered(ctx):
         return
@@ -2818,7 +2833,7 @@ def find_guild_by_name(name):
     return None, None
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 길드목록(ctx):
     if not await check_registered(ctx):
         return
@@ -2836,7 +2851,7 @@ async def 길드목록(ctx):
     await send_pages(ctx.channel, "🛡️ **[길드 목록]**\n" + "\n".join(lines))
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 길드생성(ctx, *, 길드명: str):
     if not await check_registered(ctx):
         return
@@ -2872,7 +2887,7 @@ async def 길드생성(ctx, *, 길드명: str):
     await ctx.send(f"🛡️ 길드 **{길드명}** 창설 완료!")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 길드가입(ctx, *, 길드명: str):
     if not await check_registered(ctx):
         return
@@ -2894,7 +2909,7 @@ async def 길드가입(ctx, *, 길드명: str):
     await ctx.send(f"🛡️ **{guild['name']}** 길드에 가입했습니다.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 길드정보(ctx):
     if not await check_registered(ctx):
         return
@@ -2915,7 +2930,7 @@ async def 길드정보(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 길드기부(ctx, 금액: int):
     if not await check_registered(ctx):
         return
@@ -2936,7 +2951,7 @@ async def 길드기부(ctx, 금액: int):
     await ctx.send(f"💰 길드에 식량 **{금액:,}개** 기부 완료.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 길드강화(ctx):
     if not await check_registered(ctx):
         return
@@ -2959,7 +2974,7 @@ async def 길드강화(ctx):
     await ctx.send(f"🛡️ 길드가 **Lv.{g['level']}**로 성장했습니다!")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 길드탈퇴(ctx):
     if not await check_registered(ctx):
         return
@@ -2987,7 +3002,7 @@ async def 길드탈퇴(ctx):
 # =========================================================
 # 거래소
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 거래소(ctx):
     if not await check_registered(ctx):
         return
@@ -3011,7 +3026,7 @@ async def 거래소(ctx):
     await send_pages(ctx.channel, "🏪 **[생존자 거래소]**\n" + "\n".join(lines))
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 판매(ctx, 아이템이름: str, 가격: int):
     if not await check_registered(ctx):
         return
@@ -3044,7 +3059,7 @@ async def 판매(ctx, 아이템이름: str, 가격: int):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 구매등록번호(ctx, 번호: int):
     if not await check_registered(ctx):
         return
@@ -3086,7 +3101,7 @@ async def 구매등록번호(ctx, 번호: int):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 판매취소(ctx, 번호: int):
     if not await check_registered(ctx):
         return
@@ -3122,7 +3137,7 @@ def find_party_of(user_id):
     return None, None
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 파티생성(ctx):
     if not await check_registered(ctx):
         return
@@ -3135,7 +3150,7 @@ async def 파티생성(ctx):
     await ctx.send(f"👥 {ctx.author.mention}님이 파티를 생성했습니다.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 파티가입(ctx, 리더: discord.Member):
     if not await check_registered(ctx):
         return
@@ -3154,7 +3169,7 @@ async def 파티가입(ctx, 리더: discord.Member):
     await ctx.send(f"👥 {리더.mention}님의 파티에 가입했습니다.")
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 파티정보(ctx):
     if not await check_registered(ctx):
         return
@@ -3169,7 +3184,7 @@ async def 파티정보(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 @commands.cooldown(1, 300, commands.BucketType.user)
 async def 파티사냥(ctx):
     if not await check_registered(ctx):
@@ -3217,7 +3232,7 @@ async def 파티사냥(ctx):
         )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 파티탈퇴(ctx):
     if not await check_registered(ctx):
         return
@@ -3238,7 +3253,7 @@ async def 파티탈퇴(ctx):
 # =========================================================
 # PVP
 # =========================================================
-@bot.command(name="PVP", aliases=["pvp", "피브이피"])
+@bot.hybrid_command(name="pvp", aliases=["PVP", "피브이피"])
 @commands.cooldown(1, 120, commands.BucketType.user)
 async def pvp_command(ctx, 상대: discord.Member):
     if not await check_registered(ctx):
@@ -3288,7 +3303,7 @@ async def pvp_command(ctx, 상대: discord.Member):
 # =========================================================
 # 주간 퀘스트
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 주간퀘스트(ctx):
     if not await check_registered(ctx):
         return
@@ -3304,7 +3319,7 @@ async def 주간퀘스트(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 주간보상(ctx):
     if not await check_registered(ctx):
         return
@@ -3327,7 +3342,7 @@ async def 주간보상(ctx):
 # =========================================================
 # 시즌패스
 # =========================================================
-@bot.command()
+@bot.hybrid_command()
 async def 시즌패스(ctx):
     if not await check_registered(ctx):
         return
@@ -3352,7 +3367,7 @@ async def 시즌패스(ctx):
     )
 
 
-@bot.command()
+@bot.hybrid_command()
 async def 시즌보상(ctx, 레벨: int):
     if not await check_registered(ctx):
         return
@@ -3448,3 +3463,8 @@ register_v33_commands(
     bot, get_user, check_registered, save_data, world_data,
     get_max_hp, add_title,
 )
+
+# 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
+# Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
+from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
+register_grouped_slash_commands(bot)

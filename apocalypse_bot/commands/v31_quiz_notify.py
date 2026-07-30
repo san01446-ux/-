@@ -245,7 +245,7 @@ def register_v31_commands(bot, get_user, check_registered, save_data, world_data
             "일정: 13:00 / 16:00 / 18:30 / 19:00 (KST)"
         )
 
-    @bot.group(name="rpg", invoke_without_command=True)
+    @bot.hybrid_group(name="rpg", fallback="안내", invoke_without_command=True, description="RPG 시작과 가입 안내를 확인합니다.")
     async def rpg_group(ctx):
         await ctx.send("사용법: `!rpg start`\n가입 전이라면 먼저 `!가입 생존자`를 입력하세요.")
 

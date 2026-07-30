@@ -106,7 +106,7 @@ def register_v32_commands(
             ctx.author == ctx.guild.owner or ctx.author.guild_permissions.administrator
         ))
 
-    @bot.group(name="도감", invoke_without_command=True)
+    @bot.hybrid_group(name="도감", fallback="전체", invoke_without_command=True, description="수집한 장비, 펫, 몬스터 도감을 확인합니다.")
     async def codex_group(ctx):
         if not await check_registered(ctx):
             return

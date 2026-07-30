@@ -404,7 +404,7 @@ def register_v33_commands(bot, get_user, check_registered, save_data, world_data
             lines.append(f"🏷️ 칭호 획득: {title}")
         return lines
 
-    @bot.group(name="스토리", aliases=["이야기"], invoke_without_command=True)
+    @bot.hybrid_group(name="스토리", aliases=["이야기"], fallback="상태", invoke_without_command=True, description="검은 주파수 스토리를 진행하고 기록을 확인합니다.")
     async def story_group(ctx):
         if not await check_registered(ctx):
             return

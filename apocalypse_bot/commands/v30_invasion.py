@@ -211,7 +211,7 @@ def register_v30_commands(
                 return True
         return False
 
-    @bot.command(name="도움말", aliases=["help"])
+    @bot.hybrid_command(name="도움말", aliases=["help"], description="아바돈의 명령어와 카테고리별 도움말을 확인합니다.")
     async def help_command(ctx, *, category: str = ""):
         categories = {
             "기본": ["가입 생존자", "프로필", "인벤토리", "장착", "해제", "상태", "휴식", "출석", "칭호"],
@@ -231,7 +231,7 @@ def register_v30_commands(
         if selected:
             embed = discord.Embed(
                 title=f"📖 아바돈 도움말 — {selected}",
-                description="모든 명령어 앞에는 `!`를 붙이세요.",
+                description="기존 `!명령어`와 `/명령어`를 모두 사용할 수 있습니다. `/`는 입력창 자동완성에서 선택하세요.",
                 color=discord.Color.dark_red(),
             )
             embed.add_field(name=selected, value="\n".join(f"`!{cmd}`" for cmd in categories[selected]), inline=False)
@@ -243,7 +243,7 @@ def register_v30_commands(
             title="😈 아바돈 — Apocalypse RPG 도움말",
             description=(
                 "세상의 종말에서 살아남으세요.\n"
-                "자세한 명령어는 `!도움말 분류`로 확인할 수 있습니다."
+                "자세한 명령어는 `!도움말 분류` 또는 `/도움말`로 확인할 수 있습니다."
             ),
             color=discord.Color.dark_red(),
         )
