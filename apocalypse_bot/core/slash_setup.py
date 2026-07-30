@@ -18,6 +18,16 @@ GROUP_DESCRIPTIONS: Dict[str, str] = {
     "관리": "아바돈 관리자 전용 유저 및 아이템 관리 기능입니다.",
     "서버": "서버별 채널과 기능 설정을 관리합니다.",
     "튜토리얼": "초보자 튜토리얼 상태를 확인하거나 건너뜁니다.",
+    "생존": "출석, 지원금 등 기본 생존 활동을 확인합니다.",
+    "장비": "상점, 인벤토리, 장착, 강화, 제작 기능을 사용합니다.",
+    "전투": "훈련, 던전, 레이드, 월드보스와 PVP 기능을 사용합니다.",
+    "도박": "폐허 탐색, 주파수, 생존 룰렛과 도박 통계를 확인합니다.",
+    "생활": "알바, 코인 탐색, 채집, 낚시, 벌목과 광산 활동을 합니다.",
+    "기지": "기지 현황, 건설, 강화와 자원 수확 기능을 사용합니다.",
+    "길드": "길드 생성, 가입, 기부, 강화와 탈퇴 기능을 사용합니다.",
+    "거래": "지갑, 송금, 거래소 판매와 구매 기능을 사용합니다.",
+    "파티": "파티 생성, 가입, 정보, 사냥과 탈퇴 기능을 사용합니다.",
+    "시즌": "일일·주간 퀘스트, 업적, 칭호와 시즌 보상을 확인합니다.",
 }
 
 
@@ -115,6 +125,112 @@ SLASH_ROUTES: Dict[str, Tuple[str, str]] = {
     # 튜토리얼
     "튜토리얼": ("튜토리얼", "상태"),
     "튜토리얼건너뛰기": ("튜토리얼", "건너뛰기"),
+
+    # 기본 생존
+    "출석": ("생존", "출석"),
+    "출석보상": ("생존", "출석보상"),
+    "돈주세요": ("생존", "지원"),
+
+    # 장비 / 제작
+    "상점": ("장비", "상점"),
+    "장비목록": ("장비", "목록"),
+    "구매": ("장비", "구매"),
+    "인벤토리": ("장비", "인벤토리"),
+    "장비": ("장비", "현황"),
+    "장착": ("장비", "장착"),
+    "해제": ("장비", "해제"),
+    "버리기": ("장비", "버리기"),
+    "감정": ("장비", "감정"),
+    "강화": ("장비", "강화"),
+    "재료": ("장비", "재료"),
+    "제작목록": ("장비", "제작목록"),
+    "제작": ("장비", "제작"),
+
+    # 전투
+    "훈련": ("전투", "훈련"),
+    "괴물목록": ("전투", "괴물목록"),
+    "던전": ("전투", "던전"),
+    "레이드": ("전투", "레이드"),
+    "레이드공격": ("전투", "레이드공격"),
+    "월드보스": ("전투", "월드보스"),
+    "보스랭킹": ("전투", "보스랭킹"),
+    "월드보스공격": ("전투", "월드보스공격"),
+    "pvp": ("전투", "pvp"),
+
+    # 도박
+    "탐색": ("도박", "탐색"),
+    "주파수": ("도박", "주파수"),
+    "룰렛": ("도박", "룰렛"),
+    "파산신청": ("도박", "파산신청"),
+    "도박잔액": ("도박", "잔액"),
+
+    # 생활
+    "알바": ("생활", "알바"),
+    "코인": ("생활", "코인"),
+    "채집": ("생활", "채집"),
+    "낚시": ("생활", "낚시"),
+    "벌목": ("생활", "벌목"),
+    "광산": ("생활", "광산"),
+    "자원": ("생활", "자원"),
+
+    # 기지
+    "기지": ("기지", "현황"),
+    "기지건설": ("기지", "건설"),
+    "기지강화": ("기지", "강화"),
+    "기지수확": ("기지", "수확"),
+
+    # 길드
+    "길드목록": ("길드", "목록"),
+    "길드생성": ("길드", "생성"),
+    "길드가입": ("길드", "가입"),
+    "길드정보": ("길드", "정보"),
+    "길드기부": ("길드", "기부"),
+    "길드강화": ("길드", "강화"),
+    "길드탈퇴": ("길드", "탈퇴"),
+
+    # 거래
+    "지갑": ("거래", "지갑"),
+    "송금": ("거래", "송금"),
+    "거래소": ("거래", "거래소"),
+    "판매": ("거래", "판매"),
+    "구매등록번호": ("거래", "구매"),
+    "판매취소": ("거래", "판매취소"),
+
+    # 파티
+    "파티생성": ("파티", "생성"),
+    "파티가입": ("파티", "가입"),
+    "파티정보": ("파티", "정보"),
+    "파티사냥": ("파티", "사냥"),
+    "파티탈퇴": ("파티", "탈퇴"),
+
+    # 시즌 / 성장
+    "일일퀘스트": ("시즌", "일일퀘스트"),
+    "퀘스트보상": ("시즌", "일일보상"),
+    "업적": ("시즌", "업적"),
+    "칭호목록": ("시즌", "칭호목록"),
+    "칭호": ("시즌", "칭호"),
+    "랭킹": ("시즌", "랭킹"),
+    "주간퀘스트": ("시즌", "주간퀘스트"),
+    "주간보상": ("시즌", "주간보상"),
+    "시즌패스": ("시즌", "시즌패스"),
+    "시즌보상": ("시즌", "시즌보상"),
+
+    # 관리자용 최상위 하이브리드 명령어도 /관리 아래로 이동
+    "가방조회": ("관리", "가방조회"),
+    "식량지급": ("관리", "식량지급"),
+    "식량회수": ("관리", "식량회수"),
+    "월드보스리셋": ("관리", "월드보스리셋"),
+    "월드보스체력": ("관리", "월드보스체력"),
+    "월드보스종료": ("관리", "월드보스종료"),
+}
+
+
+# 이미 /펫 그룹에 동일 기능이 있으므로 최상위 slash만 제거하고 !명령어는 유지합니다.
+REMOVE_TOP_LEVEL_SLASH = {
+    "펫상점",
+    "펫구매",
+    "펫정보",
+    "펫훈련",
 }
 
 
@@ -124,21 +240,43 @@ EXISTING_GROUP_ROUTES: Dict[str, Tuple[str, str]] = {
 }
 
 
-def _make_slash_bridge(
-    prefix_command: commands.Command,
-    slash_name: str,
-) -> commands.HybridCommand:
-    """기존 prefix callback을 그대로 사용하는 slash 전용 bridge를 만듭니다."""
+def _command_description(prefix_command: commands.Command) -> str:
     description = prefix_command.short_doc or prefix_command.description
     if not description:
         description = f"{prefix_command.name} 기능을 실행합니다."
+    return description[:100]
 
-    # wrapper의 명령어 이름은 기존 이름으로 유지합니다.
-    # 따라서 튜토리얼 진행도, cooldown reset 등 ctx.command 기반 로직이 깨지지 않습니다.
+
+def _remove_top_level_slash(bot: commands.Bot, prefix_command: commands.Command) -> bool:
+    """하이브리드 명령어의 최상위 slash 등록만 제거하고 !명령어는 유지합니다."""
+    if not isinstance(prefix_command, (commands.HybridCommand, commands.HybridGroup)):
+        return False
+    app_command = prefix_command.app_command
+    if app_command is None or app_command.parent is not None:
+        return False
+    removed = bot.tree.remove_command(app_command.name)
+    return removed is not None
+
+
+def _make_slash_app_command(
+    prefix_command: commands.Command,
+    slash_name: str,
+) -> app_commands.Command:
+    """기존 명령어 로직을 그대로 사용하는 그룹용 slash 명령어를 만듭니다."""
+    description = _command_description(prefix_command)
+
+    # 기존 하이브리드 명령어는 app command를 복사해 체크, 자동완성, 옵션 정보를 보존합니다.
+    if isinstance(prefix_command, commands.HybridCommand) and prefix_command.app_command is not None:
+        app_command = prefix_command.app_command.copy()
+        app_command.name = slash_name
+        app_command.description = description
+        return app_command
+
+    # 기존 !전용 명령어는 같은 callback을 사용하는 slash bridge를 만듭니다.
     bridge = commands.HybridCommand(
         prefix_command.callback,
         name=prefix_command.name,
-        description=description[:100],
+        description=description,
         enabled=prefix_command.enabled,
         hidden=prefix_command.hidden,
         cooldown_after_parsing=prefix_command.cooldown_after_parsing,
@@ -146,14 +284,13 @@ def _make_slash_bridge(
     if bridge.app_command is None:
         raise RuntimeError(f"슬래시 명령어 생성 실패: {prefix_command.name}")
 
-    # Discord에 보이는 하위 명령어 이름만 짧고 자연스럽게 바꿉니다.
     bridge.app_command.name = slash_name
-    bridge.app_command.description = description[:100]
-    return bridge
+    bridge.app_command.description = description
+    return bridge.app_command
 
 
 def register_grouped_slash_commands(bot: commands.Bot) -> None:
-    """100개 제한을 넘지 않도록 확장 명령어를 slash 그룹으로 묶어 등록합니다."""
+    """Discord 최상위 slash 100개 제한을 넘지 않도록 명령어를 그룹으로 묶습니다."""
     if getattr(bot, "_abaddon_slash_groups_registered", False):
         return
 
@@ -163,16 +300,26 @@ def register_grouped_slash_commands(bot: commands.Bot) -> None:
     }
 
     missing = []
+    resolved_routes = []
 
+    # 먼저 모든 대상을 찾고 기존 최상위 slash를 제거해 그룹을 넣을 자리를 확보합니다.
     for prefix_name, (group_name, slash_name) in SLASH_ROUTES.items():
         prefix_command = bot.get_command(prefix_name)
         if prefix_command is None:
             missing.append(prefix_name)
             continue
+        resolved_routes.append((prefix_command, group_name, slash_name))
+        _remove_top_level_slash(bot, prefix_command)
 
-        bridge = _make_slash_bridge(prefix_command, slash_name)
-        groups[group_name].add_command(bridge.app_command)
+    for prefix_name in REMOVE_TOP_LEVEL_SLASH:
+        prefix_command = bot.get_command(prefix_name)
+        if prefix_command is None:
+            missing.append(prefix_name)
+            continue
+        _remove_top_level_slash(bot, prefix_command)
 
+    # /도감 같은 이미 존재하는 하이브리드 그룹에 붙일 명령어도 미리 확인합니다.
+    resolved_existing = []
     for prefix_name, (existing_group_name, slash_name) in EXISTING_GROUP_ROUTES.items():
         prefix_command = bot.get_command(prefix_name)
         existing_group = bot.get_command(existing_group_name)
@@ -181,24 +328,36 @@ def register_grouped_slash_commands(bot: commands.Bot) -> None:
             continue
         if not isinstance(existing_group, commands.HybridGroup) or not existing_group.app_command:
             raise RuntimeError(f"하이브리드 그룹을 찾을 수 없습니다: {existing_group_name}")
-
-        bridge = _make_slash_bridge(prefix_command, slash_name)
-        existing_group.app_command.add_command(bridge.app_command)
+        resolved_existing.append((prefix_command, existing_group, slash_name))
+        _remove_top_level_slash(bot, prefix_command)
 
     if missing:
         raise RuntimeError("슬래시 연결 대상 명령어 누락: " + ", ".join(sorted(missing)))
 
+    # 그룹 하위 명령어를 구성합니다.
+    for prefix_command, group_name, slash_name in resolved_routes:
+        app_command = _make_slash_app_command(prefix_command, slash_name)
+        groups[group_name].add_command(app_command)
+
+    for prefix_command, existing_group, slash_name in resolved_existing:
+        app_command = _make_slash_app_command(prefix_command, slash_name)
+        existing_group.app_command.add_command(app_command)
+
+    # 그룹을 최상위 트리에 등록합니다.
     for group in groups.values():
         bot.tree.add_command(group)
 
-    # 설명이 없는 기존 하이브리드 명령어도 Discord 메뉴에서 알아보기 쉽게 표시합니다.
+    # 설명이 없는 명령어도 Discord 메뉴에서 알아보기 쉽게 표시합니다.
     for app_command in bot.tree.walk_commands():
         if isinstance(app_command, app_commands.Command) and app_command.description == "…":
             app_command.description = f"{app_command.name} 기능을 실행합니다."
 
     root_count = len(bot.tree.get_commands())
+    total_count = sum(1 for _ in bot.tree.walk_commands())
     if root_count > 100:
         raise RuntimeError(f"Discord 최상위 슬래시 명령어 제한 초과: {root_count}/100")
 
     bot._abaddon_slash_groups_registered = True
     bot._abaddon_slash_root_count = root_count
+    bot._abaddon_slash_total_count = total_count
+    print(f"[슬래시 구성] 최상위 {root_count}/100개 · 전체 {total_count}개", flush=True)

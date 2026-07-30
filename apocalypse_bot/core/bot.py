@@ -1421,8 +1421,9 @@ async def 가입(ctx, *, 암호: str = ""):
 async def 명령어(ctx):
     text = """📜 **[아포칼립스 생존 봇 명령어]**
 
-✅ 기존 `!명령어`와 새 `/명령어`를 모두 사용할 수 있습니다.
-ℹ️ 일부 슬래시 명령어는 Discord 제한 때문에 `/직업 목록`, `/의료 상태`, `/침공 공격`처럼 카테고리 안에 묶여 있습니다.
+✅ 기존 `!명령어`는 이름 변경 없이 그대로 사용할 수 있습니다.
+ℹ️ 슬래시 명령어는 Discord의 최상위 100개 제한 때문에 카테고리로 정리되었습니다.
+예: `/장비 강화`, `/전투 던전`, `/도박 룰렛`, `/거래 판매`, `/시즌 일일퀘스트`
 
 🔹 **가입 / 정보**
 `!가입 생존자` `!정보` `!출석` `!출석보상`
@@ -1455,7 +1456,7 @@ async def 명령어(ctx):
 `!길드정보` `!길드기부 금액` `!길드강화` `!길드탈퇴`
 
 🔹 **거래소**
-`!거래소` `!거래검색 키워드` `!판매 아이템명 가격` `!구매등록번호 번호`
+`!거래소` `!거래검색 키워드` `!판매`(드롭다운) `!판매 아이템명 가격` `!구매등록번호 번호`
 `!판매취소 번호` `!경매등록 아이템명 시작가` `!입찰 번호 금액` `!경매마감 번호` `!거래기록`
 
 🔹 **파티**
@@ -3671,36 +3672,317 @@ async def 거래소(ctx):
     await send_pages(ctx.channel, "🏪 **[생존자 거래소]**\n" + "\n".join(lines))
 
 
-@bot.hybrid_command()
-async def 판매(ctx, 아이템이름: str, 가격: int):
-    if not await check_registered(ctx):
-        return
-    u = get_user(ctx.author.id)
-    if 아이템이름 not in u["inventory"]:
-        await ctx.send("⚠️ 보유하지 않은 장비입니다.")
-        return
-    if 가격 <= 0:
-        await ctx.send("⚠️ 판매 가격은 1 이상이어야 합니다.")
-        return
+def _sellable_equipment(u):
+    """거래소에 등록할 수 있는 미장착 장비 목록을 반환합니다."""
+    if not isinstance(u, dict):
+        return []
+    inventory = u.get("inventory", [])
+    if not isinstance(inventory, list):
+        return []
+    equipped = {item for item in u.get("equipment", {}).values() if item}
+    items = [item for item in inventory if item and item not in equipped]
+
+    def sort_key(item_name):
+        tier, _ = find_item(item_name)
+        try:
+            tier_index = TIER_ORDER.index(tier)
+        except ValueError:
+            tier_index = len(TIER_ORDER)
+        return (tier_index, item_name)
+
+    return sorted(dict.fromkeys(items), key=sort_key)
+
+
+def _register_market_listing(user_id, item_name, price):
+    """수동 명령어와 드롭다운 UI가 함께 사용하는 거래소 등록 처리입니다."""
+    u = get_user(user_id)
+    if u is None:
+        return False, "⛔ 가입된 생존자만 거래소를 이용할 수 있습니다."
+    if item_name not in u.get("inventory", []):
+        return False, "⚠️ 해당 장비를 더 이상 보유하고 있지 않습니다."
+    if item_name in u.get("equipment", {}).values():
+        return False, "⚠️ 장착 중인 장비는 판매할 수 없습니다. 먼저 `!해제`하세요."
+    try:
+        price = int(price)
+    except (TypeError, ValueError):
+        return False, "⚠️ 판매 가격은 숫자로 입력해야 합니다."
+    if price <= 0:
+        return False, "⚠️ 판매 가격은 1 이상이어야 합니다."
+    if price > 999_999_999_999:
+        return False, "⚠️ 판매 가격은 999,999,999,999 이하로 입력하세요."
 
     listing_id = str(world_data["market_next_id"])
     world_data["market_next_id"] += 1
-    enhance = u["enhancements"].get(아이템이름, 0)
-    options = u.get("equipment_options", {}).pop(아이템이름, None)
-    u["inventory"].remove(아이템이름)
-    u["enhancements"].pop(아이템이름, None)
+    enhance = int(u.get("enhancements", {}).get(item_name, 0) or 0)
+    options = u.get("equipment_options", {}).pop(item_name, None)
+    u["inventory"].remove(item_name)
+    u.get("enhancements", {}).pop(item_name, None)
     world_data["market"][listing_id] = {
-        "seller": str(ctx.author.id),
-        "item": 아이템이름,
+        "seller": str(user_id),
+        "item": item_name,
         "enhance": enhance,
-        "price": 가격,
+        "price": price,
         "options": options,
-        "created": datetime.now().isoformat()
+        "created": datetime.now().isoformat(),
     }
     save_data()
+    return True, {
+        "listing_id": listing_id,
+        "item": item_name,
+        "enhance": enhance,
+        "price": price,
+    }
+
+
+class MarketSellPriceModal(discord.ui.Modal):
+    def __init__(self, owner_id, item_name, menu_view):
+        tier, info = find_item(item_name)
+        super().__init__(title="거래소 판매 가격 입력", timeout=180)
+        self.owner_id = int(owner_id)
+        self.item_name = item_name
+        self.menu_view = menu_view
+        suggested = int((info or {}).get("price", 0) or 0)
+        self.price_input = discord.ui.TextInput(
+            label=f"{item_name} 판매 가격",
+            placeholder=f"예: {suggested:,}" if suggested else "예: 50000",
+            required=True,
+            min_length=1,
+            max_length=15,
+        )
+        self.add_item(self.price_input)
+
+    async def on_submit(self, interaction):
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "❌ 이 판매 메뉴는 명령어를 실행한 사람만 사용할 수 있습니다.",
+                ephemeral=True,
+            )
+            return
+
+        raw_price = str(self.price_input.value).replace(",", "").replace(" ", "")
+        try:
+            price = int(raw_price)
+        except ValueError:
+            await interaction.response.send_message(
+                "⚠️ 판매 가격은 숫자로 입력하세요. 쉼표는 사용해도 됩니다.",
+                ephemeral=True,
+            )
+            return
+
+        ok, result = _register_market_listing(self.owner_id, self.item_name, price)
+        if not ok:
+            await interaction.response.send_message(result, ephemeral=True)
+            await self.menu_view.refresh_message()
+            return
+
+        await interaction.response.send_message(
+            f"🏪 **판매 등록 완료** `#{result['listing_id']}`\n"
+            f"{result['item']} +{result['enhance']} / **{result['price']:,}개**"
+        )
+        await self.menu_view.refresh_message()
+
+    async def on_error(self, interaction, error):
+        traceback.print_exception(type(error), error, error.__traceback__)
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                "❌ 판매 가격 처리 중 오류가 발생했습니다. 관리자에게 알려주세요.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ 판매 가격 처리 중 오류가 발생했습니다. 관리자에게 알려주세요.",
+                ephemeral=True,
+            )
+
+
+class MarketSellItemSelect(discord.ui.Select):
+    def __init__(self, menu_view, page_items):
+        self.menu_view = menu_view
+        options = []
+        u = get_user(menu_view.owner_id) or {}
+        enhancements = u.get("enhancements", {})
+        for item_name in page_items:
+            tier, info = find_item(item_name)
+            enhance = int(enhancements.get(item_name, 0) or 0)
+            base_price = int((info or {}).get("price", 0) or 0)
+            slot = get_item_slot(item_name)
+            description = f"{slot} · +{enhance} · 기준가 {base_price:,} 식량"
+            options.append(
+                discord.SelectOption(
+                    label=f"[{tier or '기타'}] {item_name} +{enhance}"[:100],
+                    value=item_name[:100],
+                    description=description[:100],
+                    emoji=TIER_EMOJI.get(tier, "📦"),
+                )
+            )
+
+        super().__init__(
+            placeholder=f"판매할 장비 선택 · {menu_view.page + 1}/{menu_view.page_count}페이지",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction):
+        item_name = self.values[0]
+        u = get_user(self.menu_view.owner_id)
+        if u is None or item_name not in _sellable_equipment(u):
+            await interaction.response.send_message(
+                "⚠️ 해당 장비의 상태가 변경되었습니다. 판매 메뉴를 새로고침합니다.",
+                ephemeral=True,
+            )
+            await self.menu_view.refresh_message()
+            return
+        await interaction.response.send_modal(
+            MarketSellPriceModal(self.menu_view.owner_id, item_name, self.menu_view)
+        )
+
+
+class MarketSellView(discord.ui.View):
+    PAGE_SIZE = 25
+
+    def __init__(self, owner_id):
+        super().__init__(timeout=180)
+        self.owner_id = int(owner_id)
+        self.page = 0
+        self.message = None
+        self._rebuild()
+
+    @property
+    def items(self):
+        return _sellable_equipment(get_user(self.owner_id) or {})
+
+    @property
+    def page_count(self):
+        return max(1, (len(self.items) + self.PAGE_SIZE - 1) // self.PAGE_SIZE)
+
+    def current_page_items(self):
+        items = self.items
+        self.page = min(max(0, self.page), self.page_count - 1)
+        start = self.page * self.PAGE_SIZE
+        return items[start:start + self.PAGE_SIZE]
+
+    def make_embed(self):
+        u = get_user(self.owner_id) or {}
+        sellable = self.items
+        embed = discord.Embed(
+            title="🏪 거래소 판매 등록",
+            description=(
+                "아래 드롭다운에서 판매할 장비를 선택한 뒤 가격을 입력하세요.\n"
+                "장착 중인 장비는 목록에서 제외됩니다."
+            ),
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="판매 가능 장비", value=f"**{len(sellable)}개**", inline=True)
+        embed.add_field(name="보유 식량", value=f"**{int(u.get('balance', 0) or 0):,}개**", inline=True)
+        embed.set_footer(
+            text=f"페이지 {self.page + 1}/{self.page_count} · 메뉴는 3분 후 만료됩니다."
+        )
+        return embed
+
+    def _rebuild(self):
+        self.clear_items()
+        page_items = self.current_page_items()
+        if page_items:
+            self.add_item(MarketSellItemSelect(self, page_items))
+
+        if self.page_count > 1:
+            previous = discord.ui.Button(
+                label="이전",
+                emoji="◀️",
+                style=discord.ButtonStyle.secondary,
+                disabled=self.page <= 0,
+                row=1,
+            )
+            next_button = discord.ui.Button(
+                label="다음",
+                emoji="▶️",
+                style=discord.ButtonStyle.secondary,
+                disabled=self.page >= self.page_count - 1,
+                row=1,
+            )
+            previous.callback = self.go_previous
+            next_button.callback = self.go_next
+            self.add_item(previous)
+            self.add_item(next_button)
+
+    async def interaction_check(self, interaction):
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "❌ 이 판매 메뉴는 명령어를 실행한 사람만 사용할 수 있습니다.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def go_previous(self, interaction):
+        self.page = max(0, self.page - 1)
+        self._rebuild()
+        await interaction.response.edit_message(embed=self.make_embed(), view=self)
+
+    async def go_next(self, interaction):
+        self.page = min(self.page_count - 1, self.page + 1)
+        self._rebuild()
+        await interaction.response.edit_message(embed=self.make_embed(), view=self)
+
+    async def refresh_message(self):
+        if self.message is None:
+            return
+        self._rebuild()
+        try:
+            if self.items:
+                await self.message.edit(embed=self.make_embed(), view=self)
+            else:
+                embed = discord.Embed(
+                    title="🏪 거래소 판매 등록",
+                    description="✅ 판매 가능한 미장착 장비가 더 이상 없습니다.",
+                    color=discord.Color.green(),
+                )
+                await self.message.edit(embed=embed, view=None)
+                self.stop()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+
+@bot.hybrid_command(name="판매", description="장비를 거래소에 등록합니다. 인수를 생략하면 드롭다운 메뉴가 열립니다.")
+async def 판매(ctx, 아이템이름: str = None, 가격: int = None):
+    if not await check_registered(ctx):
+        return
+
+    if 아이템이름 is None and 가격 is None:
+        u = get_user(ctx.author.id)
+        if not _sellable_equipment(u):
+            await ctx.send(
+                "⚠️ 판매 가능한 미장착 장비가 없습니다. 장착 중이라면 먼저 `!해제`하세요."
+            )
+            return
+        view = MarketSellView(ctx.author.id)
+        message = await ctx.send(embed=view.make_embed(), view=view)
+        view.message = message
+        return
+
+    if not 아이템이름 or 가격 is None:
+        await ctx.send(
+            "⚠️ 사용법: `!판매`로 드롭다운을 열거나 `!판매 아이템명 가격`을 입력하세요."
+        )
+        return
+
+    ok, result = _register_market_listing(ctx.author.id, 아이템이름, 가격)
+    if not ok:
+        await ctx.send(result)
+        return
     await ctx.send(
-        f"🏪 **판매 등록 완료** `#{listing_id}`\n"
-        f"{아이템이름} +{enhance} / **{가격:,}개**"
+        f"🏪 **판매 등록 완료** `#{result['listing_id']}`\n"
+        f"{result['item']} +{result['enhance']} / **{result['price']:,}개**"
     )
 
 
