@@ -4,6 +4,7 @@ import random
 import asyncio
 import json
 import os
+import traceback
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from apocalypse_bot.game_data.jobs import JOBS
@@ -25,7 +26,7 @@ load_dotenv()
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-DATA_FILE = os.getenv("DATA_FILE", "survival_data.json")
+DATA_FILE = os.getenv("DATA_FILE", "/var/data/survival_data.json")
 CORRECT_PASSWORD = "생존자"
 MAX_MESSAGE_LENGTH = 1900
 
@@ -163,8 +164,72 @@ def default_user():
             "season": "",
             "points": 0,
             "claimed_levels": []
-        }
+        },
+        "black_casino": {},
+        "finance": {}
     }
+
+
+
+def _safe_int(value, default=0, minimum=None):
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        result = int(default)
+    if minimum is not None:
+        result = max(minimum, result)
+    return result
+
+
+def ensure_dungeon_user_state(u):
+    """구버전 가입 데이터도 던전 보상 처리에서 안전하게 사용할 수 있게 정리합니다."""
+    if not isinstance(u, dict):
+        return u
+
+    u["balance"] = _safe_int(u.get("balance", 1000), 1000)
+    u["level"] = _safe_int(u.get("level", 1), 1, 1)
+    u["exp"] = _safe_int(u.get("exp", 0), 0, 0)
+    u["infection"] = _safe_int(u.get("infection", 0), 0, 0)
+
+    stats = u.get("stats")
+    if not isinstance(stats, dict):
+        stats = {}
+        u["stats"] = stats
+    for key in [
+        "dungeon_wins", "dungeon_losses", "boss_damage", "worldboss_damage",
+        "items_bought", "craft_count", "enhance_success", "gambles", "earned",
+    ]:
+        stats[key] = _safe_int(stats.get(key, 0), 0, 0)
+
+    for key in ["materials", "enhancements", "dungeon_monster_kills"]:
+        if not isinstance(u.get(key), dict):
+            u[key] = {}
+
+    inventory = u.get("inventory")
+    if not isinstance(inventory, list):
+        if isinstance(inventory, (tuple, set)):
+            u["inventory"] = list(inventory)
+        elif isinstance(inventory, dict):
+            u["inventory"] = list(inventory.keys())
+        else:
+            u["inventory"] = []
+
+    achievements = u.get("achievements")
+    if not isinstance(achievements, list):
+        if isinstance(achievements, dict):
+            u["achievements"] = list(achievements.keys())
+        elif isinstance(achievements, (tuple, set)):
+            u["achievements"] = list(achievements)
+        elif achievements:
+            u["achievements"] = [str(achievements)]
+        else:
+            u["achievements"] = []
+
+    titles = u.get("titles")
+    if not isinstance(titles, list):
+        u["titles"] = [str(u.get("title") or "신입 생존자")]
+
+    return u
 
 
 def migrate_user(u):
@@ -172,7 +237,17 @@ def migrate_user(u):
 
     for key, value in base.items():
         if key not in u:
-            u[key] = value
+            if isinstance(value, dict):
+                u[key] = value.copy()
+            elif isinstance(value, list):
+                u[key] = value.copy()
+            else:
+                u[key] = value
+
+    if not isinstance(u.get("stats"), dict):
+        u["stats"] = {}
+    if not isinstance(u.get("daily_quest"), dict):
+        u["daily_quest"] = base["daily_quest"].copy()
 
     for key, value in base["stats"].items():
         u["stats"].setdefault(key, value)
@@ -280,6 +355,7 @@ def migrate_user(u):
     if u.get("title") not in u["titles"]:
         u["titles"].append(u.get("title", "신입 생존자"))
 
+    ensure_dungeon_user_state(u)
     ensure_vitals(u)
     ensure_conditions(u)
     return u
@@ -1300,7 +1376,14 @@ async def on_command_error(ctx, error):
         await ctx.send(f"⏳ 쿨타임이 남았습니다: **{mins}분 {secs}초**")
         return
 
-    print(f"[명령어 오류] {type(error).__name__}: {error}")
+    original = getattr(error, "original", error)
+    print(
+        f"[명령어 오류] 명령={getattr(ctx.command, 'qualified_name', None)} "
+        f"유저={getattr(ctx.author, 'id', None)} "
+        f"오류={type(original).__name__}: {original}",
+        flush=True,
+    )
+    traceback.print_exception(type(original), original, original.__traceback__)
     await ctx.send("❌ 명령어 처리 중 오류가 발생했습니다. 관리자에게 알려주세요.")
 
 
@@ -1395,13 +1478,20 @@ async def 명령어(ctx):
 `!도감` `!도감 장비/펫/몬스터` `!도감보상` `!튜토리얼`
 `!서버설정` `!퀴즈알림설정` `!퀴즈알림상태` `!퀴즈알림해제`
 
-🔹 **도박 / 알바 / 실시간 암시장**
-`!탐색 왼쪽/오른쪽 배팅액` `!주파수 배팅액` `!룰렛 배팅액` `!파산신청`
+🔹 **BLACK CASINO / 도박 / 금융**
+`!카지노` `!카지노환전 구매/판매 금액` `!블랙잭` `!하이로우` `!슬롯` `!다이스` `!바카라`
+`!럭키휠` `!코인플립 앞/뒤 금액` `!올인 앞/뒤` `!카지노미션` `!카지노상점`
+`!룰렛 배팅액` `!주파수 배팅액` `!탐색 왼쪽/오른쪽 배팅액` `!파산신청`
+`!은행` `!입금 금액` `!출금 금액` `!대출 금액` `!상환 금액`
+`!사채` `!사채빌리기 금액` `!사채상환 금액` `!사채추심`
+슬래시: `/카지노` `/은행` `/사채` `/암시장`
+※ 카지노는 별도 칩을 사용합니다. 생존 룰렛 피격 시 식량이 최대 배팅액의 10배까지 감소하며 마이너스가 될 수 있습니다.
+
+🔹 **알바 / 코인 / 실시간 암시장**
 `!도박잔액` `!알바` `!코인` `!도박정보`
 `!시세` `!매수 일반 10` `!매도 일반 전부` `!자산` `!암시장기록`
 `!암시장알림설정 [@역할]` `!암시장알림상태` `!암시장알림해제`
-슬래시: `/도박잔액` `/알바` `/코인` `/암시장 시세/매수/매도/자산/기록/도움말/알림설정/알림상태/알림해제`
-※ 도박 배팅 범위는 100~10,000,000 식량이며, 시세는 전 서버 공통으로 1분마다 변동합니다.
+※ 시세는 전 서버 공통으로 1분마다 변동합니다.
 
 🔹 **관리자**
 `!가방조회 @유저` `!식량지급 @유저 금액`
@@ -1451,7 +1541,7 @@ async def 지갑(ctx):
     if not await check_registered(ctx):
         return
     u = get_user(ctx.author.id)
-    debt = " 🚨 사채 빚 상태" if u["balance"] < 0 else ""
+    debt = " 🚨 식량 빚 상태" if u["balance"] < 0 else ""
     await ctx.send(f"🥫 보유 식량: **{u['balance']:,}개**{debt}")
 
 
@@ -2337,6 +2427,7 @@ async def 던전(ctx, 난이도: str = None):
         return
 
     u = get_user(ctx.author.id)
+    ensure_dungeon_user_state(u)
     refresh_conditions(u, get_max_hp)
     if u["conditions"].get("기절", 0) > 0:
         ctx.command.reset_cooldown(ctx)
@@ -4028,6 +4119,24 @@ register_v36_commands(
 from apocalypse_bot.commands.v37_gambling_experience import register_v37_commands
 register_v37_commands(
     bot, get_user, check_registered, save_data, world_data, progress_quest,
+)
+
+# V3.9: 통합 폐허 카지노 (블랙잭/하이로우/슬롯/다이스/바카라)
+from apocalypse_bot.commands.v39_casino import register_v39_commands
+register_v39_commands(
+    bot, get_user, check_registered, save_data, user_data, world_data, progress_quest,
+)
+
+# V4.0: BLACK CASINO 확장 (칩/VIP/잭팟/미션/NPC/상점/럭키휠/올인)
+from apocalypse_bot.commands.v40_black_casino import register_v40_casino_commands
+register_v40_casino_commands(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+)
+
+# V4.0: 은행 + 사채 금융 시스템
+from apocalypse_bot.commands.v40_finance import register_v40_finance_commands
+register_v40_finance_commands(
+    bot, get_user, check_registered, save_data,
 )
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록

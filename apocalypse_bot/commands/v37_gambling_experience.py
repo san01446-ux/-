@@ -26,6 +26,17 @@ GAMBLE_MIN_BET = 100
 GAMBLE_MAX_BET = 10_000_000
 GAMBLE_HISTORY_LIMIT = 20
 
+# 생존 룰렛: 탄환 확률이 올라갈수록 생존 배당과 피격 손실이 함께 상승합니다.
+# key = 남은 약실 수(탄환 확률 1/key)
+ROULETTE_RISK_TABLE: Dict[int, Dict[str, Any]] = {
+    6: {"reward": 2, "losses": (1, 1, 1, 2)},
+    5: {"reward": 3, "losses": (2, 2, 3)},
+    4: {"reward": 4, "losses": (3, 4, 5)},
+    3: {"reward": 6, "losses": (5, 6, 7)},
+    2: {"reward": 10, "losses": (7, 8, 9, 10)},
+    1: {"reward": 0, "losses": (10,)},
+}
+
 WORK_DAILY_LIMIT = 50
 WORK_COOLDOWN_SECONDS = 8
 
@@ -424,16 +435,24 @@ def register_v37_commands(
             state["chamber"] = chamber
             state["bullet"] = bullet
             denominator = 7 - chamber
+            risk = ROULETTE_RISK_TABLE.get(denominator, ROULETTE_RISK_TABLE[1])
+            reward_multiplier = int(risk["reward"])
+            possible_losses = tuple(int(v) for v in risk["losses"])
+            min_loss_multiplier = min(possible_losses)
+            max_loss_multiplier = max(possible_losses)
             before = int(user.get("balance", 0))
 
             suspense = await ctx.send(
                 f"🔫 **[생존 룰렛]**\n배팅 **{배팅액:,} 식량**\n"
-                f"현재 탄환 확률 **1/{denominator}**\n실린더가 천천히 회전합니다..."
+                f"현재 탄환 확률 **1/{denominator}**\n"
+                f"생존 배당 **{reward_multiplier}배** · 피격 손실 **{min_loss_multiplier}~{max_loss_multiplier}배**\n"
+                "실린더가 천천히 회전합니다..."
             )
             await asyncio.sleep(0.9)
             await _edit_message(
                 suspense,
                 f"🔫 **현재 탄환 확률 1/{denominator}**\n"
+                f"생존 {reward_multiplier}배 · 피격 {min_loss_multiplier}~{max_loss_multiplier}배 손실\n"
                 "실린더가 멈췄습니다. 방아쇠에 손가락을 올립니다...",
             )
             await asyncio.sleep(0.9)
@@ -446,17 +465,24 @@ def register_v37_commands(
                 progress_quest(user, "도박 참여")
 
             if chamber == bullet:
-                user["balance"] = before - 배팅액
-                delta = -배팅액
+                loss_multiplier = random.choice(possible_losses)
+                loss = 배팅액 * loss_multiplier
+                # 보유액보다 손실이 크면 일반 식량 잔액이 그대로 마이너스가 됩니다.
+                user["balance"] = before - loss
+                delta = -loss
                 del roulette_states[guild_id]
+                debt_text = (
+                    f"\n⚠️ 보유액을 초과해 **{abs(int(user['balance'])):,} 식량 빚**이 생겼습니다. `!파산신청` 가능"
+                    if int(user["balance"]) < 0 else ""
+                )
                 text = (
                     f"💥 **탕! 탄환이 발사됐습니다.**\n"
-                    f"**{배팅액:,} 식량**을 잃었습니다.\n"
+                    f"위험 단계에 따라 **{loss_multiplier}배**, 총 **{loss:,} 식량**을 잃었습니다.{debt_text}\n"
                     "실린더가 교체되어 다음 도전은 다시 **1/6**부터 시작합니다."
                 )
                 success = False
             else:
-                multiplier = random.randint(2, 8)
+                multiplier = reward_multiplier
                 gain = 배팅액 * multiplier
                 user["balance"] = before + gain
                 user["stats"].setdefault("earned", 0)
@@ -464,10 +490,12 @@ def register_v37_commands(
                 delta = gain
                 state["chamber"] = chamber + 1
                 next_denominator = 7 - int(state["chamber"])
+                next_risk = ROULETTE_RISK_TABLE.get(next_denominator, ROULETTE_RISK_TABLE[1])
                 text = (
                     f"💨 **철컥! 빈 약실입니다. 생존했습니다.**\n"
-                    f"{multiplier}배 보상 **{gain:,} 식량** 획득\n"
-                    f"다음 방아쇠의 탄환 확률은 **1/{next_denominator}**입니다."
+                    f"현재 위험도 고정 배당 **{multiplier}배**, **{gain:,} 식량** 획득\n"
+                    f"다음 탄환 확률 **1/{next_denominator}** · 생존 {int(next_risk['reward'])}배 · "
+                    f"피격 최대 {max(int(v) for v in next_risk['losses'])}배 손실"
                 )
                 success = True
 
