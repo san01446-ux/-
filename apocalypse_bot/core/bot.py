@@ -25,7 +25,7 @@ load_dotenv()
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-DATA_FILE = "survival_data.json"
+DATA_FILE = os.getenv("DATA_FILE", "/var/data/survival_data.json")
 CORRECT_PASSWORD = "생존자"
 MAX_MESSAGE_LENGTH = 1900
 
