@@ -584,10 +584,6 @@ def register_v36_commands(
     async def black_market_group(ctx: commands.Context) -> None:
         await show_prices(ctx)
 
-    @black_market_group.command(name="시세", description="1분마다 변동하는 현재 암시장 시세를 확인합니다.")
-    async def black_market_prices(ctx: commands.Context) -> None:
-        await show_prices(ctx)
-
     @black_market_group.command(name="매수", description="식량으로 암시장 종목을 구매합니다.")
     async def black_market_buy(ctx: commands.Context, 종목: str, 수량: int) -> None:
         await buy_asset(ctx, 종목, 수량)
