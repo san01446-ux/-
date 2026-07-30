@@ -26,7 +26,7 @@ MARKET_ASSETS: Dict[str, Dict[str, Any]] = {
         "min_price": 100,
         "max_price": 20_000,
         "volatility": 0.018,
-        "aliases": ["일반", "일반보급권", "보급", "보급권"],
+        "aliases": ["일반", "일반코인", "일반보급권", "보급", "보급권"],
         "desc": "폐허 암시장에서 가장 자주 거래되는 기본 보급 증서",
     },
     "군수권": {
@@ -36,7 +36,7 @@ MARKET_ASSETS: Dict[str, Dict[str, Any]] = {
         "min_price": 5_000,
         "max_price": 1_500_000,
         "volatility": 0.026,
-        "aliases": ["군용", "군수", "군용보급권", "군수권"],
+        "aliases": ["군용", "슈퍼", "슈퍼코인", "군수", "군용보급권", "군수권"],
         "desc": "군수 창고 물자 우선 배급권",
     },
     "혈청": {
@@ -46,7 +46,7 @@ MARKET_ASSETS: Dict[str, Dict[str, Any]] = {
         "min_price": 100_000,
         "max_price": 80_000_000,
         "volatility": 0.038,
-        "aliases": ["혈청", "붉은혈청", "변이혈청", "붉은변이혈청"],
+        "aliases": ["혈청", "전설", "전설코인", "붉은혈청", "변이혈청", "붉은변이혈청"],
         "desc": "효능과 부작용이 모두 불명확한 고위험 실험 물질",
     },
     "유물": {
@@ -56,7 +56,7 @@ MARKET_ASSETS: Dict[str, Dict[str, Any]] = {
         "min_price": 1_000_000,
         "max_price": 2_000_000_000,
         "volatility": 0.052,
-        "aliases": ["유물", "천상", "천상유물"],
+        "aliases": ["유물", "천상", "천상코인", "천상유물"],
         "desc": "종말 이전 문명의 흔적이 담긴 희귀 유물",
     },
     "코어": {
@@ -66,9 +66,18 @@ MARKET_ASSETS: Dict[str, Dict[str, Any]] = {
         "min_price": 50_000_000,
         "max_price": 100_000_000_000,
         "volatility": 0.072,
-        "aliases": ["코어", "아바돈", "아바돈코어"],
+        "aliases": ["코어", "다이아", "다이아코인", "아바돈", "아바돈코어"],
         "desc": "공허 에너지가 응축된 최상위 투기 자산",
     },
+}
+
+
+COIN_DISPLAY_NAMES: Dict[str, str] = {
+    "보급권": "일반 코인",
+    "군수권": "슈퍼 코인",
+    "혈청": "전설 코인",
+    "유물": "천상 코인",
+    "코어": "다이아 코인",
 }
 
 
@@ -362,7 +371,8 @@ def register_v36_commands(
             "📊 **실시간 암시장**\n"
             "`!시세` · `/암시장 시세` — 현재 종목별 시세\n"
             "`!매수 일반 10` · `/암시장 매수` — 종목 구매\n"
-            "`!매도 일반 전부` · `/암시장 매도` — 보유 종목 판매\n"
+            "`!매도` 또는 `!코인판매` · `/암시장 매도` — 드롭다운 코인 판매\n"
+            "`!매도 일반 전부` — 기존 입력식 판매도 지원\n"
             "`!자산` · `/암시장 자산` — 평가금과 손익 확인\n"
             "`!암시장기록` · `/암시장 기록` — 최근 거래 확인\n"
             "`!암시장알림설정 [@역할]` · `/암시장 알림설정` — 급등락·시장 사건 자동 알림\n"
@@ -426,45 +436,46 @@ def register_v36_commands(
                 f"보유 수량 **{new_quantity:,}개** · 평균 단가 **{new_avg:,}**"
             )
 
-    async def sell_asset(ctx: commands.Context, asset_name: str, quantity_value: Any) -> None:
-        if not await check_registered(ctx):
-            return
+    async def execute_coin_sale(user_id: int, asset_key: str, quantity_value: Any) -> Dict[str, Any]:
+        """코인 판매를 실제 처리하고 UI와 텍스트 명령어가 공통으로 쓰는 결과를 반환합니다."""
         await sync_market()
-        asset_key = resolve_asset(asset_name)
-        if not asset_key:
-            await ctx.send("⚠️ 사용법: `!매도 일반 10` 또는 `!매도 일반 전부`")
-            return
+        if asset_key not in MARKET_ASSETS:
+            return {"ok": False, "message": "⚠️ 존재하지 않는 코인입니다."}
 
-        async with get_lock(ctx.author.id):
-            user = get_user(ctx.author.id)
+        async with get_lock(user_id):
+            user = get_user(user_id)
             account = ensure_user_market(user)
             position = account["holdings"][asset_key]
-            owned = int(position["quantity"])
+            owned = int(position.get("quantity", 0) or 0)
             quantity = _parse_quantity(quantity_value, owned=owned)
             if not quantity or quantity > owned:
-                await ctx.send(f"⚠️ 판매 수량이 올바르지 않습니다. 현재 보유: **{owned:,}개**")
-                return
+                return {
+                    "ok": False,
+                    "message": f"⚠️ 판매 수량이 올바르지 않습니다. 현재 보유: **{owned:,}개**",
+                }
 
             remaining = _trade_cooldown_remaining(account)
             if remaining > 0:
-                await ctx.send(f"⏳ 연속 거래 방지를 위해 **{remaining}초** 뒤 다시 거래하세요.")
-                return
+                return {
+                    "ok": False,
+                    "message": f"⏳ 연속 거래 방지를 위해 **{remaining}초** 뒤 다시 거래하세요.",
+                }
 
             market = ensure_market(world_data)
             price = int(market["assets"][asset_key]["price"])
             gross = price * quantity
             fee = max(1, math.ceil(gross * TRADE_FEE_RATE))
             net = max(0, gross - fee)
-            avg_price = int(position["avg_price"])
+            avg_price = int(position.get("avg_price", 0) or 0)
             realized = net - (avg_price * quantity)
 
-            user["balance"] += net
+            user["balance"] = int(user.get("balance", 0) or 0) + net
             position["quantity"] = owned - quantity
             if position["quantity"] <= 0:
                 position["quantity"] = 0
                 position["avg_price"] = 0
-            account["realized_profit"] = int(account.get("realized_profit", 0)) + realized
-            account["fees_paid"] = int(account.get("fees_paid", 0)) + fee
+            account["realized_profit"] = int(account.get("realized_profit", 0) or 0) + realized
+            account["fees_paid"] = int(account.get("fees_paid", 0) or 0) + fee
             _record_trade(account, "매도", asset_key, quantity, price, fee, net)
             user.setdefault("stats", {}).setdefault("gambles", 0)
             user["stats"]["gambles"] += 1
@@ -475,14 +486,301 @@ def register_v36_commands(
                 progress_quest(user, "도박 참여")
             save_data()
 
-            sign = "+" if realized >= 0 else ""
-            info = MARKET_ASSETS[asset_key]
-            await ctx.send(
-                f"💱 **[암시장 매도 완료]**\n"
-                f"{info['emoji']} {info['name']} **{quantity:,}개**\n"
-                f"체결가 **{price:,}** · 수수료 **{fee:,}** · 순수령 **{net:,} 식량**\n"
-                f"실현 손익 **{sign}{realized:,} 식량** · 남은 수량 **{position['quantity']:,}개**"
+            return {
+                "ok": True,
+                "asset_key": asset_key,
+                "quantity": quantity,
+                "price": price,
+                "gross": gross,
+                "fee": fee,
+                "net": net,
+                "realized": realized,
+                "remaining": int(position["quantity"]),
+                "balance": int(user.get("balance", 0) or 0),
+            }
+
+    def coin_sale_result_embed(result: Dict[str, Any]) -> discord.Embed:
+        asset_key = str(result["asset_key"])
+        info = MARKET_ASSETS[asset_key]
+        coin_name = COIN_DISPLAY_NAMES.get(asset_key, info["name"])
+        realized = int(result["realized"])
+        sign = "+" if realized >= 0 else ""
+        embed = discord.Embed(
+            title="💸 코인 판매 완료",
+            description=(
+                f"{info['emoji']} **{coin_name} {int(result['quantity']):,}개**를 판매했습니다.\n"
+                "현재 시세로 즉시 체결되었습니다."
+            ),
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="체결가", value=f"{int(result['price']):,} 식량", inline=True)
+        embed.add_field(name="수수료", value=f"{int(result['fee']):,} 식량", inline=True)
+        embed.add_field(name="순수령", value=f"**{int(result['net']):,} 식량**", inline=True)
+        embed.add_field(name="실현 손익", value=f"{sign}{realized:,} 식량", inline=True)
+        embed.add_field(name="남은 코인", value=f"{int(result['remaining']):,}개", inline=True)
+        embed.add_field(name="현재 잔액", value=f"{int(result['balance']):,} 식량", inline=True)
+        embed.set_footer(text="암시장 거래 수수료 2% · 게임 내 재화 전용")
+        return embed
+
+    def coin_sale_menu_embed(user_id: int) -> discord.Embed:
+        user = get_user(user_id)
+        account = ensure_user_market(user)
+        lines = []
+        for asset_key, info in MARKET_ASSETS.items():
+            quantity = int(account["holdings"][asset_key].get("quantity", 0) or 0)
+            lines.append(f"{info['emoji']} **{COIN_DISPLAY_NAMES[asset_key]}** : {quantity:,}개")
+
+        embed = discord.Embed(
+            title="🪙 코인 판매 💸",
+            description="아래 드롭다운에서 판매할 코인을 선택하세요.",
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="보유한 코인", value="\n".join(lines), inline=False)
+        embed.add_field(name="잔액", value=f"**{int(user.get('balance', 0) or 0):,} 식량**", inline=False)
+        embed.set_footer(text="선택 후 1개 · 10개 · 전부 · 직접 입력 중에서 판매 수량을 정할 수 있습니다.")
+        return embed
+
+    def coin_quantity_embed(user_id: int, asset_key: str) -> discord.Embed:
+        user = get_user(user_id)
+        account = ensure_user_market(user)
+        market = ensure_market(world_data)
+        info = MARKET_ASSETS[asset_key]
+        owned = int(account["holdings"][asset_key].get("quantity", 0) or 0)
+        price = int(market["assets"][asset_key]["price"])
+        gross_all = price * owned
+        fee_all = max(1, math.ceil(gross_all * TRADE_FEE_RATE)) if owned > 0 else 0
+        net_all = max(0, gross_all - fee_all)
+        embed = discord.Embed(
+            title=f"{info['emoji']} {COIN_DISPLAY_NAMES[asset_key]} 판매",
+            description="판매할 수량을 아래 버튼에서 선택하세요.",
+            color=discord.Color.gold(),
+        )
+        embed.add_field(name="보유 수량", value=f"**{owned:,}개**", inline=True)
+        embed.add_field(name="현재 시세", value=f"**{price:,} 식량**", inline=True)
+        embed.add_field(name="전부 판매 예상 수령", value=f"**{net_all:,} 식량**", inline=False)
+        embed.set_footer(text="실제 수령액은 거래 수수료 2%를 제외한 금액입니다.")
+        return embed
+
+    class CoinSellAmountModal(discord.ui.Modal):
+        def __init__(self, quantity_view: "CoinSellQuantityView") -> None:
+            super().__init__(title="코인 판매 수량 입력", timeout=180)
+            self.quantity_view = quantity_view
+            self.amount_input = discord.ui.TextInput(
+                label="판매 수량",
+                placeholder="예: 5 또는 전부",
+                required=True,
+                max_length=20,
             )
+            self.add_item(self.amount_input)
+
+        async def on_submit(self, interaction: discord.Interaction) -> None:
+            if interaction.user.id != self.quantity_view.author_id:
+                await interaction.response.send_message(
+                    "❌ 이 판매 메뉴는 명령어를 실행한 사람만 사용할 수 있습니다.",
+                    ephemeral=True,
+                )
+                return
+
+            result = await execute_coin_sale(
+                self.quantity_view.author_id,
+                self.quantity_view.asset_key,
+                str(self.amount_input.value),
+            )
+            if not result.get("ok"):
+                await interaction.response.send_message(
+                    str(result.get("message", "⚠️ 판매에 실패했습니다.")),
+                    ephemeral=True,
+                )
+                return
+
+            await interaction.response.send_message("✅ 코인 판매가 완료되었습니다.", ephemeral=True)
+            if self.quantity_view.message is not None:
+                try:
+                    await self.quantity_view.message.edit(embed=coin_sale_result_embed(result), view=None)
+                except (discord.HTTPException, discord.NotFound):
+                    pass
+
+        async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+            if interaction.response.is_done():
+                await interaction.followup.send("❌ 판매 수량 처리 중 오류가 발생했습니다.", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ 판매 수량 처리 중 오류가 발생했습니다.", ephemeral=True)
+            print(f"[코인 판매 모달 오류] {type(error).__name__}: {error}")
+
+    class CoinSellQuantityView(discord.ui.View):
+        def __init__(self, author_id: int, asset_key: str) -> None:
+            super().__init__(timeout=180)
+            self.author_id = int(author_id)
+            self.asset_key = asset_key
+            self.message = None
+            user = get_user(author_id)
+            account = ensure_user_market(user)
+            owned = int(account["holdings"][asset_key].get("quantity", 0) or 0)
+            self.sell_one.disabled = owned < 1
+            self.sell_ten.disabled = owned < 10
+            self.sell_all.disabled = owned < 1
+            self.sell_custom.disabled = owned < 1
+
+        async def interaction_check(self, interaction: discord.Interaction) -> bool:
+            if interaction.user.id != self.author_id:
+                await interaction.response.send_message(
+                    "❌ 이 판매 메뉴는 명령어를 실행한 사람만 사용할 수 있습니다.",
+                    ephemeral=True,
+                )
+                return False
+            return True
+
+        async def finish_sale(self, interaction: discord.Interaction, quantity_value: Any) -> None:
+            result = await execute_coin_sale(self.author_id, self.asset_key, quantity_value)
+            if not result.get("ok"):
+                await interaction.response.send_message(
+                    str(result.get("message", "⚠️ 판매에 실패했습니다.")),
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.edit_message(embed=coin_sale_result_embed(result), view=None)
+            self.stop()
+
+        @discord.ui.button(label="1개", style=discord.ButtonStyle.primary, emoji="1️⃣")
+        async def sell_one(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            await self.finish_sale(interaction, 1)
+
+        @discord.ui.button(label="10개", style=discord.ButtonStyle.primary, emoji="🔟")
+        async def sell_ten(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            await self.finish_sale(interaction, 10)
+
+        @discord.ui.button(label="전부", style=discord.ButtonStyle.danger, emoji="💸")
+        async def sell_all(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            await self.finish_sale(interaction, "전부")
+
+        @discord.ui.button(label="직접 입력", style=discord.ButtonStyle.success, emoji="⌨️")
+        async def sell_custom(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            await interaction.response.send_modal(CoinSellAmountModal(self))
+
+        @discord.ui.button(label="뒤로", style=discord.ButtonStyle.secondary, emoji="↩️")
+        async def go_back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            menu = CoinSellMenuView(self.author_id)
+            menu.message = interaction.message
+            await interaction.response.edit_message(embed=coin_sale_menu_embed(self.author_id), view=menu)
+            self.stop()
+
+        async def on_timeout(self) -> None:
+            for child in self.children:
+                child.disabled = True
+            if self.message is not None:
+                try:
+                    await self.message.edit(view=self)
+                except (discord.HTTPException, discord.NotFound):
+                    pass
+
+    class CoinSellSelect(discord.ui.Select):
+        def __init__(self, menu_view: "CoinSellMenuView") -> None:
+            self.menu_view = menu_view
+            user = get_user(menu_view.author_id)
+            account = ensure_user_market(user)
+            market = ensure_market(world_data)
+            options = []
+            for asset_key, info in MARKET_ASSETS.items():
+                owned = int(account["holdings"][asset_key].get("quantity", 0) or 0)
+                price = int(market["assets"][asset_key]["price"])
+                options.append(
+                    discord.SelectOption(
+                        label=COIN_DISPLAY_NAMES[asset_key],
+                        value=asset_key,
+                        description=f"보유 {owned:,}개 · 현재 시세 {price:,} 식량",
+                        emoji=info["emoji"],
+                    )
+                )
+            super().__init__(
+                placeholder="드롭다운으로 코인 선택",
+                min_values=1,
+                max_values=1,
+                options=options,
+            )
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            if interaction.user.id != self.menu_view.author_id:
+                await interaction.response.send_message(
+                    "❌ 이 판매 메뉴는 명령어를 실행한 사람만 사용할 수 있습니다.",
+                    ephemeral=True,
+                )
+                return
+
+            asset_key = self.values[0]
+            user = get_user(self.menu_view.author_id)
+            account = ensure_user_market(user)
+            owned = int(account["holdings"][asset_key].get("quantity", 0) or 0)
+            if owned <= 0:
+                await interaction.response.send_message(
+                    f"⚠️ {MARKET_ASSETS[asset_key]['emoji']} **{COIN_DISPLAY_NAMES[asset_key]}**을 보유하고 있지 않습니다.",
+                    ephemeral=True,
+                )
+                return
+
+            quantity_view = CoinSellQuantityView(self.menu_view.author_id, asset_key)
+            quantity_view.message = interaction.message
+            await interaction.response.edit_message(
+                embed=coin_quantity_embed(self.menu_view.author_id, asset_key),
+                view=quantity_view,
+            )
+            self.menu_view.stop()
+
+    class CoinSellMenuView(discord.ui.View):
+        def __init__(self, author_id: int) -> None:
+            super().__init__(timeout=180)
+            self.author_id = int(author_id)
+            self.message = None
+            self.add_item(CoinSellSelect(self))
+
+        async def interaction_check(self, interaction: discord.Interaction) -> bool:
+            if interaction.user.id != self.author_id:
+                await interaction.response.send_message(
+                    "❌ 이 판매 메뉴는 명령어를 실행한 사람만 사용할 수 있습니다.",
+                    ephemeral=True,
+                )
+                return False
+            return True
+
+        async def on_timeout(self) -> None:
+            for child in self.children:
+                child.disabled = True
+            if self.message is not None:
+                try:
+                    await self.message.edit(view=self)
+                except (discord.HTTPException, discord.NotFound):
+                    pass
+
+    async def show_coin_sell_menu(ctx: commands.Context) -> None:
+        if not await check_registered(ctx):
+            return
+        await sync_market()
+        user = get_user(ctx.author.id)
+        account = ensure_user_market(user)
+        total_owned = sum(
+            int(account["holdings"][key].get("quantity", 0) or 0)
+            for key in MARKET_ASSETS
+        )
+        if total_owned <= 0:
+            await ctx.send("📭 판매할 코인이 없습니다. `!코인`으로 코인을 먼저 탐색해보세요.")
+            return
+
+        view = CoinSellMenuView(ctx.author.id)
+        message = await ctx.send(embed=coin_sale_menu_embed(ctx.author.id), view=view)
+        view.message = message
+
+    async def sell_asset(ctx: commands.Context, asset_name: str, quantity_value: Any) -> None:
+        if not await check_registered(ctx):
+            return
+        asset_key = resolve_asset(asset_name)
+        if not asset_key:
+            await ctx.send("⚠️ 사용법: `!매도`로 드롭다운을 열거나 `!매도 일반 10`을 입력하세요.")
+            return
+
+        result = await execute_coin_sale(ctx.author.id, asset_key, quantity_value)
+        if not result.get("ok"):
+            await ctx.send(str(result.get("message", "⚠️ 판매에 실패했습니다.")))
+            return
+        await ctx.send(embed=coin_sale_result_embed(result))
 
     async def show_assets(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
@@ -557,8 +855,18 @@ def register_v36_commands(
     async def market_buy_legacy(ctx: commands.Context, 종목: str, 수량: str) -> None:
         await buy_asset(ctx, 종목, 수량)
 
-    @bot.command(name="매도")
-    async def market_sell_legacy(ctx: commands.Context, 종목: str, 수량: str) -> None:
+    @bot.command(name="매도", aliases=["코인판매"])
+    async def market_sell_legacy(
+        ctx: commands.Context,
+        종목: Optional[str] = None,
+        수량: Optional[str] = None,
+    ) -> None:
+        if 종목 is None and 수량 is None:
+            await show_coin_sell_menu(ctx)
+            return
+        if 종목 is None or 수량 is None:
+            await ctx.send("⚠️ `!매도`로 드롭다운을 열거나 `!매도 일반 10`처럼 입력하세요.")
+            return
         await sell_asset(ctx, 종목, 수량)
 
     @bot.command(name="자산", aliases=["투자자산"])
@@ -588,8 +896,18 @@ def register_v36_commands(
     async def black_market_buy(ctx: commands.Context, 종목: str, 수량: int) -> None:
         await buy_asset(ctx, 종목, 수량)
 
-    @black_market_group.command(name="매도", description="보유한 암시장 종목을 판매합니다.")
-    async def black_market_sell(ctx: commands.Context, 종목: str, 수량: str) -> None:
+    @black_market_group.command(name="매도", description="인수를 생략하면 드롭다운에서 보유 코인을 판매합니다.")
+    async def black_market_sell(
+        ctx: commands.Context,
+        종목: Optional[str] = None,
+        수량: Optional[str] = None,
+    ) -> None:
+        if 종목 is None and 수량 is None:
+            await show_coin_sell_menu(ctx)
+            return
+        if 종목 is None or 수량 is None:
+            await ctx.send("⚠️ 종목과 수량을 모두 입력하거나, 둘 다 비워 드롭다운을 여세요.")
+            return
         await sell_asset(ctx, 종목, 수량)
 
     @black_market_group.command(name="자산", description="보유 종목의 평가금과 손익을 확인합니다.")
