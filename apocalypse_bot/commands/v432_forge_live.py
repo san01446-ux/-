@@ -15,12 +15,14 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 import discord
 from discord.ext import commands
 
 
-V432_VERSION = "4.3.2"
+V432_VERSION = "4.3.2.1"
 MAX_PUBLIC_EVENTS = 60
 PUBLIC_MILESTONE_LEVELS = {5, 7, 10, 12, 15, 18, 20}
 
@@ -69,6 +71,15 @@ _ENHANCE_LOCKS: Dict[Tuple[int, str], asyncio.Lock] = {}
 _HTTP_SERVER: Optional[ThreadingHTTPServer] = None
 _HTTP_THREAD: Optional[threading.Thread] = None
 _HTTP_STARTED_AT = time.time()
+_RELAY_LOCK = threading.RLock()
+_RELAY_STATE: Dict[str, Any] = {
+    "configured": False,
+    "last_event_ok": None,
+    "last_event_at": None,
+    "last_status_ok": None,
+    "last_status_at": None,
+    "last_error": "",
+}
 
 
 def _utc_iso() -> str:
@@ -320,6 +331,117 @@ def _event_accent(event_type: str) -> str:
     }.get(event_type, "#8e8899")
 
 
+def _sanitize_public_metadata(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    allowed = {"item", "level", "tier", "protected", "version"}
+    cleaned: Dict[str, Any] = {}
+    for key in allowed:
+        if key not in value:
+            continue
+        item = value[key]
+        if isinstance(item, bool):
+            cleaned[key] = item
+        elif isinstance(item, int):
+            cleaned[key] = max(-1_000_000, min(1_000_000, item))
+        elif isinstance(item, (float, str)):
+            cleaned[key] = _clean_public_text(item, 80)
+    return cleaned
+
+
+def _relay_config() -> Tuple[str, str]:
+    base = os.getenv("PUBLIC_FEED_RELAY_URL", "").strip().rstrip("/")
+    secret = os.getenv("PUBLIC_FEED_RELAY_KEY", "").strip()
+    with _RELAY_LOCK:
+        _RELAY_STATE["configured"] = bool(base and secret)
+    return base, secret
+
+
+def _relay_state_snapshot() -> Dict[str, Any]:
+    with _RELAY_LOCK:
+        return dict(_RELAY_STATE)
+
+
+def _relay_post_sync(path: str, payload: Dict[str, Any], *, kind: str) -> Dict[str, Any]:
+    base, secret = _relay_config()
+    if not base or not secret:
+        return {"ok": False, "error": "relay_not_configured"}
+
+    url = f"{base}/{path.lstrip('/')}"
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    req = urllib_request.Request(
+        url,
+        data=raw,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {secret}",
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": f"ABADDON-Worker/{V432_VERSION}",
+        },
+    )
+    now = _utc_iso()
+    try:
+        with urllib_request.urlopen(req, timeout=8) as response:
+            body = response.read(65536)
+            result = json.loads(body.decode("utf-8")) if body else {"ok": True}
+            if not isinstance(result, dict):
+                result = {"ok": True}
+            ok = bool(result.get("ok", True))
+    except urllib_error.HTTPError as exc:
+        try:
+            detail = exc.read(2048).decode("utf-8", "replace")
+        except Exception:
+            detail = ""
+        result = {"ok": False, "error": f"HTTP {exc.code} {detail[:160]}".strip()}
+        ok = False
+    except Exception as exc:
+        result = {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+        ok = False
+
+    with _RELAY_LOCK:
+        if kind == "event":
+            _RELAY_STATE["last_event_ok"] = ok
+            _RELAY_STATE["last_event_at"] = now
+        else:
+            _RELAY_STATE["last_status_ok"] = ok
+            _RELAY_STATE["last_status_at"] = now
+        _RELAY_STATE["last_error"] = "" if ok else str(result.get("error", "relay_error"))[:220]
+    return result
+
+
+async def _relay_post(path: str, payload: Dict[str, Any], *, kind: str) -> Dict[str, Any]:
+    return await asyncio.to_thread(_relay_post_sync, path, payload, kind=kind)
+
+
+def _schedule_relay_event(event: Dict[str, Any]) -> None:
+    base, secret = _relay_config()
+    if not base or not secret:
+        return
+    payload = {
+        "id": _clean_public_text(event.get("id"), 72),
+        "type": _clean_public_text(event.get("type"), 24),
+        "title": _clean_public_text(event.get("title"), 80),
+        "message": _clean_public_text(event.get("message"), 220),
+        "actor": _clean_public_text(event.get("actor"), 48),
+        "guild": _clean_public_text(event.get("guild"), 48),
+        "accent": _clean_public_text(event.get("accent"), 16),
+        "created_at": _clean_public_text(event.get("created_at"), 48),
+        "metadata": _sanitize_public_metadata(event.get("metadata")),
+    }
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        threading.Thread(
+            target=_relay_post_sync,
+            args=("/api/ingest/event", payload),
+            kwargs={"kind": "event"},
+            name="abaddon-feed-event",
+            daemon=True,
+        ).start()
+    else:
+        loop.create_task(_relay_post("/api/ingest/event", payload, kind="event"))
+
+
 def publish_public_event(
     world_data: Dict[str, Any],
     save_data: Callable[[], None],
@@ -330,6 +452,7 @@ def publish_public_event(
     actor: str = "",
     guild: str = "",
     metadata: Optional[Dict[str, Any]] = None,
+    relay: bool = True,
 ) -> Optional[Dict[str, Any]]:
     with _EVENT_LOCK:
         feed = ensure_public_feed(world_data)
@@ -345,14 +468,15 @@ def publish_public_event(
             "guild": _clean_public_text(guild, 48) if os.getenv("PUBLIC_FEED_SHOW_GUILD", "").strip().lower() in {"1", "true", "yes", "on"} else "",
             "accent": _event_accent(event_type),
             "created_at": _utc_iso(),
-            "metadata": metadata if isinstance(metadata, dict) else {},
+            "metadata": _sanitize_public_metadata(metadata),
         }
         events = feed["events"]
         events.insert(0, event)
         del events[MAX_PUBLIC_EVENTS:]
         save_data()
-        return event
-
+    if relay:
+        _schedule_relay_event(event)
+    return event
 
 def _public_status(bot: commands.Bot, world_data: Dict[str, Any]) -> Dict[str, Any]:
     try:
@@ -387,26 +511,50 @@ def _public_status(bot: commands.Bot, world_data: Dict[str, Any]) -> Dict[str, A
     }
 
 
+async def _send_relay_status(bot: commands.Bot, world_data: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _public_status(bot, world_data)
+    payload["heartbeat_at"] = _utc_iso()
+    return await _relay_post("/api/ingest/status", payload, kind="status")
+
+
+async def _relay_heartbeat_loop(bot: commands.Bot, world_data: Dict[str, Any]) -> None:
+    interval = _safe_int(os.getenv("PUBLIC_FEED_HEARTBEAT_SECONDS") or 45, 45, minimum=15, maximum=300)
+    while True:
+        try:
+            await _send_relay_status(bot, world_data)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            with _RELAY_LOCK:
+                _RELAY_STATE["last_status_ok"] = False
+                _RELAY_STATE["last_status_at"] = _utc_iso()
+                _RELAY_STATE["last_error"] = f"{type(exc).__name__}: {str(exc)[:180]}"
+        await asyncio.sleep(interval)
+
+
 def start_public_feed_server(bot: commands.Bot, world_data: Dict[str, Any]) -> Dict[str, Any]:
     global _HTTP_SERVER, _HTTP_THREAD
     if _HTTP_SERVER is not None:
         return {"started": True, "port": _HTTP_SERVER.server_port, "reason": "already_running"}
 
-    explicit = os.getenv("PUBLIC_FEED_ENABLED")
-    if explicit is None:
-        enabled = bool(os.getenv("PORT") or os.getenv("PUBLIC_FEED_PORT"))
-    else:
-        enabled = explicit.strip().lower() in {"1", "true", "yes", "on", "켜기"}
-    if os.getenv("ABADDON_DISABLE_HTTP", "").strip() == "1":
+    mode = os.getenv("PUBLIC_FEED_HTTP_MODE", "").strip().lower()
+    relay_base, _relay_secret = _relay_config()
+    if os.getenv("ABADDON_DISABLE_HTTP", "").strip() == "1" or mode in {"off", "disabled", "relay"}:
         enabled = False
+    elif mode in {"embedded", "on", "true", "1"}:
+        enabled = True
+    else:
+        # Backward compatibility: only auto-start inside an actual web process.
+        # A Background Worker normally has no PORT, and relay mode must not open a useless local server.
+        enabled = bool(os.getenv("PORT") or os.getenv("PUBLIC_FEED_PORT")) and not bool(relay_base)
     if not enabled:
-        return {"started": False, "port": None, "reason": "disabled"}
+        return {"started": False, "port": None, "reason": "relay_or_disabled"}
 
     port = _safe_int(os.getenv("PORT") or os.getenv("PUBLIC_FEED_PORT") or 10000, 10000, minimum=1, maximum=65535)
     allowed_origin = os.getenv("PUBLIC_FEED_ALLOWED_ORIGIN", "*").strip() or "*"
 
     class FeedHandler(BaseHTTPRequestHandler):
-        server_version = "ABADDONFeed/4.3.2"
+        server_version = "ABADDONFeed/4.3.2.1"
 
         def log_message(self, _format: str, *_args: Any) -> None:
             return
@@ -429,7 +577,7 @@ def start_public_feed_server(bot: commands.Bot, world_data: Dict[str, Any]) -> D
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             if parsed.path in {"/", "/health", "/healthz"}:
-                self._send_json(200, {"ok": True, "service": "ABADDON public feed", "version": f"v{V432_VERSION}"})
+                self._send_json(200, {"ok": True, "service": "ABADDON embedded public feed", "version": f"v{V432_VERSION}"})
                 return
             if parsed.path == "/api/status":
                 self._send_json(200, _public_status(bot, world_data))
@@ -453,14 +601,14 @@ def start_public_feed_server(bot: commands.Bot, world_data: Dict[str, Any]) -> D
     try:
         _HTTP_SERVER = ThreadingHTTPServer(("0.0.0.0", port), FeedHandler)
     except OSError as exc:
-        print(f"[V4.3.2 실시간 피드] HTTP 서버 시작 실패: {exc}", flush=True)
+        print(f"[V4.3.2.1 실시간 피드] HTTP 서버 시작 실패: {exc}", flush=True)
         _HTTP_SERVER = None
         return {"started": False, "port": port, "reason": str(exc)}
 
     _HTTP_THREAD = threading.Thread(target=_HTTP_SERVER.serve_forever, name="abaddon-public-feed", daemon=True)
     _HTTP_THREAD.start()
-    print(f"[V4.3.2 실시간 피드] 0.0.0.0:{port} 시작", flush=True)
-    return {"started": True, "port": port, "reason": "started"}
+    print(f"[V4.3.2.1 실시간 피드] embedded 0.0.0.0:{port} 시작", flush=True)
+    return {"started": True, "port": port, "reason": "embedded"}
 
 
 class ForgeResultView(discord.ui.View):
@@ -694,7 +842,7 @@ def register_v432_forge_live(
             color=TIER_COLORS.get(str(result["tier"]), 0xAAB0BC),
         )
         embed.add_field(name="대장장이의 증언", value=f"“{result['quote']}”", inline=False)
-        embed.set_footer(text="ABADDON FORGE · v4.3.2")
+        embed.set_footer(text="ABADDON FORGE · v4.3.2.1")
         await interaction.response.send_message(embed=embed)
 
         if not result.get("published"):
@@ -826,13 +974,12 @@ def register_v432_forge_live(
     if existing_patch_notes is not None:
         async def latest_patch_notes(ctx: commands.Context) -> None:
             await ctx.send(
-                "🕯️ **ABADDON v4.3.2 — 검은 대장간 & 실시간 피드**\n"
-                "• 강화 결과 고딕 장비 카드, 슬롯별 실루엣, 다시 강화·자랑하기 버튼\n"
-                "• +5~+20 단계별 표시 이름 진화와 연속 실패 장인의 열기 보정\n"
-                "• `!강화정보`에 실제 성공률, 열기, 일반·보호 비용 통합 표시\n"
-                "• 홈페이지 봇 상태·강화 이정표·공개 공지 실시간 API\n"
-                "• 홈페이지 전체 검은 성당 고딕 테마 및 페이지 내 브라우저 알림\n"
-                "• v4.3.1까지의 장비·경제·카지노·원정·스토리·SERVER GUARD 기능 유지"
+                "🕯️ **ABADDON v4.3.2.1 — Background Worker 실시간 피드 핫픽스**\n"
+                "• Background Worker는 그대로 유지하고 별도 Web Service로 공개 이벤트만 전송\n"
+                "• 비밀키 인증 이벤트 수신, 45초 상태 심박, 150초 무응답 시 OFFLINE 판정\n"
+                "• 강화 이정표·공개 공지만 허용하고 경고·문의·DM·유저 데이터는 전송하지 않음\n"
+                "• `!실시간피드상태`·`!실시간피드테스트`로 배포 상태 점검\n"
+                "• 고딕 강화 카드·장인의 열기·단계별 표시 이름과 v4.3.2 전체 기능 유지"
             )
         existing_patch_notes.callback = latest_patch_notes
         existing_patch_notes.help = "아바돈 최신 통합 패치 내용을 확인합니다."
@@ -859,28 +1006,43 @@ def register_v432_forge_live(
     @bot.command(name="강화연출", help="강화 단계별 장비 표시 이름과 장인의 열기를 안내합니다.")
     async def forge_guide(ctx: commands.Context) -> None:
         await ctx.send(
-            "🕯️ **[ABADDON FORGE v4.3.2]**\n"
+            "🕯️ **[ABADDON FORGE v4.3.2.1]**\n"
             "강화 결과는 고딕 대장간 카드와 `다시 강화`·`자랑하기` 버튼으로 표시됩니다.\n"
             "표시 이름 진화: **+5 단련된 · +7 광휘의 · +10 종말의 · +12 심연을 가르는 · +15 아바돈의 · +18 경계 너머의 · +20 공허를 끝낸**\n"
             "연속 실패마다 **장인의 열기 +2%**가 쌓이며 최대 +15%까지 다음 강화 확률을 보정합니다. 성공하면 초기화됩니다.\n"
             "표시 이름은 연출용이므로 기존 인벤토리·장착·거래 데이터는 바뀌지 않습니다."
         )
 
-    @bot.command(name="실시간피드상태", help="홈페이지 실시간 피드 서버와 공개 이벤트 상태를 확인합니다.")
+    @bot.command(name="실시간피드상태", help="Background Worker와 홈페이지 실시간 피드 릴레이 상태를 확인합니다.")
     @commands.has_permissions(administrator=True)
     async def live_feed_status(ctx: commands.Context) -> None:
         status = _public_status(bot, world_data)
-        public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
-        endpoint = f"{public_base}/api/events" if public_base else "PUBLIC_BASE_URL 환경변수 미설정"
+        relay_base, relay_secret = _relay_config()
+        relay_state = _relay_state_snapshot()
         server_info = getattr(bot, "abaddon_public_feed_server", {})
-        port_suffix = f" · 포트 {server_info.get('port')}" if server_info.get("port") else ""
+        endpoint = f"{relay_base}/api/events" if relay_base else "PUBLIC_FEED_RELAY_URL 환경변수 미설정"
+        local_http = "실행 중" if server_info.get("started") else "꺼짐(Background Worker 권장)"
+        event_result = "대기"
+        if relay_state.get("last_event_ok") is True:
+            event_result = "성공"
+        elif relay_state.get("last_event_ok") is False:
+            event_result = "실패"
+        heartbeat_result = "대기"
+        if relay_state.get("last_status_ok") is True:
+            heartbeat_result = "성공"
+        elif relay_state.get("last_status_ok") is False:
+            heartbeat_result = "실패"
+        error_line = f"\n최근 오류: `{relay_state.get('last_error')}`" if relay_state.get("last_error") else ""
         await ctx.send(
-            "🕯️ **[홈페이지 실시간 피드]**\n"
-            f"HTTP 서버: **{'실행 중' if server_info.get('started') else '비활성'}**{port_suffix}\n"
-            f"공개 이벤트: **{'켜짐' if status['feed_enabled'] else '꺼짐'}** · 저장 {status['event_count']}/{MAX_PUBLIC_EVENTS}개\n"
-            f"봇 연결: **{'ONLINE' if status['online'] else 'STARTING'}** · 서버 {status['guilds']}개 · 멤버 {status['members']:,}명\n"
-            f"피드 주소: `{endpoint}`\n"
-            "홈페이지 `config.js`의 `eventFeedUrl`에 `PUBLIC_BASE_URL`과 같은 주소를 입력하세요."
+            "🕯️ **[홈페이지 실시간 피드 v4.3.2.1]**\n"
+            f"전송 방식: **별도 Web Service 릴레이** · 설정 **{'완료' if relay_base and relay_secret else '미완료'}**\n"
+            f"릴레이 주소: `{endpoint}`\n"
+            f"이벤트 전송: **{event_result}** · 상태 심박: **{heartbeat_result}**\n"
+            f"내장 HTTP: **{local_http}**\n"
+            f"공개 이벤트: **{'켜짐' if status['feed_enabled'] else '꺼짐'}** · 로컬 보관 {status['event_count']}/{MAX_PUBLIC_EVENTS}개\n"
+            f"봇 연결: **{'ONLINE' if status['online'] else 'STARTING'}** · 서버 {status['guilds']}개 · 멤버 {status['members']:,}명"
+            f"{error_line}\n"
+            "설정 후 `!실시간피드테스트`로 실제 전송을 확인하세요."
         )
 
     @bot.command(name="실시간피드", help="홈페이지 공개 이벤트 피드를 켜거나 끕니다.")
@@ -895,7 +1057,7 @@ def register_v432_forge_live(
         elif normalized in {"끄기", "off", "false", "0"}:
             feed["enabled"] = False
             save_data()
-            await ctx.send("⚫ 홈페이지 공개 이벤트 피드를 껐습니다. 봇 상태 API는 유지됩니다.")
+            await ctx.send("⚫ 홈페이지 공개 이벤트 피드를 껐습니다. 상태 심박은 유지됩니다.")
         else:
             await ctx.send(f"🕯️ 현재 홈페이지 공개 이벤트 피드: **{'켜짐' if feed.get('enabled', True) else '꺼짐'}**")
 
@@ -915,10 +1077,53 @@ def register_v432_forge_live(
         if event is None:
             await ctx.send("⚠️ 공개 이벤트 피드가 꺼져 있습니다. `!실시간피드 켜기` 후 다시 시도하세요.")
             return
-        await ctx.send(f"📡 홈페이지 실시간 피드에 공지를 등록했습니다. `{event['id']}`")
+        await ctx.send(f"📡 홈페이지 실시간 피드 전송을 요청했습니다. `{event['id']}`")
+
+    @bot.command(name="실시간피드테스트", help="별도 Web Service로 테스트 이벤트와 상태 심박을 직접 전송합니다.")
+    @commands.has_permissions(administrator=True)
+    async def live_feed_test(ctx: commands.Context) -> None:
+        relay_base, relay_secret = _relay_config()
+        if not relay_base or not relay_secret:
+            await ctx.send(
+                "⚠️ 릴레이 설정이 없습니다. Background Worker 환경변수에 "
+                "`PUBLIC_FEED_RELAY_URL`과 `PUBLIC_FEED_RELAY_KEY`를 추가하세요."
+            )
+            return
+        event = publish_public_event(
+            world_data,
+            save_data,
+            event_type="system",
+            title="실시간 피드 연결 시험",
+            message="Background Worker에서 공개 피드 Web Service로 신호를 전송했습니다.",
+            actor="ABADDON",
+            metadata={"version": f"v{V432_VERSION}"},
+            relay=False,
+        )
+        if event is None:
+            await ctx.send("⚠️ 테스트 이벤트를 만들지 못했습니다.")
+            return
+        event_result, status_result = await asyncio.gather(
+            _relay_post("/api/ingest/event", event, kind="event"),
+            _send_relay_status(bot, world_data),
+        )
+        if event_result.get("ok") and status_result.get("ok"):
+            await ctx.send(
+                "✅ **실시간 피드 연결 성공**\n"
+                f"이벤트·상태 심박이 모두 전송됐습니다. `{relay_base}/api/events`에서 확인할 수 있습니다."
+            )
+        else:
+            detail = event_result.get("error") or status_result.get("error") or "알 수 없는 오류"
+            await ctx.send(f"❌ 실시간 피드 전송 실패: `{str(detail)[:300]}`")
 
     @bot.listen("on_ready")
     async def v432_public_ready_event() -> None:
+        relay_base, relay_secret = _relay_config()
+        task = getattr(bot, "_v4321_relay_heartbeat_task", None)
+        if relay_base and relay_secret and (task is None or task.done()):
+            bot._v4321_relay_heartbeat_task = asyncio.create_task(
+                _relay_heartbeat_loop(bot, world_data),
+                name="abaddon-public-feed-heartbeat",
+            )
         if getattr(bot, "_v432_ready_event_published", False):
             return
         bot._v432_ready_event_published = True
@@ -931,10 +1136,11 @@ def register_v432_forge_live(
         )
 
     print(
-        "[V4.3.2 등록 확인] "
+        "[V4.3.2.1 등록 확인] "
         f"강화교체={bot.get_command('강화') is existing_enhance} "
         f"강화기록={bot.get_command('강화기록') is not None} "
         f"실시간피드={bot.get_command('실시간피드상태') is not None} "
+        f"피드테스트={bot.get_command('실시간피드테스트') is not None} "
         f"HTTP={server_state}",
         flush=True,
     )
