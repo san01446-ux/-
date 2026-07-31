@@ -239,7 +239,7 @@ def register_condition_commands(bot, get_user, check_registered, save_data, get_
         ensure_conditions(user)
         severity = sum(int(v or 0) for v in user["conditions"].values())
         missing_hp = max(0, get_max_hp(user) - user["hp"])
-        cost = 1000 + severity * 1400 + user["infection"] * 70 + missing_hp * 20
+        cost = 1400 + severity * 1800 + user["infection"] * 90 + missing_hp * 25
 
         if severity == 0 and user["infection"] == 0 and missing_hp == 0:
             await ctx.send("🏥 현재 치료가 필요하지 않습니다. 아주 멀쩡합니다.")

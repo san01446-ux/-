@@ -15,10 +15,10 @@ from apocalypse_bot.commands.v37_gambling_experience import _kst_date, _safe_rea
 CASINO_VERSION = "4.0"
 CASINO_CHIP_MIN_EXCHANGE = 100
 CASINO_CHIP_MAX_EXCHANGE = 100_000_000
-CASINO_SELL_BASE_RATE = 0.95
+CASINO_SELL_BASE_RATE = 0.90
 CASINO_JACKPOT_BASE = 1_000_000
 CASINO_JACKPOT_CONTRIBUTION_RATE = 0.02
-CASINO_WHEEL_COST = 10_000
+CASINO_WHEEL_COST = 12_000
 CASINO_HISTORY_LIMIT = 50
 
 VIP_TIERS: Sequence[Tuple[str, int, str]] = (
@@ -211,14 +211,14 @@ def ensure_black_casino_world(world_data: Dict[str, Any]) -> Dict[str, Any]:
 
 def _new_daily_missions() -> List[Dict[str, Any]]:
     pool = [
-        {"key": "play", "title": "카지노 게임 3회", "target": 3, "reward_chips": 8_000, "reward_vip": 100},
-        {"key": "win", "title": "카지노 승리 2회", "target": 2, "reward_chips": 12_000, "reward_vip": 150},
-        {"key": "bet", "title": "누적 25,000칩 배팅", "target": 25_000, "reward_chips": 15_000, "reward_vip": 180},
-        {"key": "슬롯머신", "title": "슬롯 5회", "target": 5, "reward_chips": 10_000, "reward_vip": 120},
-        {"key": "블랙잭", "title": "블랙잭 3회", "target": 3, "reward_chips": 10_000, "reward_vip": 120},
-        {"key": "하이로우", "title": "하이로우 3회", "target": 3, "reward_chips": 10_000, "reward_vip": 120},
-        {"key": "다이스", "title": "다이스 4회", "target": 4, "reward_chips": 9_000, "reward_vip": 110},
-        {"key": "바카라", "title": "바카라 3회", "target": 3, "reward_chips": 11_000, "reward_vip": 130},
+        {"key": "play", "title": "카지노 게임 3회", "target": 3, "reward_chips": 6_500, "reward_vip": 100},
+        {"key": "win", "title": "카지노 승리 2회", "target": 2, "reward_chips": 9_500, "reward_vip": 150},
+        {"key": "bet", "title": "누적 25,000칩 배팅", "target": 25_000, "reward_chips": 12_000, "reward_vip": 180},
+        {"key": "슬롯머신", "title": "슬롯 5회", "target": 5, "reward_chips": 8_000, "reward_vip": 120},
+        {"key": "블랙잭", "title": "블랙잭 3회", "target": 3, "reward_chips": 8_000, "reward_vip": 120},
+        {"key": "하이로우", "title": "하이로우 3회", "target": 3, "reward_chips": 8_000, "reward_vip": 120},
+        {"key": "다이스", "title": "다이스 4회", "target": 4, "reward_chips": 7_000, "reward_vip": 110},
+        {"key": "바카라", "title": "바카라 3회", "target": 3, "reward_chips": 8_500, "reward_vip": 130},
     ]
     selected = random.sample(pool, 3)
     return [dict(item, progress=0, claimed=False) for item in selected]
@@ -348,7 +348,7 @@ def vip_rank_index(user: Dict[str, Any]) -> int:
 
 
 def chip_sell_rate(user: Dict[str, Any]) -> float:
-    return min(0.99, CASINO_SELL_BASE_RATE + vip_rank_index(user) * 0.008)
+    return min(0.95, CASINO_SELL_BASE_RATE + vip_rank_index(user) * 0.008)
 
 
 def shop_discount(user: Dict[str, Any]) -> float:
@@ -359,21 +359,21 @@ def daily_loss_bonus(user: Dict[str, Any]) -> int:
     return vip_rank_index(user) * 5_000_000
 
 
-def slot_symbol_weights(user: Dict[str, Any], symbols: Sequence[Tuple[str, int]]) -> List[int]:
+def slot_symbol_weights(user: Dict[str, Any], symbols: Sequence[Tuple[str, float]]) -> List[float]:
     account = ensure_black_casino_account(user)
     luck = int(account.get("luck", 0))
     charge = int(account["inventory"].get("행운부적_충전", 0))
     vip = vip_rank_index(user)
-    bonus = luck // 10 + vip + (4 if charge > 0 else 0)
+    bonus = luck // 14 + vip + (3 if charge > 0 else 0)
     rare_symbols = {"👑", "7️⃣", "💠"}
-    weights: List[int] = []
+    weights: List[float] = []
     for symbol, base in symbols:
         if symbol in rare_symbols:
-            weights.append(max(1, int(base) + bonus))
+            weights.append(max(1.0, float(base) + bonus))
         elif symbol == "💀":
-            weights.append(max(1, int(base)))
+            weights.append(max(1.0, float(base)))
         else:
-            weights.append(max(1, int(base) - bonus // 2))
+            weights.append(max(1.0, float(base) - bonus // 2))
     return weights
 
 
@@ -854,13 +854,13 @@ def register_v40_casino_commands(
             except (discord.Forbidden, discord.HTTPException, AttributeError):
                 pass
         outcomes = [
-            ("💀 꽝", 25, 0, 0, 0),
-            ("💰 5,000칩", 30, 5_000, 0, 0),
-            ("🎁 15,000칩", 22, 15_000, 0, 0),
-            ("⭐ VIP 500P", 12, 0, 500, 0),
-            ("🍀 행운 +3", 7, 0, 0, 3),
-            ("💎 100,000칩", 3, 100_000, 0, 0),
-            ("🎟️ 이용권 3장", 1, 0, 0, 0),
+            ("💀 꽝", 30, 0, 0, 0),
+            ("💰 5,000칩", 29, 5_000, 0, 0),
+            ("🎁 15,000칩", 20, 15_000, 0, 0),
+            ("⭐ VIP 500P", 11, 0, 500, 0),
+            ("🍀 행운 +3", 6, 0, 0, 3),
+            ("💎 100,000칩", 2.5, 100_000, 0, 0),
+            ("🎟️ 이용권 3장", 0.5, 0, 0, 0),
         ]
         result = random.choices(outcomes, weights=[o[1] for o in outcomes], k=1)[0]
         label, _weight, chips, vip, luck = result

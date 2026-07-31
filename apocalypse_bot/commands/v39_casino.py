@@ -50,23 +50,23 @@ CASINO_GAME_NAMES: Set[str] = {
 CARD_SUITS: Tuple[str, ...] = ("♠️", "♥️", "♦️", "♣️")
 CARD_RANKS: Tuple[str, ...] = ("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
 
-SLOT_SYMBOLS: Sequence[Tuple[str, int]] = (
-    ("🍒", 36),
-    ("🍋", 27),
+SLOT_SYMBOLS: Sequence[Tuple[str, float]] = (
+    ("🍒", 39),
+    ("🍋", 29),
     ("🔔", 17),
-    ("👑", 10),
-    ("7️⃣", 6),
-    ("💠", 3),
+    ("👑", 8),
+    ("7️⃣", 4.5),
+    ("💠", 1.8),
     ("💀", 1),
 )
 
 SLOT_TRIPLE_PAYOUTS: Dict[str, float] = {
-    "🍒": 5.0,
-    "🍋": 6.0,
-    "🔔": 9.0,
-    "👑": 16.0,
-    "7️⃣": 30.0,
-    "💠": 60.0,
+    "🍒": 4.5,
+    "🍋": 5.5,
+    "🔔": 8.0,
+    "👑": 14.0,
+    "7️⃣": 26.0,
+    "💠": 50.0,
     "💀": 0.0,
 }
 
@@ -854,7 +854,7 @@ def register_v39_commands(
         def cashout_amount(self) -> int:
             if self.streak <= 0:
                 return self.bet
-            multiplier = min(20.0, 1.55 ** self.streak)
+            multiplier = min(16.0, 1.48 ** self.streak)
             return max(self.bet, int(self.bet * multiplier))
 
         def table_embed(self, note: str = "다음 카드의 높낮이를 예측하세요.") -> discord.Embed:
@@ -1022,8 +1022,8 @@ def register_v39_commands(
                     payout += jackpot_amount
                     detail += f"\n💎 **전 서버 누적 잭팟 {jackpot_amount:,}칩 당첨!**"
         elif len(set(reels)) == 2:
-            payout = int(bet * 1.5)
-            detail = "같은 그림 2개가 일치해 **1.5배 총지급**을 받았습니다."
+            payout = int(bet * 1.35)
+            detail = "같은 그림 2개가 일치해 **1.35배 총지급**을 받았습니다."
         if slot_buffs.get("charm"):
             detail += "\n🍀 행운의 부적 효과가 적용됐습니다."
         if slot_buffs.get("booster") and jackpot_amount <= 0:
@@ -1095,7 +1095,7 @@ def register_v39_commands(
         if normalized.isdigit():
             success = int(normalized) == roll
             if success:
-                payout = int(bet * 5.5)
+                payout = int(bet * 5.2)
                 detail = f"정확히 **{roll}**을 맞혀 5.5배 총지급을 받았습니다!"
             else:
                 detail = f"주사위는 **{roll}**. 숫자 예측에 실패했습니다."
@@ -1103,7 +1103,7 @@ def register_v39_commands(
             actual = "홀" if roll % 2 else "짝"
             success = normalized == actual
             if success:
-                payout = int(bet * 1.9)
+                payout = int(bet * 1.85)
                 detail = f"주사위는 **{roll} ({actual})**. 1.9배 총지급을 받았습니다!"
             else:
                 detail = f"주사위는 **{roll} ({actual})**. 홀짝 예측에 실패했습니다."

@@ -7,8 +7,14 @@ from typing import Dict, List, Optional
 import discord
 from discord.ext import commands
 
+from apocalypse_bot.commands.v431_growth_balance import (
+    apply_player_turn_status, ensure_expedition_growth, expire_stale_battle,
+    maybe_inflict_player_status, prepare_enemy, progress_expedition_missions,
+    relic_bonus,
+)
 
-V430_VERSION = 1
+
+V430_VERSION = 2
 SEASON2_START_NODE = "a1_white_noise"
 
 
@@ -501,6 +507,8 @@ def ensure_v430(user: dict) -> dict:
     }
     if expedition.get("battle") is not None and not isinstance(expedition.get("battle"), dict):
         expedition["battle"] = None
+    ensure_expedition_growth(expedition)
+    expire_stale_battle(expedition)
     expedition["rank"] = expedition_rank(expedition["reputation"])
     return root
 
@@ -860,7 +868,7 @@ def register_v430_story_expedition(
             title=f"{zone['emoji']} 원정 전투 · {battle['enemy']}",
             description=(
                 f"**{battle['zone']}**에서 교전 중입니다.\n"
-                "`!원정 행동 공격` · `방어` · `집중` · `응급` · `도주`"
+                "`!원정 행동 공격` · `기술` · `방어` · `집중` · `응급` · `도주`"
             ),
             color=discord.Color.dark_teal(),
         )
@@ -878,7 +886,8 @@ def register_v430_story_expedition(
             value=(
                 f"💀 {battle['enemy_hp']} / {battle['enemy_max_hp']}\n"
                 f"`{_battle_bar(battle['enemy_hp'], battle['enemy_max_hp'])}`\n"
-                f"턴 {battle['turn']} · 집중 {battle.get('focus', 0)}"
+                f"{battle.get('enemy_rank', '일반')} · 턴 {battle['turn']} · 집중 {battle.get('focus', 0)}\n"
+                f"기술 대기 {battle.get('skill_cooldown', 0)}턴"
             ),
             inline=True,
         )
@@ -887,7 +896,8 @@ def register_v430_story_expedition(
             value=(
                 f"등급: **{expedition['rank']}**\n"
                 f"평판: **{expedition['reputation']}**\n"
-                f"응급 키트: **{expedition['kits']}개**"
+                f"응급 키트: **{expedition['kits']}개**\n"
+                f"장착 유물: **{', '.join(expedition.get('equipped_relics', [])) or '없음'}**"
             ),
             inline=False,
         )
@@ -899,17 +909,27 @@ def register_v430_story_expedition(
     def enemy_retaliation(user: dict, battle: dict, zone: dict, *, guarded: bool = False, weakened: bool = False) -> tuple:
         low, high = zone["enemy_attack"]
         scaling = max(0, _safe_int(user.get("level"), 1, 1) - zone["level"]) // 6
-        damage = random.randint(low + scaling, high + scaling)
-        special = random.random() < 0.18
+        attack_mult = float(battle.get("enemy_attack_mult", 1.0))
+        damage = round(random.randint(low + scaling, high + scaling) * attack_mult)
+        special = random.random() < (0.18 + (0.05 if battle.get("enemy_rank") == "정예" else 0.10 if battle.get("enemy_rank") == "보스" else 0.0))
         if special:
             damage = round(damage * 1.45)
         if guarded:
             damage = max(1, round(damage * 0.42))
         elif weakened:
             damage = max(1, round(damage * 0.72))
+        bonus = relic_bonus(ensure_v430(user)["expedition"])
+        defense = min(0.55, float(bonus.get("defense_pct", 0.0)))
+        player_status = battle.setdefault("player_status", {})
+        if _safe_int(player_status.get("armor_break"), 0, 0) > 0:
+            defense *= 0.35
+            player_status["armor_break"] = _safe_int(player_status.get("armor_break"), 0, 0) - 1
+        battle["player_status"] = {k: v for k, v in player_status.items() if _safe_int(v, 0, 0) > 0}
+        damage = max(1, round(damage * (1.0 - defense)))
         actual, knocked = apply_damage(user, damage)
         note = "💥 강공격" if special else "🩸 반격"
-        battle.setdefault("log", []).append(f"{note}: HP -{actual}")
+        status_note = maybe_inflict_player_status(battle, special) if not guarded else None
+        battle.setdefault("log", []).append(f"{note}: HP -{actual}" + (f" · {status_note}" if status_note else ""))
         battle["log"] = battle["log"][-8:]
         return actual, knocked, special
 
@@ -919,10 +939,12 @@ def register_v430_story_expedition(
 
     def finish_battle_victory(user: dict, expedition: dict, battle: dict) -> List[str]:
         zone = EXPEDITION_ZONES[battle["zone"]]
+        bonus = relic_bonus(expedition)
         reward = random.randint(*zone["reward"])
         reputation = random.randint(*zone["rep"])
-        streak_bonus = min(0.30, expedition["streak"] * 0.03)
-        reward += round(reward * streak_bonus)
+        streak_bonus = min(0.24, expedition["streak"] * 0.025)
+        reward_mult = float(battle.get("reward_mult", 1.0)) * (1.0 + float(bonus.get("reward_pct", 0.0)))
+        reward = max(1, round(reward * (1.0 + streak_bonus) * reward_mult))
 
         user["balance"] = _safe_int(user.get("balance"), 0, 0) + reward
         stats = user.setdefault("stats", {})
@@ -935,11 +957,17 @@ def register_v430_story_expedition(
         materials[material] = _safe_int(materials.get(material), 0, 0) + amount
 
         expedition["clears"] += 1
+        expedition["zone_clears"][battle["zone"]] = _safe_int(expedition["zone_clears"].get(battle["zone"]), 0, 0) + 1
         expedition["streak"] += 1
         expedition["best_streak"] = max(expedition["best_streak"], expedition["streak"])
         expedition["reputation"] += reputation
         expedition["rank"] = expedition_rank(expedition["reputation"])
         add_season_points(user, 2 + zone["level"] // 10)
+        progress_expedition_missions(expedition, "clear", 1)
+        progress_expedition_missions(expedition, "material", amount)
+        progress_expedition_missions(expedition, "streak", expedition["streak"])
+        if battle.get("enemy_rank") == "보스":
+            progress_expedition_missions(expedition, "boss", 1)
 
         lines = [
             f"🥫 식량 +**{reward:,}개**",
@@ -947,17 +975,31 @@ def register_v430_story_expedition(
             f"🧭 원정 평판 +**{reputation}** → {expedition['reputation']}",
             f"🔥 연승 **{expedition['streak']}회**",
         ]
+        if battle.get("enemy_rank") in {"정예", "보스"}:
+            dust = 1 if battle.get("enemy_rank") == "정예" else 3
+            expedition["relic_dust"] += dust
+            lines.append(f"✨ {battle.get('enemy_rank')} 격파 보너스 · 유물 가루 +**{dust}개**")
 
-        relic_chance = min(0.42, 0.09 + zone["level"] * 0.006 + expedition["streak"] * 0.012)
+        relic_chance = min(0.46, 0.08 + zone["level"] * 0.0055 + expedition["streak"] * 0.01 + float(bonus.get("relic_pct", 0.0)))
         if random.random() < relic_chance:
             relic = random.choice(zone["relics"])
             expedition["relics"][relic] = _safe_int(expedition["relics"].get(relic), 0, 0) + 1
+            progress_expedition_missions(expedition, "relic", 1)
             lines.append(f"🏺 희귀 유물 획득: **{relic}**")
 
-        if random.random() < 0.18:
+        if random.random() < 0.14:
             expedition["kits"] += 1
             lines.append("🩹 원정 응급 키트 +**1개**")
 
+        expedition.setdefault("battle_results", []).append({
+            "time": _utc_now().isoformat(),
+            "zone": battle["zone"],
+            "enemy": battle["enemy"],
+            "rank": battle.get("enemy_rank", "일반"),
+            "turns": _safe_int(battle.get("turn"), 1, 1),
+            "reward": reward,
+        })
+        expedition["battle_results"] = expedition["battle_results"][-30:]
         record_expedition(expedition, f"{battle['zone']} 승리 · {battle['enemy']} · 식량 {reward:,}")
         expedition["battle"] = None
         return lines
@@ -969,6 +1011,9 @@ def register_v430_story_expedition(
             return
         user = get_user(ctx.author.id)
         expedition = ensure_v430(user)["expedition"]
+        if expedition.pop("_v431_expired_battle", False):
+            save_data()
+            await ctx.send("🚑 6시간 이상 방치된 원정을 자동 종료하고 생존자를 구조했습니다.")
         battle = expedition.get("battle")
         if isinstance(battle, dict):
             await ctx.send(embed=battle_embed(user, battle))
@@ -998,13 +1043,14 @@ def register_v430_story_expedition(
             "`!원정 목록` — 지역과 입장 조건 확인\n"
             "`!원정 출발 지하철잔해` — 스태미나를 사용해 전투 시작\n"
             "`!원정 행동 공격` — 기본 공격, 집중 수치가 있으면 추가 피해\n"
+            "`!원정 행동 기술` — 강한 피해와 적 상태이상, 사용 후 3턴 재사용 대기\n"
             "`!원정 행동 방어` — 적의 다음 피해를 크게 감소\n"
             "`!원정 행동 집중` — 다음 공격 강화, 현재 턴에는 반격을 받음\n"
             "`!원정 행동 응급` — 원정 키트 1개로 HP 회복\n"
             "`!원정 행동 도주` — 확률적으로 전투 이탈\n"
             "`!원정 포기` — 전투를 즉시 종료하고 연승 초기화\n"
             "`!원정 보급` — 하루 한 번 응급 키트와 소량 식량 수령\n"
-            "`!원정 유물` · `!원정 기록` · `!원정 랭킹`"
+            "`!원정 유물` · `!원정 장비` · `!원정 임무` · `!원정 기록` · `!원정 랭킹`"
         )
 
     @expedition_group.command(name="목록")
@@ -1054,17 +1100,18 @@ def register_v430_story_expedition(
 
         player_level = _safe_int(user.get("level"), 1, 1)
         enemy_max = zone["enemy_hp"] + max(0, player_level - zone["level"]) * 4
-        enemy = random.choice(zone["enemy"])
+        base_enemy = random.choice(zone["enemy"])
+        enemy_data = prepare_enemy(expedition, name, base_enemy, enemy_max)
         expedition["battle"] = {
             "zone": name,
-            "enemy": enemy,
-            "enemy_hp": enemy_max,
-            "enemy_max_hp": enemy_max,
+            **enemy_data,
             "turn": 1,
             "focus": 0,
-            "log": [f"🚪 {name} 진입 · {enemy} 조우"],
+            "log": [f"🚪 {name} 진입 · {enemy_data['enemy']} ({enemy_data['enemy_rank']}) 조우"],
             "started_at": _utc_now().isoformat(),
+            "last_action_at": "",
         }
+        enemy = enemy_data["enemy"]
         save_data()
         await ctx.send(
             f"{zone['emoji']} **[{name} 원정 출발]**\n"
@@ -1092,20 +1139,99 @@ def register_v430_story_expedition(
             "공격하기": "공격",
         }
         action = aliases.get(action, action)
-        if action not in {"공격", "방어", "집중", "응급", "도주"}:
-            await ctx.send("⚠️ 행동은 `공격 / 방어 / 집중 / 응급 / 도주` 중 하나를 입력하세요.")
+        if action not in {"공격", "기술", "방어", "집중", "응급", "도주"}:
+            await ctx.send("⚠️ 행동은 `공격 / 기술 / 방어 / 집중 / 응급 / 도주` 중 하나를 입력하세요.")
             return
+        if action == "기술" and _safe_int(battle.get("skill_cooldown"), 0, 0) > 0:
+            await ctx.send(f"⏳ 전술 기술 재사용까지 **{_safe_int(battle.get('skill_cooldown'), 0, 0)}턴** 남았습니다.")
+            return
+        if action == "응급":
+            if expedition["kits"] <= 0:
+                await ctx.send("🩹 원정 응급 키트가 없습니다. 하루 보급은 `!원정 보급`으로 받을 수 있습니다.")
+                return
+            if user["hp"] >= get_max_hp(user):
+                await ctx.send("✨ HP가 이미 가득 찼습니다. 키트를 아껴두세요.")
+                return
+
+        now = _utc_now()
+        last_action = battle.get("last_action_at")
+        try:
+            last_action_dt = datetime.fromisoformat(last_action) if last_action else None
+        except (TypeError, ValueError):
+            last_action_dt = None
+        if last_action_dt and last_action_dt.tzinfo is None:
+            last_action_dt = last_action_dt.replace(tzinfo=timezone.utc)
+        if last_action_dt and (now - last_action_dt).total_seconds() < 1.2:
+            await ctx.send("⏳ 같은 전투 행동이 너무 빠르게 입력됐습니다. 잠시 후 다시 시도하세요.")
+            return
+        battle["last_action_at"] = now.isoformat()
 
         zone = EXPEDITION_ZONES[battle["zone"]]
         power = max(1, _safe_int(calculate_user_power(user), 1, 1))
-        result_lines: List[str] = []
-        knocked = False
+        bonus = relic_bonus(expedition)
+        result_lines: List[str] = apply_player_turn_status(user, battle, apply_damage)
+
+        # 플레이어 기술로 부여된 적 상태이상은 다음 행동 시작 시 처리합니다.
+        enemy_status = battle.setdefault("enemy_status", {})
+        enemy_vulnerable = action in {"공격", "기술"} and _safe_int(enemy_status.get("방어 붕괴"), 0, 0) > 0
+        for status_name, label, base_damage in (("출혈", "🩸 적 출혈", 5), ("중독", "☠️ 적 중독", 7)):
+            turns = _safe_int(enemy_status.get(status_name), 0, 0)
+            if turns > 0:
+                tick = base_damage + max(0, _safe_int(battle.get("turn"), 1, 1) // 4)
+                battle["enemy_hp"] = max(0, _safe_int(battle.get("enemy_hp"), 0, 0) - tick)
+                enemy_status[status_name] = turns - 1
+                result_lines.append(f"{label} 지속 피해 **{tick}**")
+        if enemy_vulnerable:
+            enemy_status["방어 붕괴"] = _safe_int(enemy_status.get("방어 붕괴"), 0, 0) - 1
+            result_lines.append("🛡️ 적의 방어 붕괴로 이번 공격 피해가 증가합니다.")
+        battle["enemy_status"] = {k: v for k, v in enemy_status.items() if _safe_int(v, 0, 0) > 0}
+
+        knocked = user.get("hp", 1) <= 1 and any("쓰러" in line for line in result_lines)
+        stunned = any("기절 상태" in line for line in result_lines)
+        if knocked:
+            expedition["fails"] += 1
+            expedition["streak"] = 0
+            record_expedition(expedition, f"{battle['zone']} 실패 · 상태이상으로 구조됨")
+            expedition["battle"] = None
+            save_data()
+            await ctx.send("\n".join(result_lines + ["🚑 상태이상 피해로 쓰러져 구조됐습니다."]))
+            return
+
+        if battle["enemy_hp"] <= 0:
+            reward_lines = finish_battle_victory(user, expedition, battle)
+            save_data()
+            embed = discord.Embed(
+                title=f"🏆 {battle['zone']} 원정 승리",
+                description=f"**{battle['enemy']}**이(가) 상태이상 피해로 쓰러졌습니다.",
+                color=discord.Color.gold(),
+            )
+            embed.add_field(name="전투 결과", value="\n".join(result_lines), inline=False)
+            embed.add_field(name="원정 보상", value="\n".join(reward_lines), inline=False)
+            await ctx.send(embed=embed)
+            return
+        if stunned:
+            actual, knocked, _ = enemy_retaliation(user, battle, zone)
+            result_lines.append(f"🩸 행동 불능 중 받은 피해 **{actual}**")
+            battle["turn"] = _safe_int(battle.get("turn"), 1, 1) + 1
+            if knocked:
+                expedition["fails"] += 1
+                expedition["streak"] = 0
+                record_expedition(expedition, f"{battle['zone']} 실패 · 기절 중 구조됨")
+                expedition["battle"] = None
+                save_data()
+                await ctx.send("\n".join(result_lines + ["🚑 기절 중 적의 공격으로 쓰러져 구조됐습니다."]))
+                return
+            save_data()
+            await ctx.send("\n".join(result_lines), embed=battle_embed(user, battle))
+            return
 
         if action == "공격":
             focus = _safe_int(battle.get("focus"), 0, 0)
-            base = max(8, round(power * 0.58) + _safe_int(user.get("level"), 1, 1))
+            base = max(8, round(power * 0.58 * (1.0 + float(bonus.get("attack_pct", 0.0)))) + _safe_int(user.get("level"), 1, 1))
             damage = random.randint(max(5, round(base * 0.82)), max(8, round(base * 1.18)))
-            critical = random.random() < min(0.28, 0.08 + power / 900)
+            if enemy_vulnerable:
+                damage = round(damage * 1.15)
+            critical = random.random() < min(0.34, 0.08 + power / 900 + float(bonus.get("crit", 0.0)))
             if critical:
                 damage = round(damage * 1.65)
             if focus:
@@ -1115,10 +1241,35 @@ def register_v430_story_expedition(
             prefix = "💢 치명타" if critical else "⚔️ 공격"
             result_lines.append(f"{prefix}: **{damage} 피해**")
             battle.setdefault("log", []).append(f"{prefix} · 적 HP -{damage}")
+            status_chance = min(0.25, float(bonus.get("status_chance", 0.0)))
+            if battle["enemy_hp"] > 0 and status_chance > 0 and random.random() < status_chance:
+                status = random.choice(["출혈", "중독", "방어 붕괴"])
+                battle.setdefault("enemy_status", {})[status] = max(
+                    1, _safe_int(battle.setdefault("enemy_status", {}).get(status), 0, 0)
+                )
+                result_lines.append(f"✨ 유물 효과로 적에게 **{status} 1턴**을 부여했습니다.")
+            progress_expedition_missions(expedition, "damage", damage)
+            if battle["enemy_hp"] > 0:
+                _, knocked, _ = enemy_retaliation(user, battle, zone)
+
+        elif action == "기술":
+            base = max(12, round(power * 0.92 * (1.0 + float(bonus.get("attack_pct", 0.0)))))
+            damage = random.randint(max(8, round(base * 0.90)), max(12, round(base * 1.12)))
+            if enemy_vulnerable:
+                damage = round(damage * 1.15)
+            battle["enemy_hp"] = max(0, battle["enemy_hp"] - damage)
+            battle["skill_cooldown"] = 3
+            status = random.choice(["출혈", "중독", "방어 붕괴"])
+            battle.setdefault("enemy_status", {})[status] = 2
+            result_lines.append(f"⚡ 전술 기술: **{damage} 피해** · 적에게 **{status} 2턴**")
+            battle.setdefault("log", []).append(f"⚡ 전술 기술 · 적 HP -{damage} · {status}")
+            progress_expedition_missions(expedition, "damage", damage)
+            progress_expedition_missions(expedition, "skill", 1)
             if battle["enemy_hp"] > 0:
                 _, knocked, _ = enemy_retaliation(user, battle, zone)
 
         elif action == "방어":
+            progress_expedition_missions(expedition, "guard", 1)
             result_lines.append("🛡️ 자세를 낮추고 적의 공격을 받아냈습니다.")
             actual, knocked, special = enemy_retaliation(user, battle, zone, guarded=True)
             result_lines.append(f"받은 피해: **{actual}**" + (" · 적 강공격을 막아냈습니다." if special else ""))
@@ -1129,22 +1280,16 @@ def register_v430_story_expedition(
             _, knocked, _ = enemy_retaliation(user, battle, zone, weakened=True)
 
         elif action == "응급":
-            if expedition["kits"] <= 0:
-                await ctx.send("🩹 원정 응급 키트가 없습니다. 하루 보급은 `!원정 보급`으로 받을 수 있습니다.")
-                return
             max_hp = get_max_hp(user)
-            if user["hp"] >= max_hp:
-                await ctx.send("✨ HP가 이미 가득 찼습니다. 키트를 아껴두세요.")
-                return
             expedition["kits"] -= 1
             before = user["hp"]
-            heal = random.randint(max(18, max_hp // 5), max(28, max_hp // 3))
+            heal = round(random.randint(max(18, max_hp // 5), max(28, max_hp // 3)) * (1.0 + float(bonus.get("heal_pct", 0.0))))
             user["hp"] = min(max_hp, user["hp"] + heal)
             result_lines.append(f"🩹 HP +**{user['hp'] - before}** · 남은 키트 **{expedition['kits']}개**")
             _, knocked, _ = enemy_retaliation(user, battle, zone, weakened=True)
 
         elif action == "도주":
-            chance = min(0.82, 0.48 + max(0, _safe_int(user.get("level"), 1, 1) - zone["level"]) * 0.012)
+            chance = min(0.88, 0.46 + max(0, _safe_int(user.get("level"), 1, 1) - zone["level"]) * 0.012 + float(bonus.get("escape", 0.0)))
             if random.random() < chance:
                 expedition["escapes"] += 1
                 expedition["streak"] = 0
@@ -1156,6 +1301,8 @@ def register_v430_story_expedition(
             result_lines.append("⛔ 퇴로가 막혀 도주에 실패했습니다.")
             _, knocked, _ = enemy_retaliation(user, battle, zone)
 
+        if action != "기술" and _safe_int(battle.get("skill_cooldown"), 0, 0) > 0:
+            battle["skill_cooldown"] = max(0, _safe_int(battle.get("skill_cooldown"), 0, 0) - 1)
         battle["turn"] = _safe_int(battle.get("turn"), 1, 1) + 1
         battle["log"] = _copy_list(battle.get("log"))[-8:]
 
@@ -1215,7 +1362,7 @@ def register_v430_story_expedition(
         if expedition.get("last_supply") == today:
             await ctx.send("📦 오늘 원정 보급은 이미 수령했습니다. 다음 UTC 날짜에 다시 받을 수 있습니다.")
             return
-        food = 500 + min(2500, expedition["reputation"] * 12)
+        food = 350 + min(1800, expedition["reputation"] * 9)
         kits = 1 + (1 if expedition["rank"] in {"방주 추적자", "종말 원정대장"} else 0)
         user["balance"] = _safe_int(user.get("balance"), 0, 0) + food
         user.setdefault("stats", {})["earned"] = _safe_int(user.setdefault("stats", {}).get("earned"), 0, 0) + food
@@ -1286,7 +1433,7 @@ def register_v430_story_expedition(
         await ctx.send("\n".join(lines))
 
     print(
-        "[V4.3.0 등록 확인] "
+        "[V4.3.1 원정 코어 등록 확인] "
         f"시즌2={bot.get_command('시즌2') is not None} "
         f"원정={bot.get_command('원정') is not None}",
         flush=True,

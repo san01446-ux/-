@@ -37,7 +37,7 @@ ROULETTE_RISK_TABLE: Dict[int, Dict[str, Any]] = {
     1: {"reward": 0, "losses": (10,)},
 }
 
-WORK_DAILY_LIMIT = 50
+WORK_DAILY_LIMIT = 40
 WORK_COOLDOWN_SECONDS = 8
 
 COIN_DAILY_LIMIT = 30
@@ -307,9 +307,9 @@ def register_v37_commands(
         if progress_quest:
             progress_quest(user, "도박 참여")
 
-        success = random.random() < 0.5
+        success = random.random() < 0.44
         if success:
-            multiplier = random.choice([1, 1, 2, 3])
+            multiplier = random.choice([1, 1, 1, 2, 2])
             reward = 배팅액 * multiplier
             user["balance"] = before + reward
             user["stats"].setdefault("earned", 0)
@@ -383,7 +383,7 @@ def register_v37_commands(
                 message = f"☠️ **저주받은 신호!** 배팅액의 3배인 **{loss:,} 식량**을 잃었습니다."
                 success = False
             else:
-                multiplier = random.randint(5, 20)
+                multiplier = random.randint(4, 16)
                 gain = 배팅액 * multiplier
                 user["balance"] = before + gain
                 user["stats"].setdefault("earned", 0)
@@ -392,7 +392,7 @@ def register_v37_commands(
                 message = f"📡 **완전 일치 잭팟 {multiplier}배!** **{gain:,} 식량**을 획득했습니다."
                 success = True
         elif len(set(result)) == 2:
-            gain = 배팅액 // 2
+            gain = int(배팅액 * 0.4)
             user["balance"] = before + gain
             user["stats"].setdefault("earned", 0)
             user["stats"]["earned"] += gain
@@ -517,7 +517,7 @@ def register_v37_commands(
 
         before = int(user["balance"])
         debt = abs(before)
-        rate = random.randint(10, 100)
+        rate = random.randint(10, 70)
         forgiven = int(debt * rate / 100)
         user["balance"] = min(0, before + forgiven)
         save_data()
@@ -548,7 +548,7 @@ def register_v37_commands(
             f"배팅 범위 **{GAMBLE_MIN_BET:,} ~ {GAMBLE_MAX_BET:,} 식량**"
         )
 
-    @bot.hybrid_command(name="알바", aliases=["일하기"], description="하루 50회 폐허 알바를 하며 식량과 알바 경험치를 얻습니다.")
+    @bot.hybrid_command(name="알바", aliases=["일하기"], description="하루 40회 폐허 알바를 하며 식량과 알바 경험치를 얻습니다.")
     @commands.cooldown(1, WORK_COOLDOWN_SECONDS, commands.BucketType.user)
     async def part_time_work(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
@@ -558,7 +558,7 @@ def register_v37_commands(
         attempts = int(work.get("attempts", 0))
         if attempts >= WORK_DAILY_LIMIT:
             ctx.command.reset_cooldown(ctx)
-            await ctx.send("🛑 오늘 가능한 알바 **50회**를 모두 사용했습니다. 자정(KST)에 초기화됩니다.")
+            await ctx.send("🛑 오늘 가능한 알바 **40회**를 모두 사용했습니다. 자정(KST)에 초기화됩니다.")
             return
 
         level = max(1, int(work.get("level", 1)))
@@ -587,7 +587,7 @@ def register_v37_commands(
             success = False
             work_outcome = "failure"
         elif roll < bad_chance + jackpot_chance:
-            gain = random.randint(4000, 12000) + level * random.randint(100, 350)
+            gain = random.randint(3200, 9500) + level * random.randint(80, 280)
             user["balance"] = before + gain
             delta = gain
             exp_delta = random.randint(5, 9)
@@ -605,7 +605,7 @@ def register_v37_commands(
             success = True
             work_outcome = "jackpot"
         else:
-            gain = random.randint(450, 1800) + level * random.randint(30, 90)
+            gain = random.randint(380, 1450) + level * random.randint(25, 70)
             user["balance"] = before + gain
             delta = gain
             exp_delta = random.randint(2, 5)

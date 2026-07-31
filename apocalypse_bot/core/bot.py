@@ -1455,9 +1455,9 @@ async def 명령어(ctx):
 `!상태` `!휴식`
 
 🔹 **상점 / 장비 / 제작**
-`!상점 [티어]` `!장비목록 [티어]` `!구매 아이템명`
+`!상점 [티어]` `!장비목록 [티어]` `!구매 아이템명` `!신규장비 [티어]`
 `!인벤토리` `!강화 아이템명` `!강화정보 아이템명` `!보호강화 아이템명`
-`!강화랭킹` `!장비옵션 아이템명` `!옵션재설정 아이템명` `!세트효과` `!재료`
+`!강화기록` `!강화연출` `!강화랭킹` `!장비옵션 아이템명` `!옵션재설정 아이템명` `!세트효과` `!재료`
 `!제작목록` `!제작 아이템명`
 
 🔹 **전투 / 보스**
@@ -1499,11 +1499,17 @@ async def 명령어(ctx):
 🔹 **스토리 / 원정 / 도감 / 서버 설정**
 `!스토리` `!스토리 시작` `!스토리 선택 번호` `!스토리 기록` `!스토리 재시작`
 `!시즌2` `!시즌2 시작` `!시즌2 선택 번호` `!시즌2 기록` `!시즌2 재시작`
-`!원정 도움말` `!원정 목록` `!원정 출발 지역명` `!원정 행동 공격/방어/집중/응급/도주`
-`!원정 보급` `!원정 유물` `!원정 기록` `!원정 랭킹`
+`!시즌2 장면 [번호]` `!시즌2 수집` `!시즌2 계승` `!시즌2 복구`
+`!원정 도움말` `!원정 목록` `!원정 출발 지역명` `!원정 행동 공격/기술/방어/집중/응급/도주`
+`!원정 보급` `!원정 유물` `!유물` `!유물 장착/해제/강화/분해`
+`!실시간피드상태` `!실시간피드 켜기/끄기` `!실시간공지 내용`
+`!원정 장비` `!원정 임무 [주간]` `!원정 임무보상 일일/주간 번호` `!원정 복구` `!원정 기록` `!원정 랭킹`
 `!도감` `!도감 장비/펫/몬스터` `!도감보상` `!튜토리얼`
 `!서버설정` `!서버세팅 미리보기/실행/상태/취소`
 `!퀴즈알림설정` `!퀴즈알림상태` `!퀴즈알림해제`
+
+🔹 **경제 패치 안내**
+`!경제밸런스` — v4.3.1 가격·보상·도박 변경점 확인
 
 🔹 **BLACK CASINO / 도박 / 금융**
 `!카지노` `!카지노환전 구매/판매 금액` `!블랙잭` `!하이로우` `!슬롯` `!다이스` `!바카라`
@@ -1671,13 +1677,13 @@ async def 출석보상(ctx):
     )
 
 @bot.hybrid_command()
-@commands.cooldown(1, 600, commands.BucketType.user)
+@commands.cooldown(1, 720, commands.BucketType.user)
 async def 돈주세요(ctx):
     if not await check_registered(ctx):
         return
 
     u = get_user(ctx.author.id)
-    reward = random.randint(0, 10000)
+    reward = random.randint(0, 8000)
     u["balance"] += reward
     u["stats"]["earned"] += reward
     save_data()
@@ -1694,7 +1700,7 @@ async def 훈련(ctx):
         return
 
     u = get_user(ctx.author.id)
-    cost = u["level"] * 700
+    cost = u["level"] * 900
 
     if u["balance"] < cost:
         await ctx.send(f"⚠️ 훈련 비용 부족: **{cost:,}개** 필요")
@@ -2197,7 +2203,7 @@ async def _pet_train(ctx):
         return
 
     rarity = PET_RARITY_ORDER.get(PET_DB[name]["rarity"], 1)
-    cost = 1000 + record["level"] * 900 + rarity * 300
+    cost = 1300 + record["level"] * 1100 + rarity * 400
     if u["balance"] < cost:
         await ctx.send(f"⚠️ 훈련 비용 **식량 {cost:,}개**가 필요합니다. 현재 **{u['balance']:,}개**")
         return
@@ -2228,7 +2234,7 @@ async def _pet_feed(ctx):
         await ctx.send(f"⏳ 다시 먹이를 줄 수 있을 때까지 **{format_seconds(remaining)}** 남았습니다.")
         return
 
-    cost = 300 + record["level"] * 50
+    cost = 450 + record["level"] * 70
     if u["balance"] < cost:
         await ctx.send(f"⚠️ 먹이 비용 **식량 {cost:,}개**가 필요합니다.")
         return
@@ -3373,10 +3379,10 @@ async def 자원(ctx):
 # 기지 건설 / 강화 / 수확
 # =========================================================
 BASE_COSTS = {
-    1: {"나무": 20, "광석": 10, "고철": 10, "food": 5000},
-    2: {"나무": 45, "광석": 30, "고철": 25, "food": 15000},
-    3: {"나무": 80, "광석": 60, "고철": 50, "food": 40000},
-    4: {"나무": 140, "광석": 100, "고철": 90, "food": 90000},
+    1: {"나무": 20, "광석": 10, "고철": 10, "food": 6500},
+    2: {"나무": 45, "광석": 30, "고철": 25, "food": 19000},
+    3: {"나무": 80, "광석": 60, "고철": 50, "food": 52000},
+    4: {"나무": 140, "광석": 100, "고철": 90, "food": 120000},
 }
 
 
@@ -3388,7 +3394,7 @@ async def 기지(ctx):
     base = u["base"]
     built = base["level"] > 0 and base.get("built", False)
     state = "건설 완료" if built else "미건설"
-    hourly = base["level"] * 400 if built else 0
+    hourly = base["level"] * 320 if built else 0
     await ctx.send(
         f"🏠 **[{ctx.author.name}의 기지]**\n"
         f"상태: **{state}**\n"
@@ -3408,7 +3414,7 @@ async def 기지건설(ctx):
         await ctx.send("⚠️ 기지가 이미 건설되어 있습니다.")
         return
 
-    cost = {"나무": 10, "광석": 5, "고철": 5, "food": 3000}
+    cost = {"나무": 10, "광석": 5, "고철": 5, "food": 4500}
     missing = []
     for resource in ["나무", "광석", "고철"]:
         if u["resources"].get(resource, 0) < cost[resource]:
@@ -3482,7 +3488,7 @@ async def 기지수확(ctx):
         last = now
 
     elapsed_hours = min(24, max(0, (now - last).total_seconds() / 3600))
-    reward = int(elapsed_hours * base["level"] * 400)
+    reward = int(elapsed_hours * base["level"] * 320)
     if reward < 100:
         await ctx.send("⏳ 아직 수확할 식량이 충분히 쌓이지 않았습니다.")
         return
@@ -3537,7 +3543,7 @@ async def 길드생성(ctx, *, 길드명: str):
     if find_guild_by_name(길드명)[1]:
         await ctx.send("⚠️ 이미 존재하는 길드명입니다.")
         return
-    cost = 30000
+    cost = 45000
     if u["balance"] < cost:
         await ctx.send(f"⚠️ 길드 창설 비용 **{cost:,}개**가 필요합니다.")
         return
@@ -3636,7 +3642,7 @@ async def 길드강화(ctx):
     if g["owner"] != str(ctx.author.id):
         await ctx.send("❌ 길드장만 길드를 강화할 수 있습니다.")
         return
-    cost = g["level"] * 50000
+    cost = g["level"] * 65000
     if g["fund"] < cost:
         await ctx.send(f"⚠️ 길드 기금 **{cost:,}개**가 필요합니다.")
         return
@@ -4208,6 +4214,21 @@ register_v430_story_expedition(
     bot, get_user, check_registered, save_data, calculate_user_power,
     spend_stamina, apply_damage, get_max_hp, get_max_stamina,
     add_title, add_season_points,
+)
+
+# V4.3.1: 신규 장비/경제 밸런스/유물 성장/원정 임무/스토리 편의
+# prefix 전용 명령으로 추가하여 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
+from apocalypse_bot.commands.v431_growth_balance import register_v431_growth_balance
+register_v431_growth_balance(
+    bot, get_user, check_registered, save_data, ITEM_DB, PET_DB,
+)
+
+# V4.3.2: 고딕 강화 연출/장인의 열기/홈페이지 실시간 공개 피드
+# 강화 명령어는 기존 HybridCommand 인스턴스의 callback만 교체해 슬래시 개수를 늘리지 않습니다.
+from apocalypse_bot.commands.v432_forge_live import register_v432_forge_live
+register_v432_forge_live(
+    bot, get_user, check_registered, save_data, world_data,
+    find_item, get_item_slot, progress_quest, check_achievements,
 )
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
