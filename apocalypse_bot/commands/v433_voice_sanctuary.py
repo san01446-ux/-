@@ -21,8 +21,11 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "5.0.4"
-TTS_MAX_TEXT = 180
+VERSION = "5.1.0"
+TTS_MAX_TEXT = 450
+TTS_CHUNK_LENGTH = 180
+TTS_CACHE_TTL = 21600
+TTS_CACHE_LIMIT = 100
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
 DEFAULT_IDLE_SECONDS = 600
@@ -530,6 +533,9 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
     tts["announce_names"] = False  # v5.0.2: 닉네임은 읽지 않고 채팅 내용만 낭독
     tts.setdefault("auto_join", True)
     tts.setdefault("require_author_in_voice", True)
+    tts.setdefault("engine", "auto")
+    if tts.get("engine") not in {"auto", "edge", "google"}:
+        tts["engine"] = "auto"
     settings.setdefault("layout", {})
     settings["layout"].setdefault("style", None)
     settings["layout"].setdefault("backup", None)
@@ -921,6 +927,9 @@ class VoiceRuntime:
         self.workers: Dict[int, asyncio.Task[None]] = {}
         self.user_cooldowns: Dict[Tuple[int, int], float] = {}
         self.active_channel_ids: Dict[int, int] = {}
+        self.speaking: Dict[int, bool] = {}
+        self.last_text: Dict[int, str] = {}
+        self.cache_hits: Dict[int, int] = {}
 
     def queue_for(self, guild_id: int) -> asyncio.Queue[Dict[str, Any]]:
         queue = self.queues.get(guild_id)
@@ -939,6 +948,8 @@ class VoiceRuntime:
 
     def clear(self, guild_id: int) -> int:
         self.active_channel_ids.pop(guild_id, None)
+        self.speaking.pop(guild_id, None)
+        self.last_text.pop(guild_id, None)
         queue = self.queue_for(guild_id)
         removed = 0
         while True:
@@ -966,6 +977,40 @@ def _clean_spoken_text(text: str) -> str:
     text = re.sub(r"[`*_~>|]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text[:TTS_MAX_TEXT]
+
+def _split_spoken_text(text: str) -> List[str]:
+    chunks: List[str] = []
+    rest = text.strip()
+    while rest:
+        if len(rest) <= TTS_CHUNK_LENGTH:
+            chunks.append(rest)
+            break
+        cut = max(rest.rfind(mark, 0, TTS_CHUNK_LENGTH + 1) for mark in (". ", "? ", "! ", ", ", " "))
+        if cut < 40:
+            cut = TTS_CHUNK_LENGTH
+        else:
+            cut += 1
+        chunks.append(rest[:cut].strip())
+        rest = rest[cut:].strip()
+    return [chunk for chunk in chunks if chunk]
+
+def _cache_dir() -> Path:
+    path = Path(tempfile.gettempdir()) / "abaddon_tts_cache_v51"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def _cache_path(text: str, voice_key: str, speed: float, engine: str) -> Path:
+    import hashlib
+    digest = hashlib.sha256(f"{engine}|{voice_key}|{speed:.2f}|{text}".encode("utf-8")).hexdigest()
+    return _cache_dir() / f"{digest}.mp3"
+
+def _prune_cache() -> None:
+    now = time.time()
+    files = sorted(_cache_dir().glob("*.mp3"), key=lambda x: x.stat().st_mtime, reverse=True)
+    for index, item in enumerate(files):
+        with contextlib.suppress(OSError):
+            if index >= TTS_CACHE_LIMIT or now - item.stat().st_mtime > TTS_CACHE_TTL:
+                item.unlink()
 
 
 def _remove_audio_file(output_path: str) -> None:
@@ -1059,7 +1104,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.4"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.1.0"}
     _remove_audio_file(output_path)
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
@@ -1077,13 +1122,28 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
         raise RuntimeError("Google TTS 파일 검증에 실패했습니다.")
 
 
-async def _synthesise(text: str, voice_key: str, speed: float, output_path: str) -> str:
+async def _synthesise(text: str, voice_key: str, speed: float, output_path: str, engine: str = "auto") -> str:
+    engine = engine if engine in {"auto", "edge", "google"} else "auto"
+    cache = _cache_path(text, voice_key, speed, engine)
+    if _valid_audio_file(str(cache)) and time.time() - cache.stat().st_mtime <= TTS_CACHE_TTL:
+        await asyncio.to_thread(shutil.copyfile, cache, output_path)
+        return f"cache:{engine}"
     preset = VOICE_PRESETS.get(voice_key, VOICE_PRESETS["선히"])
-    used_voice = await _synth_edge(text, preset["edge"], speed, output_path)
-    if used_voice:
-        return f"edge-tts:{used_voice}"
-    await _synth_google(text, speed, output_path)
-    return "google-fallback"
+    provider = ""
+    if engine in {"auto", "edge"}:
+        used_voice = await _synth_edge(text, preset["edge"], speed, output_path)
+        if used_voice:
+            provider = f"edge-tts:{used_voice}"
+        elif engine == "edge":
+            raise RuntimeError("Edge 전용 모드에서 음성 합성에 실패했습니다.")
+    if not provider:
+        await _synth_google(text, speed, output_path)
+        provider = "google" if engine == "google" else "google-fallback"
+    if _valid_audio_file(output_path):
+        with contextlib.suppress(OSError):
+            await asyncio.to_thread(shutil.copyfile, output_path, cache)
+            await asyncio.to_thread(_prune_cache)
+    return provider
 
 
 async def _ensure_voice_connection(
@@ -1182,24 +1242,29 @@ def register_v433_voice_sanctuary(
         if not clean:
             return False, "읽을 수 있는 내용이 없습니다."
         queue = VOICE_RUNTIME.queue_for(guild.id)
-        if queue.full():
-            return False, f"대기열이 가득 찼습니다. 최대 {TTS_QUEUE_LIMIT}개까지 보관합니다."
-        spoken = clean  # v5.0.2: 모든 TTS는 작성자 이름 없이 내용만 낭독
+        chunks = _split_spoken_text(clean)
+        if queue.qsize() + len(chunks) > TTS_QUEUE_LIMIT:
+            return False, f"대기열 공간이 부족합니다. 현재 {queue.qsize()}/{TTS_QUEUE_LIMIT}개입니다."
+        spoken = clean
         resolved_voice = _voice_name_or_default(voice_key, _personal_voice(settings, author.id))
         resolved_channel_id = int(target_voice_channel_id or settings.get("voice_channel_id") or 0)
         if not resolved_channel_id:
             return False, "입장할 음성 채널을 찾지 못했습니다."
-        await queue.put({
-            "text": spoken,
-            "author_id": author.id,
-            "voice": resolved_voice,
-            "voice_channel_id": resolved_channel_id,
-            "queued_at": time.time(),
-        })
+        for index, chunk in enumerate(chunks, start=1):
+            await queue.put({
+                "text": chunk,
+                "author_id": author.id,
+                "voice": resolved_voice,
+                "voice_channel_id": resolved_channel_id,
+                "queued_at": time.time(),
+                "chunk_index": index,
+                "chunk_total": len(chunks),
+            })
         task = VOICE_RUNTIME.workers.get(guild.id)
         if task is None or task.done():
             VOICE_RUNTIME.workers[guild.id] = asyncio.create_task(tts_worker(guild.id))
-        return True, f"대기열 **{queue.qsize()}번째**에 추가했습니다."
+        suffix = f" · 긴 문장 {len(chunks)}조각" if len(chunks) > 1 else ""
+        return True, f"대기열에 추가했습니다{suffix}. 현재 **{queue.qsize()}/{TTS_QUEUE_LIMIT}**"
 
     async def tts_worker(guild_id: int) -> None:
         queue = VOICE_RUNTIME.queue_for(guild_id)
@@ -1228,12 +1293,17 @@ def register_v433_voice_sanctuary(
                 VOICE_RUNTIME.active_channel_ids[guild_id] = int(item.get("voice_channel_id") or 0)
                 fd, temp_path = tempfile.mkstemp(prefix="abaddon_tts_", suffix=".mp3")
                 os.close(fd)
+                VOICE_RUNTIME.speaking[guild_id] = True
+                VOICE_RUNTIME.last_text[guild_id] = str(item["text"])[:80]
                 provider = await _synthesise(
                     str(item["text"]),
                     _voice_name_or_default(item.get("voice"), _voice_name_or_default(settings.get("voice"))),
                     float(settings.get("speed", 1.0)),
                     temp_path,
+                    str(settings.get("engine", "auto")),
                 )
+                if provider.startswith("cache:"):
+                    VOICE_RUNTIME.cache_hits[guild_id] = VOICE_RUNTIME.cache_hits.get(guild_id, 0) + 1
                 if not _valid_audio_file(temp_path):
                     raise RuntimeError("재생 직전 TTS 음성 파일 검증에 실패했습니다.")
                 print(
@@ -1246,6 +1316,7 @@ def register_v433_voice_sanctuary(
             except Exception as exc:
                 print(f"[TTS 재생 오류] guild={guild_id} {type(exc).__name__}: {exc}", flush=True)
             finally:
+                VOICE_RUNTIME.speaking[guild_id] = False
                 queue.task_done()
                 if temp_path:
                     with contextlib.suppress(OSError):
@@ -1264,7 +1335,7 @@ def register_v433_voice_sanctuary(
                 "텍스트를 음성 채널에서 읽고, 지정한 채팅 채널의 메시지를 자동 낭독합니다.\n\n"
                 "`!음성입장` · `!말해 내용` · `!음성퇴장`\n"
                 "`!TTS채널` · `!TTS 켜기` · `!TTS 끄기`\n"
-                "`/tts 목소리` · `/tts 내설정` · `!TTS 기본목소리 선히` · `!TTS 진단`"
+                "`/tts 목소리` · `/tts 내설정` · `!TTS엔진 자동` · `!TTS 진단`"
             ),
             color=0x6D2335,
         )
@@ -1464,6 +1535,28 @@ def register_v433_voice_sanctuary(
         save_data()
         await ctx.send(f"✅ 개인 설정이 없는 사용자의 기본 목소리를 **{voice_name}**으로 변경했습니다.")
 
+    @tts_group.command(name="엔진", aliases=["provider"])
+    async def tts_engine(ctx: commands.Context, engine: Optional[str] = None):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        labels = {"auto": "자동 (Edge 실패 시 Google)", "edge": "Edge 전용", "google": "Google 전용"}
+        if engine is None:
+            await ctx.send(f"🎙️ 현재 TTS 엔진: **{labels.get(settings.get('engine', 'auto'), '자동')}**\n변경: `!TTS엔진 자동`, `!TTS엔진 edge`, `!TTS엔진 google`")
+            return
+        normalized = {"자동": "auto", "auto": "auto", "엣지": "edge", "edge": "edge", "구글": "google", "google": "google"}.get(engine.casefold())
+        if normalized is None:
+            await ctx.send("❌ 엔진은 `자동`, `edge`, `google` 중 하나를 선택하세요.")
+            return
+        settings["engine"] = normalized
+        save_data()
+        await ctx.send(f"✅ TTS 엔진을 **{labels[normalized]}**으로 설정했습니다.")
+
+    @bot.command(name="TTS엔진")
+    async def tts_engine_shortcut(ctx: commands.Context, engine: Optional[str] = None):
+        await ctx.invoke(tts_engine, engine=engine)
+
     @tts_group.command(name="속도")
     async def tts_speed(ctx: commands.Context, speed: float):
         guild = await require_admin(ctx)
@@ -1496,7 +1589,8 @@ def register_v433_voice_sanctuary(
         if guild is None:
             return
         queue = VOICE_RUNTIME.queue_for(guild.id)
-        await ctx.send(f"🔊 현재 TTS 대기열: **{queue.qsize()}/{TTS_QUEUE_LIMIT}개**")
+        speaking = "말하는 중" if VOICE_RUNTIME.speaking.get(guild.id) else "대기"
+        await ctx.send(f"🔊 TTS 상태: **{speaking}** · 대기열 **{queue.qsize()}/{TTS_QUEUE_LIMIT}개** · 캐시 적중 **{VOICE_RUNTIME.cache_hits.get(guild.id, 0)}회**")
 
     @tts_group.command(name="비우기", aliases=["clear"])
     async def tts_clear(ctx: commands.Context):
@@ -1548,6 +1642,10 @@ def register_v433_voice_sanctuary(
         embed.add_field(name="텍스트 채널", value=getattr(text_channel, "mention", "미설정"), inline=True)
         embed.add_field(name="음성 대상", value=("작성자 음성방 자동 감지" if settings.get("mode") == "author_voice" else getattr(voice_channel, "mention", "미설정")), inline=True)
         embed.add_field(name="자동 입장", value="켜짐" if settings.get("auto_join", True) else "꺼짐", inline=True)
+        engine_labels = {"auto": "자동", "edge": "Edge", "google": "Google"}
+        embed.add_field(name="TTS 엔진", value=engine_labels.get(settings.get("engine", "auto"), "자동"), inline=True)
+        embed.add_field(name="재생 상태", value="말하는 중" if VOICE_RUNTIME.speaking.get(guild.id) else "대기", inline=True)
+        embed.add_field(name="캐시", value=f"적중 {VOICE_RUNTIME.cache_hits.get(guild.id, 0)}회", inline=True)
         embed.add_field(name="목소리", value=f"{settings.get('voice', '선히')} · {settings.get('speed', 1.0)}배 · {int(float(settings.get('volume', 1.0))*100)}%", inline=True)
         embed.add_field(
             name="음성 의존성",
@@ -1672,6 +1770,24 @@ def register_v433_voice_sanctuary(
         settings["voice"] = voice.value
         save_data()
         await interaction.response.send_message(f"✅ 서버 기본 TTS 목소리를 **{voice.value}**으로 변경했습니다.", ephemeral=True)
+
+    ENGINE_CHOICES = [
+        app_commands.Choice(name="자동 · Edge 실패 시 Google", value="auto"),
+        app_commands.Choice(name="Edge 전용", value="edge"),
+        app_commands.Choice(name="Google 전용", value="google"),
+    ]
+
+    @tts_slash.command(name="엔진", description="서버 TTS 합성 엔진을 선택합니다.")
+    @app_commands.describe(engine="사용할 TTS 엔진")
+    @app_commands.choices(engine=ENGINE_CHOICES)
+    async def slash_tts_engine(interaction: discord.Interaction, engine: app_commands.Choice[str]):
+        guild, member = await slash_require_admin(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings["engine"] = engine.value
+        save_data()
+        await interaction.response.send_message(f"✅ TTS 엔진을 **{engine.name}**으로 설정했습니다.", ephemeral=True)
 
     @tts_slash.command(name="채널", description="현재 채널을 TTS 채팅 채널로 지정합니다.")
     @app_commands.describe(channel="다른 채널을 지정할 때만 선택")
