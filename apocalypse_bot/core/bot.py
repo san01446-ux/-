@@ -4231,6 +4231,11 @@ register_v432_forge_live(
     find_item, get_item_slot, progress_quest, check_achievements,
 )
 
+# V4.3.3: TTS 음성 성역 + 기존 서버 채널 리뉴얼/이동 메뉴
+# prefix 전용 명령으로 추가하여 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
+from apocalypse_bot.commands.v433_voice_sanctuary import register_v433_voice_sanctuary
+register_v433_voice_sanctuary(bot, world_data, save_data)
+
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
