@@ -1399,7 +1399,14 @@ async def on_command_error(ctx, error):
         flush=True,
     )
     traceback.print_exception(type(original), original, original.__traceback__)
-    await ctx.send("❌ 명령어 처리 중 오류가 발생했습니다. 관리자에게 알려주세요.")
+    try:
+        await ctx.send("❌ 명령어 처리 중 오류가 발생했습니다. 관리자에게 알려주세요.")
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as notify_exc:
+        print(
+            f"[명령어 오류 알림 실패] channel={getattr(getattr(ctx, 'channel', None), 'id', None)} "
+            f"{type(notify_exc).__name__}: {notify_exc}",
+            flush=True,
+        )
 
 
 # =========================================================
@@ -4160,6 +4167,16 @@ register_v40_finance_commands(
 # prefix 전용이라 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
 from apocalypse_bot.commands.v403_server_builder import register_v403_server_builder
 register_v403_server_builder(bot, world_data, save_data)
+
+# V4.1: SERVER GUARD 서버 운영/제재/로그/자동관리/문의 시스템
+from apocalypse_bot.commands.v410_server_management import register_v410_server_management
+register_v410_server_management(bot, world_data, save_data)
+print(f"[SERVER GUARD 등록 확인] 운영초기설정={bot.get_command('운영초기설정') is not None} 운영진단={bot.get_command('운영진단') is not None}", flush=True)
+
+# V4.1.1: SERVER GUARD PLUS 자동 이모지/안티레이드/비상관리 확장
+# prefix 전용으로 추가하여 글로벌 슬래시 100개 제한을 사용하지 않습니다.
+from apocalypse_bot.commands.v411_server_guard_plus import register_v411_server_guard_plus
+register_v411_server_guard_plus(bot, world_data, save_data)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.

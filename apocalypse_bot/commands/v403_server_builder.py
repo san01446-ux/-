@@ -195,6 +195,70 @@ def _find_channel(guild: discord.Guild, name: str, channel_type: str):
     return discord.utils.get(guild.text_channels, name=name)
 
 
+async def _safe_progress_update(
+    ctx: commands.Context,
+    progress: discord.Message,
+    content: str,
+) -> discord.Message:
+    """진행 메시지의 원래 채널이 사라져도 다른 채널이나 DM으로 상태를 전달합니다."""
+    try:
+        await progress.edit(content=content)
+        return progress
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as exc:
+        print(
+            f"[서버세팅 진행메시지 복구] guild={getattr(ctx.guild, 'id', None)} "
+            f"channel={getattr(getattr(progress, 'channel', None), 'id', None)} "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
+
+    guild = ctx.guild
+    if guild is not None:
+        bot_member = guild.me
+        preferred_names = (
+            "🤖・봇-명령어",
+            "📋・관리자-로그",
+            "🧪・테스트실",
+            "💬・생존자-광장",
+        )
+        candidates: List[discord.TextChannel] = []
+        seen_ids = set()
+
+        for name in preferred_names:
+            channel = discord.utils.get(guild.text_channels, name=name)
+            if channel is not None and channel.id not in seen_ids:
+                candidates.append(channel)
+                seen_ids.add(channel.id)
+
+        for channel in guild.text_channels:
+            if channel.id not in seen_ids:
+                candidates.append(channel)
+                seen_ids.add(channel.id)
+
+        for channel in candidates:
+            if bot_member is not None:
+                permissions = channel.permissions_for(bot_member)
+                if not (permissions.view_channel and permissions.send_messages):
+                    continue
+            try:
+                return await channel.send(content)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                continue
+
+    try:
+        return await ctx.author.send(
+            "서버 세팅을 실행한 채널이 삭제되었거나 접근할 수 없어 DM으로 결과를 보냅니다.\n\n"
+            + content
+        )
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        print(
+            f"[서버세팅 진행메시지 전달 실패] guild={getattr(ctx.guild, 'id', None)} "
+            f"user={getattr(ctx.author, 'id', None)}",
+            flush=True,
+        )
+        return progress
+
+
 def _build_plan(guild: discord.Guild) -> Dict[str, Any]:
     missing_roles = [spec["name"] for spec in ROLE_SPECS if _find_role(guild, spec["name"]) is None]
     missing_categories: List[str] = []
@@ -516,7 +580,7 @@ def register_v403_server_builder(
             created_voice = 0
             starter_embeds = 0
             created_text_channels: List[discord.TextChannel] = []
-            reason = f"ABADDON V4.0.3 자동 서버 세팅 / 실행자 {ctx.author} ({ctx.author.id})"
+            reason = f"ABADDON V4.0.5 자동 서버 세팅 / 실행자 {ctx.author} ({ctx.author.id})"
 
             try:
                 for spec in ROLE_SPECS:
@@ -583,7 +647,9 @@ def register_v403_server_builder(
                         created_text_channels.append(new_channel)
                         created_text += 1
 
-                    await progress.edit(
+                    progress = await _safe_progress_update(
+                        ctx,
+                        progress,
                         content=(
                             "🏗️ **ABADDON 서버 자동 세팅 진행 중...**\n"
                             f"현재 처리: {category_spec['name']}\n"
@@ -618,14 +684,16 @@ def register_v403_server_builder(
                     guild_settings["rpg_channel_id"] = rpg_channel.id
 
                 world_data.setdefault("server_builder", {})[str(guild.id)] = {
-                    "version": "4.0.3",
+                    "version": "4.0.5",
                     "completed_at": int(time.time()),
                     "completed_by": ctx.author.id,
                 }
                 save_data()
                 PENDING_SETUPS.pop(guild.id, None)
 
-                await progress.edit(
+                progress = await _safe_progress_update(
+                    ctx,
+                    progress,
                     content=(
                         "✅ **ABADDON 서버 자동 세팅 완료!**\n"
                         f"새 역할: **{created_roles}개**\n"
@@ -640,7 +708,9 @@ def register_v403_server_builder(
 
             except discord.Forbidden:
                 PENDING_SETUPS.pop(guild.id, None)
-                await progress.edit(
+                progress = await _safe_progress_update(
+                    ctx,
+                    progress,
                     content=(
                         "❌ **권한 부족으로 자동 세팅이 중단되었습니다.**\n"
                         "봇 역할에 `채널 관리`, `역할 관리`, `메시지 보내기`, `링크 첨부` 권한을 부여하세요.\n"
@@ -649,7 +719,9 @@ def register_v403_server_builder(
                 )
             except discord.HTTPException as exc:
                 PENDING_SETUPS.pop(guild.id, None)
-                await progress.edit(
+                progress = await _safe_progress_update(
+                    ctx,
+                    progress,
                     content=(
                         "❌ **Discord API 오류로 자동 세팅이 중단되었습니다.**\n"
                         f"오류: `{type(exc).__name__}: {str(exc)[:300]}`\n"
@@ -663,7 +735,9 @@ def register_v403_server_builder(
                     f"{type(exc).__name__}: {exc}",
                     flush=True,
                 )
-                await progress.edit(
+                progress = await _safe_progress_update(
+                    ctx,
+                    progress,
                     content=(
                         "❌ **예상하지 못한 오류로 자동 세팅이 중단되었습니다.**\n"
                         f"오류: `{type(exc).__name__}: {str(exc)[:300]}`\n"
