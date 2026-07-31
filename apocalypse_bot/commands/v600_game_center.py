@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "6.1.0"
+VERSION = "6.2.3"
 MENU_TIMEOUT = 300
 STORY3_START_NODE = "eclipse_signal"
 
@@ -173,6 +173,16 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("shark_borrow", "사채 빌리기", "사채 금액을 입력합니다.", "사채빌리기", "예: 3000", force_modal=True),
             _a("shark_repay", "사채 상환", "사채 상환액을 입력합니다.", "사채상환", "예: 1000", force_modal=True),
             _a("shark_collection", "사채 추심 확인", "현재 추심 위험을 확인합니다.", "사채추심"),
+        ),
+    ),
+    "digging": (
+        "⛏️ 굴착·보물",
+        "땅파기, 미감정 보물, 감정사와 보물함을 관리합니다.",
+        (
+            _a("dig", "땅파기", "하루 50회·1분 간격으로 굴착해 식량·자원·미감정 보물을 찾습니다.", "땅파기"),
+            _a("treasure_box", "보물함", "남은 굴착 횟수, 미감정 보물과 감정 기록을 확인합니다.", "보물함"),
+            _a("appraisers", "감정사 목록", "감정사 4명의 비용·매입 배율·등급 상승 확률을 확인합니다.", "감정사"),
+            _a("treasure_appraise", "보물 감정", "감정사를 드롭다운에서 선택해 가장 오래된 미감정 보물을 감정합니다.", "보물감정"),
         ),
     ),
     "casino": (
@@ -692,10 +702,10 @@ def _main_embed(user: Optional[Dict[str, Any]] = None) -> discord.Embed:
     total_actions = sum(len(item[2]) for item in GAME_CATEGORIES.values())
     state = _ensure_game_center_state(user) if user is not None else {"favorites": [], "recent": []}
     embed = discord.Embed(
-        title="🎮 ABADDON v6.1.0 게임 제어실",
+        title=f"🎮 ABADDON v{VERSION} 게임 제어실",
         description=(
-            "카테고리에서 기능을 고르면 **실행 전 미리보기**가 열립니다.\n"
-            "즐겨찾기·최근 실행·검색으로 191개 기능을 빠르게 찾을 수 있으며 기존 `!명령어`도 유지됩니다."
+            f"카테고리에서 기능을 고르면 **실행 전 미리보기**가 열립니다.\n"
+            f"즐겨찾기·최근 실행·검색으로 **{total_actions}개 기능**을 빠르게 찾을 수 있으며 기존 `!명령어`도 유지됩니다."
         ),
         color=discord.Color.dark_red(),
     )
