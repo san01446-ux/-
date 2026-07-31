@@ -21,7 +21,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "5.2.1"
+VERSION = "6.0.0"
 TTS_MAX_TEXT = 450
 TTS_CHUNK_LENGTH = 180
 TTS_CACHE_TTL = 21600
@@ -1151,7 +1151,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.2.1"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/6.0.0"}
     _remove_audio_file(output_path)
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:

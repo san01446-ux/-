@@ -20,7 +20,7 @@ from discord.ext import commands
 from apocalypse_bot.commands import v433_voice_sanctuary as voice_system
 
 
-VERSION = "5.2.1"
+VERSION = "6.0.0"
 DIAGNOSTIC_LOG_LIMIT = 30
 DIAGNOSTIC_MENU_TIMEOUT = 300
 RECENT_LOGS: Deque[str] = deque(maxlen=DIAGNOSTIC_LOG_LIMIT)
@@ -622,7 +622,7 @@ def _report_text(
     if RECENT_LOGS:
         lines.extend(f"- {line}" for line in list(RECENT_LOGS)[-10:])
     else:
-        lines.append("- none captured since v5.2.1 startup")
+        lines.append("- none captured since v6.0.0 startup")
     lines.append("")
     lines.append("Secrets and token values are intentionally excluded.")
     return report_code, "\n".join(lines)
@@ -904,7 +904,7 @@ def register_v521_diagnostics(
             autopilot = layout.setdefault("autopilot", {})
             autopilot["enabled"] = False
             autopilot["next_run_at"] = 0
-            autopilot["last_reason"] = "v5.2.1 설정 제어실에서 관리자가 중지"
+            autopilot["last_reason"] = "v6.0.0 설정 제어실에서 관리자가 중지"
             task = voice_system.RENEWAL_AUTOPILOT_TASKS.get(guild.id)
             if task and not task.done():
                 task.cancel()
