@@ -1305,14 +1305,23 @@ async def on_ready():
     print(f"로그인 완료: {bot.user} / 서버 {len(bot.guilds)}개")
 
     if not getattr(bot, "_abaddon_slash_synced", False):
+        bot._abaddon_slash_sync_status = "syncing"
+        bot._abaddon_slash_sync_error = ""
+        bot._abaddon_slash_sync_at = datetime.now().isoformat()
         try:
             synced = await bot.tree.sync()
             bot._abaddon_slash_synced = True
+            bot._abaddon_slash_sync_status = "success"
+            bot._abaddon_slash_sync_count = len(synced)
+            bot._abaddon_slash_sync_at = datetime.now().isoformat()
             print(
                 f"슬래시 명령어 동기화 완료: "
                 f"최상위 {len(synced)}개 / 전체 {sum(1 for _ in bot.tree.walk_commands())}개"
             )
         except Exception as exc:
+            bot._abaddon_slash_sync_status = "failed"
+            bot._abaddon_slash_sync_error = f"{type(exc).__name__}: {exc}"
+            bot._abaddon_slash_sync_at = datetime.now().isoformat()
             print(f"[슬래시 명령어 동기화 실패] {type(exc).__name__}: {exc}")
 
     if not bot_presence.is_running():
@@ -4236,6 +4245,17 @@ register_v432_forge_live(
 from apocalypse_bot.commands.v433_voice_sanctuary import register_v433_voice_sanctuary
 register_v433_voice_sanctuary(bot, world_data, save_data)
 
+# V5.2.1: 통합 진단 센터·서버 설정 드롭다운
+# prefix 전용 명령이라 글로벌 slash 최상위 명령어 수는 증가하지 않습니다.
+from apocalypse_bot.commands.v521_diagnostics import register_v521_diagnostics
+register_v521_diagnostics(
+    bot,
+    world_data,
+    save_data,
+    data_file=DATA_FILE,
+    user_data=user_data,
+)
+
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
@@ -4247,3 +4267,5 @@ register_grouped_slash_commands(bot)
 # V5.0.4: 서버 리뉴얼 5분 단계 간격·HTTP 429 감지·15분 격리·45초 안전 중단
 
 # V5.2.0: 서버 리뉴얼 안전 자동진행·Edge 개별 음성 격리 회로
+
+# V5.2.1: 통합 진단 센터·서버 설정 드롭다운·슬래시 동기화 상태 기록
