@@ -49,6 +49,11 @@ def register_v410_server_management(
         key = guild_key(guild_or_id)
         settings = root.setdefault(key, {})
         settings.setdefault("log_channel_id", 0)
+        log_channels = settings.setdefault("log_channels", {})
+        log_channels.setdefault("security", 0)
+        log_channels.setdefault("message", 0)
+        log_channels.setdefault("member", 0)
+        log_channels.setdefault("operation", 0)
         settings.setdefault("welcome_channel_id", 0)
         settings.setdefault("leave_channel_id", 0)
         settings.setdefault("autorole_id", 0)
@@ -82,6 +87,8 @@ def register_v410_server_management(
         automod.setdefault("strike_limit", 3)
         automod.setdefault("strike_window", 600)
         automod.setdefault("timeout_minutes", 10)
+        automod.setdefault("action_mode", "삭제")
+        automod.setdefault("invite_exempt_channel_ids", [])
         return settings
 
     def now_iso() -> str:
@@ -190,12 +197,36 @@ def register_v410_server_management(
             return None
         return guild.get_channel(cid)
 
-    async def find_log_channel(guild: discord.Guild) -> Optional[discord.TextChannel]:
+    def classify_log_type(title: str) -> str:
+        text = title or ""
+        if any(token in text for token in ("메시지 삭제", "메시지 수정")):
+            return "message"
+        if any(token in text for token in ("멤버 입장", "멤버 퇴장", "닉네임", "역할 변경", "차단 이벤트", "차단 해제 이벤트")):
+            return "member"
+        if any(token in text for token in ("자동 관리", "경고", "타임아웃", "추방", "차단", "격리", "레이드", "비상", "보안")):
+            return "security"
+        return "operation"
+
+    async def find_log_channel(
+        guild: discord.Guild,
+        log_type: Optional[str] = None,
+    ) -> Optional[discord.TextChannel]:
         settings = get_settings(guild)
+        channel_map = settings.get("log_channels", {})
+        if log_type in {"security", "message", "member", "operation"}:
+            channel = resolve_channel(guild, channel_map.get(log_type, 0))
+            if isinstance(channel, discord.TextChannel):
+                return channel
         channel = resolve_channel(guild, settings.get("log_channel_id", 0))
         if isinstance(channel, discord.TextChannel):
             return channel
-        for name in ("📋・관리자-로그", "🤖・봇-로그", "🚨・신고접수"):
+        fallback_names = {
+            "security": ("🚨・보안-알림", "📋・관리자-로그", "🚨・신고접수"),
+            "message": ("📨・메시지-로그", "📋・관리자-로그", "🤖・봇-로그"),
+            "member": ("👥・멤버-로그", "📋・관리자-로그", "🤖・봇-로그"),
+            "operation": ("🔧・운영-로그", "📋・관리자-로그", "🤖・봇-로그"),
+        }
+        for name in fallback_names.get(log_type or "operation", fallback_names["operation"]):
             fallback = discord.utils.get(guild.text_channels, name=name)
             if fallback:
                 return fallback
@@ -209,8 +240,9 @@ def register_v410_server_management(
         color: int = 0x8E44AD,
         fields: Optional[Iterable[Tuple[str, str, bool]]] = None,
         file: Optional[discord.File] = None,
+        log_type: Optional[str] = None,
     ) -> None:
-        channel = await find_log_channel(guild)
+        channel = await find_log_channel(guild, log_type or classify_log_type(title))
         if channel is None:
             return
         embed = discord.Embed(
@@ -792,7 +824,7 @@ def register_v410_server_management(
             await ctx.send("❌ 서버 안에서만 사용할 수 있습니다.")
             return
         me = ctx.guild.me
-        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지", "운영대시보드", "셀프역할패널")
+        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지", "운영대시보드", "셀프역할패널", "보안초기설정", "보안상태")
         registered = [name for name in command_names if bot.get_command(name) is not None]
         missing = [name for name in command_names if bot.get_command(name) is None]
         perms = me.guild_permissions if me is not None else None
@@ -826,7 +858,7 @@ def register_v410_server_management(
             ),
             inline=True,
         )
-        embed.set_footer(text="초기 연결: !운영초기설정  |  확장 연결: !운영강화설정")
+        embed.set_footer(text="초기 연결: !운영초기설정  |  확장 연결: !운영강화설정  |  보안 로그: !보안초기설정")
         await ctx.send(embed=embed)
 
     @bot.command(name="운영설정", help="현재 서버 관리 설정을 확인합니다.")
@@ -863,7 +895,7 @@ def register_v410_server_management(
                 f"멘션 도배: **{'켜짐' if automod['mention_spam'] else '꺼짐'}**\n"
                 f"초대 링크: **{'켜짐' if automod['invites'] else '꺼짐'}** · "
                 f"금칙어: **{'켜짐' if automod['bad_words'] else '꺼짐'}**\n"
-                f"자동 타임아웃: **{'켜짐' if automod['auto_timeout'] else '꺼짐'}**"
+                f"처리 모드: **{automod.get('action_mode', '삭제')}** · 자동 타임아웃: **{'켜짐' if automod['auto_timeout'] else '꺼짐'}**"
             ),
             inline=False,
         )
@@ -1608,7 +1640,12 @@ def register_v410_server_management(
         window = MESSAGE_WINDOWS[key]
         window.append((now, content_norm))
 
-        if automod.get("invites", False) and INVITE_RE.search(message.content):
+        invite_exempt = {int(value) for value in automod.get("invite_exempt_channel_ids", [])}
+        if (
+            automod.get("invites", False)
+            and message.channel.id not in invite_exempt
+            and INVITE_RE.search(message.content)
+        ):
             reason = "외부 Discord 초대 링크"
 
         if reason is None and automod.get("bad_words", False):
@@ -1635,11 +1672,18 @@ def register_v410_server_management(
         if reason is None:
             return
 
-        AUTOMOD_DELETED_MESSAGE_IDS.add(message.id)
-        try:
-            await message.delete()
-        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-            pass
+        action_mode = str(automod.get("action_mode", "삭제")).strip()
+        if action_mode not in {"알림", "삭제", "타임아웃"}:
+            action_mode = "삭제"
+
+        deleted = False
+        if action_mode in {"삭제", "타임아웃"}:
+            AUTOMOD_DELETED_MESSAGE_IDS.add(message.id)
+            try:
+                await message.delete()
+                deleted = True
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                AUTOMOD_DELETED_MESSAGE_IDS.discard(message.id)
 
         settings["stats"]["automod_hits"] = int(settings["stats"].get("automod_hits", 0)) + 1
         strikes = AUTOMOD_STRIKES[key]
@@ -1650,7 +1694,10 @@ def register_v410_server_management(
         strike_limit = max(2, int(automod.get("strike_limit", 3)))
         timed_out = False
         timeout_minutes = max(1, min(40320, int(automod.get("timeout_minutes", 10))))
-        if automod.get("auto_timeout", True) and len(strikes) >= strike_limit:
+        should_timeout = action_mode == "타임아웃" or (
+            action_mode == "삭제" and automod.get("auto_timeout", False)
+        )
+        if should_timeout and len(strikes) >= strike_limit:
             if message.guild.me and message.guild.me.guild_permissions.moderate_members:
                 allowed, _ = can_act_on(message.guild.me, message.author, message.guild.me)
                 if allowed:
@@ -1675,22 +1722,23 @@ def register_v410_server_management(
                         pass
         save_data()
 
+        action_text = "감지" if action_mode == "알림" else ("삭제" if deleted else "삭제 시도")
         try:
-            notice = await message.channel.send(
-                f"🛡️ {message.author.mention} 메시지가 자동 관리에 의해 삭제됐습니다. "
+            await message.channel.send(
+                f"🛡️ {message.author.mention} 자동 관리 위반이 **{action_text}** 처리됐습니다. "
                 f"사유: **{reason}**"
                 + (f" · 반복 위반으로 **{timeout_minutes}분 타임아웃**" if timed_out else ""),
                 delete_after=6,
             )
         except (discord.Forbidden, discord.HTTPException):
-            notice = None
+            pass
 
         await send_log(
             message.guild,
             "🤖 자동 관리 적발",
             f"멤버: {message.author.mention} (`{message.author.id}`)\n채널: {message.channel.mention}\n사유: **{reason}**",
             color=0xC0392B,
-            fields=[("메시지", message.content[:1000] or "(내용 없음)", False), ("타임아웃", "적용" if timed_out else "미적용", True)],
+            fields=[("메시지", message.content[:1000] or "(내용 없음)", False), ("처리 모드", action_mode, True), ("타임아웃", "적용" if timed_out else "미적용", True)],
         )
 
     async def handle_member_join(member: discord.Member) -> None:

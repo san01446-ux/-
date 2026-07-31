@@ -81,6 +81,11 @@ def register_v411_server_guard_plus(
     def get_settings(guild_or_id: Any) -> Dict[str, Any]:
         settings = management_root.setdefault(guild_key(guild_or_id), {})
         settings.setdefault("log_channel_id", 0)
+        log_channels = settings.setdefault("log_channels", {})
+        log_channels.setdefault("security", 0)
+        log_channels.setdefault("message", 0)
+        log_channels.setdefault("member", 0)
+        log_channels.setdefault("operation", 0)
         settings.setdefault("mod_role_ids", [])
         settings.setdefault("cases", [])
         settings.setdefault("next_case_id", 1)
@@ -168,8 +173,23 @@ def register_v411_server_guard_plus(
             return False
         return True
 
-    def resolve_log_channel(guild: discord.Guild) -> Optional[discord.TextChannel]:
+    def classify_log_type(title: str) -> str:
+        if any(token in title for token in ("격리", "소프트밴", "서버 잠금", "비상", "레이드")):
+            return "security"
+        return "operation"
+
+    def resolve_log_channel(
+        guild: discord.Guild,
+        log_type: str = "security",
+    ) -> Optional[discord.TextChannel]:
         settings = get_settings(guild)
+        try:
+            split_id = int(settings.get("log_channels", {}).get(log_type, 0) or 0)
+        except (TypeError, ValueError):
+            split_id = 0
+        split_channel = guild.get_channel(split_id)
+        if isinstance(split_channel, discord.TextChannel):
+            return split_channel
         try:
             configured_id = int(settings.get("log_channel_id", 0))
         except (TypeError, ValueError):
@@ -177,7 +197,12 @@ def register_v411_server_guard_plus(
         channel = guild.get_channel(configured_id)
         if isinstance(channel, discord.TextChannel):
             return channel
-        for name in ("📋・관리자-로그", "🤖・봇-로그", "moderator-only"):
+        fallback_names = (
+            ("🚨・보안-알림", "📋・관리자-로그", "🚨・신고접수")
+            if log_type == "security"
+            else ("🔧・운영-로그", "📋・관리자-로그", "🤖・봇-로그")
+        )
+        for name in fallback_names:
             fallback = discord.utils.get(guild.text_channels, name=name)
             if fallback:
                 return fallback
@@ -191,7 +216,7 @@ def register_v411_server_guard_plus(
         color: int = 0x8E44AD,
         fields: Optional[Iterable[Tuple[str, str, bool]]] = None,
     ) -> None:
-        channel = resolve_log_channel(guild)
+        channel = resolve_log_channel(guild, classify_log_type(title))
         if channel is None:
             return
         embed = discord.Embed(

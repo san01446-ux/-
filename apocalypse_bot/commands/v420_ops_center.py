@@ -178,10 +178,11 @@ def register_v420_ops_center(
             name="🤖 자동 기능",
             value=(
                 f"자동 관리: **{on_off(automod.get('enabled'))}**\n"
-                f"초대 차단: **{on_off(automod.get('block_invites'))}**\n"
+                f"초대 차단: **{on_off(automod.get('invites'))}**\n"
                 f"자동 이모지: **{on_off(reactions.get('enabled'))}**\n"
                 f"첨부 반응: **{on_off(reactions.get('smart_attachments'))}**\n"
-                f"안티레이드: **{on_off(anti_raid.get('enabled'))}**"
+                f"안티레이드: **{on_off(anti_raid.get('enabled'))}**\n"
+                f"자동관리 모드: **{automod.get('action_mode', '삭제')}**"
             ),
             inline=True,
         )
@@ -212,7 +213,7 @@ def register_v420_ops_center(
             value=f"prefix 루트 **{prefix_count}개** · slash 최상위 **{slash_root}/100개** · slash 전체 **{slash_total}개**",
             inline=False,
         )
-        embed.set_footer(text="상세 도움말: !운영도구도움말 · 편의 기능: !운영편의도움말 · 권한 점검: !봇권한")
+        embed.set_footer(text="상세 도움말: !운영도구도움말 · 보안센터: !보안센터도움말 · 권한 점검: !봇권한")
         await ctx.send(embed=embed)
 
     @bot.command(name="봇권한", aliases=["권한점검"], help="현재 서버와 채널에서 아바돈이 가진 권한을 점검합니다.")
@@ -260,7 +261,7 @@ def register_v420_ops_center(
         settings = get_settings(ctx.guild)
         payload = {
             "format": "ABADDON_SERVER_GUARD_SETTINGS",
-            "version": "4.2.1",
+            "version": "4.2.2",
             "guild_id": ctx.guild.id,
             "guild_name": ctx.guild.name,
             "exported_at": discord.utils.utcnow().isoformat(),
