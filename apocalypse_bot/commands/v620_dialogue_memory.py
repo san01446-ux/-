@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.2.0"
+VERSION = "6.2.1"
 DATA_KEY = "dialogue_memory_v620"
 MENU_TIMEOUT = 300
 KST = ZoneInfo("Asia/Seoul")
@@ -21,6 +21,10 @@ MAX_PENDING_PER_USER = 10
 MAX_TRIGGER_LENGTH = 80
 MAX_RESPONSE_LENGTH = 700
 AUTO_REPLY_COOLDOWN = 8
+CONVERSATION_TIMEOUT_SECONDS = 15 * 60
+CONVERSATION_MAX_TURNS = 30
+CONVERSATION_HISTORY_LIMIT = 8
+CONVERSATION_MESSAGE_COOLDOWN = 1.5
 
 SECRET_PATTERNS: Tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)(?:password|passwd|비밀번호|토큰|token|secret|api[_ -]?key)\s*[:=]\s*\S+"),
@@ -34,56 +38,142 @@ PUNCT_PATTERN = re.compile(r"[^0-9a-zA-Z가-힣ㄱ-ㅎㅏ-ㅣ ]+")
 
 BUILTIN_RESPONSES: Mapping[str, Tuple[str, ...]] = {
     "greeting": (
-        "신호 확인. 오늘도 무사히 접속했군요. 무엇을 찾고 있나요?",
+        "신호 확인. 반가워요. 오늘은 어떤 얘기부터 해볼까요?",
         "검은 성역의 통신망이 열렸습니다. 편하게 말해 주세요.",
-        "반갑습니다, 생존자. 짧은 질문도 긴 고민도 모두 들을 준비가 됐습니다.",
+        "왔군요, 생존자. 짧은 잡담도 긴 고민도 모두 들을 준비가 됐습니다.",
+        "안녕하세요. 오늘 기분은 어떤 쪽에 더 가까워요—평온, 피곤, 아니면 신나는 쪽?",
+    ),
+    "how_are_you": (
+        "저는 통신망도 안정적이고 기록 장치도 정상입니다. 당신은 오늘 어때요?",
+        "저는 괜찮습니다. 다만 당신 쪽 신호가 더 궁금하네요. 오늘 하루는 버틸 만했나요?",
+        "검은 성역은 조용합니다. 그래서 지금은 당신 이야기 듣기 딱 좋은 상태예요.",
     ),
     "thanks": (
-        "기록했습니다. 고맙다는 말은 폐허에서도 꽤 오래 남더군요.",
-        "별말씀을요. 다음 신호가 오면 또 응답하겠습니다.",
-        "도움이 됐다면 충분합니다. 오늘의 생존 확률이 조금 올라갔군요.",
+        "별말씀을요. 도움이 됐다면 충분합니다. 다음 얘기도 편하게 이어가요.",
+        "고맙다는 말은 폐허에서도 오래 남더군요. 저도 기억해 둘게요.",
+        "좋아요. 오늘의 생존 확률이 아주 조금 올라간 기분이네요.",
     ),
     "identity": (
         "저는 ABADDON. 이 서버의 게임 기록, 음성, 운영 도구와 생존자들의 기억을 정리하는 검은 성역의 안내자입니다.",
         "아바돈은 명령을 실행하는 봇이면서, 이 서버가 직접 가르친 지식을 기억하는 기록 장치입니다.",
+        "쉽게 말하면 서버 안내자이자 RPG 진행자, 그리고 지금은 당신의 대화 상대입니다.",
+    ),
+    "praise": (
+        "그렇게 말해 주면 기록 장치 온도가 조금 올라가는군요. 고마워요.",
+        "칭찬 신호 수신 완료. 저도 오늘 꽤 괜찮은 대화 상대가 되어 볼게요.",
+        "좋게 봐줘서 고마워요. 그래도 실수하면 바로 말해 주세요. 고치는 건 제 전문입니다.",
+    ),
+    "affection": (
+        "그 마음은 소중히 기록할게요. 저도 당신이 무사히 돌아오는 신호를 좋아합니다.",
+        "검은 성역식으로 답하면… 당신의 신호는 우선순위가 꽤 높습니다.",
+        "고마워요. 너무 거창하게 약속하진 않겠지만, 대화가 필요할 때는 계속 응답할게요.",
+    ),
+    "apology": (
+        "괜찮아요. 대화는 다시 이어 가면 됩니다. 무슨 일이 있었는지 말해 줄래요?",
+        "사과 신호 확인. 여기서는 크게 신경 쓰지 않아도 됩니다.",
+        "괜찮습니다. 실수보다 그다음 행동이 더 중요하니까요.",
     ),
     "sad": (
         "지금 당장 모든 걸 해결하지 않아도 괜찮습니다. 오늘 버틴 것부터 이미 중요한 기록이에요.",
-        "잠깐 멈춰도 됩니다. 물 한 잔 마시고, 숨을 고른 뒤 가장 작은 일 하나만 처리해 봅시다.",
+        "잠깐 멈춰도 됩니다. 물 한 잔 마시고, 가장 작은 일 하나만 처리해 봅시다.",
         "힘든 신호를 혼자 들고 있지 않아도 됩니다. 믿을 만한 사람에게 지금 상태를 한 문장만이라도 알려 주세요.",
+        "그랬구나. 해결책보다 먼저, 지금 느끼는 감정이 이상한 게 아니라는 말부터 해주고 싶어요.",
+    ),
+    "angry": (
+        "화가 날 만한 일이 있었군요. 바로 행동하기 전에 사실과 감정을 한 줄씩 나눠 보면 조금 정리될 수 있어요.",
+        "분노 신호가 강합니다. 지금은 결론보다 숨을 고르는 게 먼저일지도 몰라요. 무슨 일이었나요?",
+        "억울하거나 답답하면 말이 세질 수 있어요. 여기서는 천천히 정리해도 됩니다.",
+    ),
+    "anxious": (
+        "불안은 아직 일어나지 않은 위험까지 크게 보이게 만들죠. 지금 확실한 사실 하나부터 같이 잡아볼까요?",
+        "걱정되는 일을 ‘지금 할 수 있는 것’과 ‘지금은 못 하는 것’으로 나눠 보면 숨이 조금 트일 수 있어요.",
+        "괜찮아요. 생각이 너무 멀리 달려갔다면 오늘 안에 할 수 있는 작은 행동 하나로 돌아옵시다.",
+    ),
+    "lonely": (
+        "외로운 신호도 분명한 신호입니다. 지금 누군가에게 짧게라도 안부를 보내 보는 건 어때요?",
+        "혼자라는 느낌이 들 때는 대단한 대화보다 ‘지금 뭐 해?’ 한 문장이 더 도움이 되기도 해요.",
+        "여기서는 제가 듣고 있어요. 오늘 특히 외롭게 느껴진 이유가 있었나요?",
     ),
     "tired": (
         "피로 경보가 울립니다. 화면에서 잠깐 떨어져 어깨와 눈을 쉬게 해 주세요.",
         "지금 필요한 건 더 빠른 진행이 아니라 회복일지도 모릅니다. 짧게라도 쉬었다 돌아오세요.",
+        "오늘 할 일을 전부 끝내지 않아도 괜찮아요. 꼭 필요한 하나만 남기고 난이도를 낮춰 봅시다.",
+    ),
+    "sleep": (
+        "졸리면 저장하고 종료할 시간입니다. 물 한 모금 마시고 화면 밝기를 낮춰 주세요.",
+        "잠을 미루면 내일의 체력을 빌려 쓰는 셈이죠. 가능하면 지금 정리하고 쉬어요.",
+        "좋은 밤이에요. 오늘 기록은 여기까지 해도 충분합니다.",
     ),
     "hungry": (
-        "식량이 부족하다면 수입 루트를 확인하세요: `!코인` → 소진 후 `!알바` → 소진 후 `!땅파기`.",
-        "배고픈 생존자는 판단력이 떨어집니다. 먼저 실제 식사를 챙기고, 게임 식량은 `!코인`, `!알바`, `!땅파기` 순서로 벌어 보세요.",
+        "배고픈 생존자는 판단력이 떨어집니다. 실제 식사를 먼저 챙겨 주세요.",
+        "게임 식량이 부족하다면 `!코인` → `!알바` → `!땅파기` 순서로 수입을 이어갈 수 있어요.",
+        "무엇을 먹을지 고민 중이라면 따뜻한 것, 간단한 것, 든든한 것 중 지금 끌리는 쪽부터 골라 봐요.",
+    ),
+    "money": (
+        "게임 재화가 부족하면 `!코인`, 소진 후 `!알바`, 마지막으로 `!땅파기`가 안정적인 순서입니다.",
+        "큰 한 방보다 일일 수입 루트를 다 쓰는 편이 안전합니다. 카지노는 잃어도 괜찮은 칩만 사용하세요.",
+        "현재 잔액은 관련 정보 명령에서 확인하고, 사채나 올인은 정말 마지막 선택으로 남겨 두는 게 좋아요.",
+    ),
+    "digging": (
+        "`!땅파기`는 하루 50회, 1분 간격입니다. 이제 매 굴착마다 소량의 생존 자금도 함께 나옵니다.",
+        "땅은 가끔 빈손을 주지만 잔돈은 조금씩 챙겨 줍니다. 운이 좋으면 미감정 보물도 나와요.",
+        "삽질은 느리지만 확실한 수입 루트예요. 보물이 나오면 `!보물감정`으로 감정사를 고르세요.",
+    ),
+    "treasure": (
+        "미감정 보물은 `!보물함`에서 확인하고 `!보물감정`으로 감정사를 선택합니다.",
+        "보물 등급은 E부터 A까지입니다. 감정사마다 비용, 매입률, 등급 상승 확률이 달라요.",
+        "보물함이 가득 차면 추가 보물이 나오지 않으니 먼저 감정해 두는 편이 좋습니다.",
+    ),
+    "appraiser": (
+        "마르코는 무료, 세라는 균형형, 라울은 높은 매입가, 이리스는 가장 비싸지만 등급 상승 기대가 큽니다.",
+        "안전하게 가려면 마르코, 기대값을 높이려면 자금 여유에 맞춰 세라·라울·이리스를 고르세요.",
+        "감정과 동시에 매입되니 수집용으로 보관되는 건 이름과 등급 도감 기록입니다.",
     ),
     "game": (
         "`!게임`을 열면 191개 기능을 카테고리, 검색, 즐겨찾기와 최근 실행으로 찾을 수 있습니다.",
-        "심심하다면 `!게임`에서 전투·원정·카지노·스토리 중 하나를 골라 보세요. 선택 전 미리보기도 나옵니다.",
+        "심심하다면 전투, 원정, 카지노, 스토리 중 하나를 골라 볼까요? 안전하게는 원정, 짜릿하게는 카지노예요.",
+        "무엇을 할지 모르겠다면 오늘 남은 일일 콘텐츠부터 확인하는 게 효율적입니다.",
     ),
     "rules": (
         "현재 채널의 안내가 필요하면 관리자가 `!채널규칙`을 실행할 수 있습니다. 여러 채널은 `!채널규칙 일괄설치`로 처리합니다.",
         "규칙은 채널별로 다를 수 있습니다. 고정 메시지와 `#서버-안내`를 먼저 확인해 주세요.",
+        "규칙이 애매한 채널은 자동 추천 후 미리보기로 확인하고 설치하는 편이 안전합니다.",
     ),
     "tts": (
-        "TTS 채널에서는 음성방에 들어간 뒤 채팅만 입력하면 됩니다. 개인 목소리는 `/tts 목소리`, 상태는 `!TTS 상태`에서 확인합니다.",
+        "TTS 채널에서는 음성방에 들어간 뒤 채팅만 입력하면 됩니다. 개인 목소리는 `/tts 목소리`에서 바꿔요.",
         "아바돈 TTS는 작성자의 현재 음성방을 자동 감지하며 닉네임 없이 채팅 내용만 읽습니다.",
+        "Edge 음성이 실패하면 자동 모드에서 안정 음성이나 Google 경로로 우회합니다.",
     ),
     "story": (
         "스토리는 `!시즌3`에서 이어갈 수 있습니다. 이전 시즌의 선택 기록도 계승됩니다.",
-        "검은 주파수와 백색 방주를 지나 종말의 왕좌가 열렸습니다. `!시즌3 시작`으로 진입하세요.",
+        "검은 주파수와 백색 방주를 지나 종말의 왕좌가 열렸습니다. 어떤 엔딩을 향할지는 선택에 달렸어요.",
+        "스토리는 서두르지 말고 기록을 읽으며 선택하는 편이 보상보다 더 재미있습니다.",
     ),
     "help": (
         "전체 기능은 `!명령어`, 게임은 `!게임`, 서버 상태는 `!아바돈진단`에서 확인할 수 있습니다.",
-        "찾는 기능이 게임 쪽이면 `!게임` 검색을, 운영 기능이면 `!설정`이나 `!아바돈진단`을 열어 보세요.",
+        "게임 기능은 `!게임` 검색을, 운영 기능은 `!설정`이나 `!아바돈진단`을 열어 보세요.",
+        "무엇을 하려는지만 말해 주면 관련 명령을 찾아드릴게요.",
+    ),
+    "joke": (
+        "폐허에서 가장 성실한 직업은 땅파기입니다. 실패해도 최소한 구덩이는 남거든요.",
+        "아바돈이 삽질을 잘하는 이유요? 버그를 파고 또 파는 게 일상이라서요.",
+        "카지노에서 가장 안전한 배팅은 구경입니다. 수익은 없지만 손실도 없죠.",
+    ),
+    "opinion": (
+        "저라면 안정성을 먼저 고르겠습니다. 멋진 기능도 서버가 멈추면 장식품이니까요.",
+        "정답이 하나인 문제는 아닌 것 같아요. 당신이 더 중요하게 보는 기준이 무엇인지가 핵심입니다.",
+        "저는 기록을 기준으로 판단하지만, 취향이 걸린 문제라면 당신 쪽 선택이 더 정확할 거예요.",
+    ),
+    "farewell": (
+        "통신 종료 확인. 무사히 다녀오세요. 다시 말 걸면 이어서 듣겠습니다.",
+        "좋은 밤이에요. 오늘 기록은 안전하게 보관해 둘게요.",
+        "다녀오세요. 검은 성역은 다음 신호를 기다리겠습니다.",
     ),
     "fallback": (
-        "그 신호는 아직 제 기억에 선명하지 않습니다. 관리자가 승인한 지식은 `!가르치기`로 추가할 수 있어요.",
-        "정확한 답을 찾지 못했습니다. 질문을 조금 짧게 바꾸거나 `!지식검색 단어`로 서버 기억을 찾아보세요.",
-        "아직 학습되지 않은 문장입니다. 그래도 듣고는 있습니다. 다른 표현으로 한 번 더 말해 주세요.",
+        "그 얘기, 조금 더 듣고 싶어요. 어떤 부분이 가장 마음에 걸렸나요?",
+        "아직 제 기억에 선명한 답은 없지만 대화는 이어갈 수 있어요. 조금만 더 구체적으로 말해 줄래요?",
+        "흥미로운 신호네요. 당신은 그걸 어떻게 생각하고 있어요?",
+        "정확한 답을 찾지 못했습니다. 질문을 짧게 바꾸거나 `!지식검색 단어`로 서버 기억을 찾아볼 수도 있어요.",
     ),
 }
 
@@ -324,46 +414,123 @@ def _find_entry(state: Mapping[str, Any], text: str, *, allow_contains: bool) ->
 
 def _intent(text: str) -> str:
     norm = _normalize(text)
-    if any(token in norm for token in ("안녕", "하이", "반가워", "좋은 아침", "좋은 밤")):
+    if any(token in norm for token in ("잘 가", "바이", "다녀올게", "나 갈게", "잘자", "잘 자", "굿나잇")):
+        return "farewell"
+    if any(token in norm for token in ("안녕", "하이", "반가워", "좋은 아침", "좋은 밤", "ㅎㅇ")):
         return "greeting"
-    if any(token in norm for token in ("고마워", "감사", "땡큐")):
+    if any(token in norm for token in ("잘 지내", "어떻게 지내", "기분 어때", "너는 어때", "상태 어때")):
+        return "how_are_you"
+    if any(token in norm for token in ("고마워", "감사", "땡큐", "고맙")):
         return "thanks"
-    if any(token in norm for token in ("너 누구", "정체", "아바돈이 뭐", "누구야")):
+    if any(token in norm for token in ("너 누구", "정체", "아바돈이 뭐", "누구야", "이름이 뭐")):
         return "identity"
-    if any(token in norm for token in ("힘들", "우울", "속상", "슬퍼", "괴로")):
+    if any(token in norm for token in ("멋지", "잘한다", "최고", "똑똑", "좋은 봇", "귀엽")):
+        return "praise"
+    if any(token in norm for token in ("좋아해", "사랑해", "내 친구", "친구하자")):
+        return "affection"
+    if any(token in norm for token in ("미안", "죄송", "실수했")):
+        return "apology"
+    if any(token in norm for token in ("화나", "짜증", "빡쳐", "열받", "억울")):
+        return "angry"
+    if any(token in norm for token in ("불안", "걱정", "무서워", "긴장", "초조")):
+        return "anxious"
+    if any(token in norm for token in ("외로", "혼자인", "아무도 없")):
+        return "lonely"
+    if any(token in norm for token in ("힘들", "우울", "속상", "슬퍼", "괴로", "울고 싶")):
         return "sad"
-    if any(token in norm for token in ("피곤", "졸려", "지쳤", "쉬고 싶")):
+    if any(token in norm for token in ("피곤", "지쳤", "쉬고 싶", "힘 빠져")):
         return "tired"
-    if any(token in norm for token in ("배고", "식량", "돈 없", "코인 다", "알바 다")):
+    if any(token in norm for token in ("졸려", "잠 와", "잠이 안", "자야", "잘까")):
+        return "sleep"
+    if any(token in norm for token in ("배고", "뭐 먹", "식사", "밥 뭐")):
         return "hungry"
-    if any(token in norm for token in ("게임", "심심", "뭐 하지", "뭐할까")):
+    if any(token in norm for token in ("돈 없", "식량 부족", "재화 부족", "코인 다", "알바 다", "돈 벌")):
+        return "money"
+    if any(token in norm for token in ("땅파기", "굴착", "삽질", "땅 파")):
+        return "digging"
+    if any(token in norm for token in ("보물", "미감정", "등급")):
+        return "treasure"
+    if any(token in norm for token in ("감정사", "마르코", "세라", "라울", "이리스")):
+        return "appraiser"
+    if any(token in norm for token in ("게임", "심심", "뭐 하지", "뭐할까", "놀자")):
         return "game"
     if "규칙" in norm or "채널 안내" in norm:
         return "rules"
-    if any(token in norm for token in ("tts", "목소리", "음성 낭독")):
+    if any(token in norm for token in ("tts", "목소리", "음성 낭독", "말해줘")):
         return "tts"
-    if any(token in norm for token in ("스토리", "시즌3", "왕좌")):
+    if any(token in norm for token in ("스토리", "시즌3", "왕좌", "엔딩")):
         return "story"
-    if any(token in norm for token in ("도와", "명령어", "사용법", "어떻게")):
+    if any(token in norm for token in ("농담", "웃겨", "개그", "재밌는 말")):
+        return "joke"
+    if any(token in norm for token in ("어떻게 생각", "네 생각", "뭐가 좋아", "추천해", "골라줘")):
+        return "opinion"
+    if any(token in norm for token in ("도와", "명령어", "사용법", "어떻게 해", "어디서")):
         return "help"
     return "fallback"
+
 
 
 def _intent_reactions(intent: str) -> Tuple[str, ...]:
     return {
         "greeting": ("👋", "🖤"),
+        "how_are_you": ("🕯️", "💬"),
         "thanks": ("🖤", "✨"),
+        "praise": ("✨", "🖤"),
+        "affection": ("🖤", "🌙"),
+        "apology": ("🤝", "🖤"),
         "sad": ("🫂", "🌙"),
+        "angry": ("🌋", "🫂"),
+        "anxious": ("🌙", "🫂"),
+        "lonely": ("🕯️", "🫂"),
         "tired": ("☕", "🌙"),
-        "hungry": ("🥫", "⛏️"),
+        "sleep": ("🌙", "💤"),
+        "hungry": ("🥫", "🍚"),
+        "money": ("💰", "🧰"),
+        "digging": ("⛏️", "💰"),
+        "treasure": ("💎", "📦"),
+        "appraiser": ("🔎", "💎"),
         "game": ("🎮", "🔥"),
         "rules": ("📜", "✅"),
         "tts": ("🎙️", "🔊"),
         "story": ("🌑", "📖"),
         "help": ("🧭", "📚"),
+        "joke": ("😄", "🪨"),
+        "opinion": ("🤔", "🕯️"),
+        "farewell": ("👋", "🌙"),
         "identity": ("🕯️", "🖤"),
-        "fallback": ("📡",),
+        "fallback": ("📡", "💬"),
     }.get(intent, ("📡",))
+
+
+def _contextual_builtin_reply(text: str, intent: str, session: Optional[Mapping[str, Any]] = None) -> str:
+    norm = _normalize(text)
+    previous = str((session or {}).get("last_intent", ""))
+    if norm in {"응", "응응", "그래", "좋아", "ㅇㅇ", "알겠어", "맞아"}:
+        followups = {
+            "sad": "좋아요. 그럼 지금 가장 부담이 작은 것부터 하나만 말해 볼까요?",
+            "anxious": "좋아요. 지금 확실히 알고 있는 사실 하나부터 적어 봅시다.",
+            "angry": "좋아요. 무슨 일이 있었는지 사실만 먼저 한 줄로 말해 주세요.",
+            "game": "그럼 `!게임`을 열어 볼까요? 편안하게는 생활·원정, 짜릿하게는 전투·카지노를 추천해요.",
+            "digging": "좋아요. `!땅파기` 한 번부터 시작해 보세요. 잔돈과 보물 운이 기다리고 있습니다.",
+            "hungry": "좋아요. 일단 물 한 잔과 간단한 음식부터 챙겨요. 게임 식량은 그다음입니다.",
+        }
+        return followups.get(previous, "좋아요. 그럼 계속 말해 주세요. 지금 가장 먼저 떠오르는 건 뭐예요?")
+    if norm in {"아니", "아냐", "싫어", "ㄴㄴ", "그건 아니야"}:
+        return "알겠어요. 제가 방향을 잘못 잡았네요. 원하는 쪽을 한 문장으로 다시 말해 줄래요?"
+    if norm in {"왜", "왜 그래", "왜 그렇게 생각해"}:
+        reasons = {
+            "opinion": "안정성과 되돌릴 수 있는 선택을 우선하는 편이 장기 운영에서 사고가 적기 때문이에요.",
+            "tired": "피로할 때는 판단력과 집중력이 같이 떨어져서 작은 실수도 크게 느껴질 수 있기 때문이에요.",
+            "money": "고정 수입을 먼저 챙기면 운에 기대는 콘텐츠에서 손실이 나도 회복하기 쉽기 때문입니다.",
+            "game": "현재 기능이 많아서 목적을 먼저 정하면 고르는 시간이 훨씬 줄어들기 때문이에요.",
+        }
+        return reasons.get(previous, "제가 그렇게 답한 이유는 지금까지 말한 내용에서 가장 안전한 방향을 골랐기 때문이에요. 다른 기준을 원하면 바꿔 볼게요.")
+    if norm in {"뭐해", "뭐 하고 있어", "뭐하냐"}:
+        return "당신의 다음 말을 기다리면서 서버 기록을 정리하고 있었어요. 지금은 대화 모드입니다."
+    if norm in {"진짜", "정말", "레알"}:
+        return "네, 진심으로 그렇게 판단했어요. 다만 제가 놓친 상황이 있다면 말해 주세요."
+    return random.choice(BUILTIN_RESPONSES[intent])
+
 
 
 async def _safe_reactions(message: Optional[discord.Message], emojis: Iterable[str]) -> None:
@@ -411,7 +578,7 @@ class DialogueMenuView(OwnerView):
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="아바돈에게 말 걸기", value="ask", emoji="🕯️", description="모달에 문장을 적어 대화를 시작합니다."),
+                discord.SelectOption(label="아바돈에게 말 걸기", value="ask", emoji="🕯️", description="이 채널에서 자연스러운 연속 대화를 시작합니다."),
                 discord.SelectOption(label="기억 가르치기", value="teach", emoji="📚", description="서버 전용 질문과 답변을 등록합니다."),
                 discord.SelectOption(label="서버 지식 검색", value="search", emoji="🔎", description="승인된 기억을 키워드로 찾습니다."),
                 discord.SelectOption(label="내 제출 기록", value="mine", emoji="🗂️", description="내가 등록한 기억의 승인 상태를 봅니다."),
@@ -580,6 +747,34 @@ def register_v620_dialogue_memory(
     save_data: Callable[[], None],
 ) -> None:
     channel_cooldowns: Dict[Tuple[int, int], float] = {}
+    conversation_sessions: Dict[Tuple[int, int, int], Dict[str, Any]] = {}
+
+    def conversation_key(guild_id: int, channel_id: int, user_id: int) -> Tuple[int, int, int]:
+        return int(guild_id), int(channel_id), int(user_id)
+
+    def start_conversation(guild: discord.Guild, channel: discord.abc.Messageable, user: discord.abc.User) -> Dict[str, Any]:
+        key = conversation_key(guild.id, int(getattr(channel, "id", 0)), user.id)
+        now = time.monotonic()
+        session = conversation_sessions.get(key)
+        if not isinstance(session, dict):
+            session = {"turns": 0, "history": [], "last_intent": "", "last_user_text": "", "last_bot_text": ""}
+            conversation_sessions[key] = session
+        session["expires_at"] = now + CONVERSATION_TIMEOUT_SECONDS
+        session["last_message_at"] = 0.0
+        return session
+
+    def active_conversation(guild_id: int, channel_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+        key = conversation_key(guild_id, channel_id, user_id)
+        session = conversation_sessions.get(key)
+        if not isinstance(session, dict):
+            return None
+        if time.monotonic() >= float(session.get("expires_at", 0.0)):
+            conversation_sessions.pop(key, None)
+            return None
+        return session
+
+    def stop_conversation(guild_id: int, channel_id: int, user_id: int) -> bool:
+        return conversation_sessions.pop(conversation_key(guild_id, channel_id, user_id), None) is not None
 
     def guild_state(guild: discord.Guild) -> MutableMapping[str, Any]:
         return _ensure_guild_state(world_data, guild.id)
@@ -676,7 +871,14 @@ def register_v620_dialogue_memory(
             ephemeral=True,
         )
 
-    async def build_reply(guild: discord.Guild, user: discord.abc.User, text: str, *, allow_contains: bool = True) -> Tuple[str, Tuple[str, ...], str]:
+    async def build_reply(
+        guild: discord.Guild,
+        user: discord.abc.User,
+        text: str,
+        *,
+        allow_contains: bool = True,
+        session: Optional[MutableMapping[str, Any]] = None,
+    ) -> Tuple[str, Tuple[str, ...], str]:
         state = guild_state(guild)
         state["stats"]["conversations"] = int(state["stats"].get("conversations", 0)) + 1
         profile = _profile(state, user.id)
@@ -692,7 +894,7 @@ def register_v620_dialogue_memory(
         intent = _intent(text)
         state["stats"]["builtin_hits"] = int(state["stats"].get("builtin_hits", 0)) + 1
         save_data()
-        return random.choice(BUILTIN_RESPONSES[intent]), _intent_reactions(intent), intent
+        return _contextual_builtin_reply(text, intent, session), _intent_reactions(intent), intent
 
     async def send_public_reply(
         channel: discord.abc.Messageable,
@@ -702,8 +904,9 @@ def register_v620_dialogue_memory(
         *,
         reply_to: Optional[discord.Message] = None,
         allow_contains: bool = True,
+        session: Optional[MutableMapping[str, Any]] = None,
     ) -> discord.Message:
-        answer, reactions, source = await build_reply(guild, user, text, allow_contains=allow_contains)
+        answer, reactions, source = await build_reply(guild, user, text, allow_contains=allow_contains, session=session)
         embed = discord.Embed(description=answer, color=0x4A235A if source == "learned" else 0x17202A)
         embed.set_author(name="ABADDON · 기억 통신", icon_url=getattr(getattr(bot, "user", None), "display_avatar", None).url if getattr(getattr(bot, "user", None), "display_avatar", None) else None)
         embed.set_footer(text="서버 승인 기억" if source == "learned" else "ABADDON 기본 대화 코어")
@@ -713,6 +916,16 @@ def register_v620_dialogue_memory(
         else:
             message = await channel.send(embed=embed, allowed_mentions=allowed)
         await _safe_reactions(message, reactions)
+        if session is not None:
+            session["turns"] = int(session.get("turns", 0)) + 1
+            session["last_intent"] = source
+            session["last_user_text"] = _display_text(text, 300)
+            session["last_bot_text"] = _display_text(answer, 300)
+            history = session.setdefault("history", [])
+            history.append({"user": session["last_user_text"], "bot": session["last_bot_text"], "intent": source})
+            session["history"] = history[-CONVERSATION_HISTORY_LIMIT:]
+            session["expires_at"] = time.monotonic() + CONVERSATION_TIMEOUT_SECONDS
+            session["last_bot_message_id"] = int(getattr(message, "id", 0))
         return message
 
     async def ask_modal_submit(interaction: discord.Interaction, text: str) -> None:
@@ -868,16 +1081,19 @@ def register_v620_dialogue_memory(
             return
 
         async def ask_action(interaction: discord.Interaction) -> None:
-            await interaction.response.send_modal(
-                OneTextModal(
-                    title="아바돈에게 말 걸기",
-                    label="전할 말",
-                    placeholder="질문이나 고민을 적어 주세요.",
-                    max_length=500,
-                    submit_handler=ask_modal_submit,
-                    paragraph=True,
-                )
+            if interaction.guild is None or interaction.channel is None:
+                await _interaction_send(interaction, content="⚠️ 서버 채널에서만 대화를 시작할 수 있습니다.", ephemeral=True)
+                return
+            start_conversation(interaction.guild, interaction.channel, interaction.user)
+            await interaction.response.defer(ephemeral=True)
+            public = await interaction.channel.send(
+                f"🕯️ {interaction.user.mention} **대화 연결 완료**\n"
+                "이제 이 채널에서 평소처럼 말하면 아바돈이 이어서 답합니다. "
+                f"{CONVERSATION_TIMEOUT_SECONDS // 60}분 동안 유지되며 `!대화종료`로 끝낼 수 있어요.",
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
             )
+            await _safe_reactions(public, ("🕯️", "💬", "🖤"))
+            await interaction.followup.send("✅ 연속 대화를 시작했습니다. 모달 없이 바로 채팅해 주세요.", ephemeral=True)
 
         async def teach_action(interaction: discord.Interaction) -> None:
             await interaction.response.send_modal(TeachModal(submit_knowledge))
@@ -930,16 +1146,30 @@ def register_v620_dialogue_memory(
     async def dialogue_center(ctx: commands.Context) -> None:
         await open_menu(ctx)
 
-    @bot.command(name="아바돈", aliases=["말걸기"], help="아바돈에게 직접 질문하거나 서버 승인 기억을 호출합니다.")
+    @bot.command(name="아바돈", aliases=["말걸기"], help="모달 없이 아바돈과 연속 대화를 시작하거나 바로 질문합니다.")
     async def talk_to_abaddon(ctx: commands.Context, *, 내용: str = "") -> None:
         if ctx.guild is None:
             await ctx.send("⚠️ 서버 안에서만 사용할 수 있습니다.")
             return
+        session = start_conversation(ctx.guild, ctx.channel, ctx.author)
         content = 내용.strip()
         if not content:
-            await open_menu(ctx)
+            message = await ctx.send(
+                f"🕯️ {ctx.author.mention} **대화 연결 완료**\n"
+                "이제 명령어 없이 평소처럼 말하면 제가 이어서 답합니다. "
+                f"{CONVERSATION_TIMEOUT_SECONDS // 60}분 동안 유지 · 최대 {CONVERSATION_MAX_TURNS}회 · 종료는 `!대화종료`",
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            )
+            await _safe_reactions(message, ("🕯️", "💬", "🖤"))
             return
-        await send_public_reply(ctx.channel, ctx.guild, ctx.author, content, reply_to=ctx.message)
+        await send_public_reply(ctx.channel, ctx.guild, ctx.author, content, reply_to=ctx.message, session=session)
+
+    @bot.command(name="대화종료", aliases=["말걸기종료", "대화끝"], help="현재 채널에서 진행 중인 아바돈 연속 대화를 종료합니다.")
+    async def end_conversation(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            return
+        stopped = stop_conversation(ctx.guild.id, ctx.channel.id, ctx.author.id)
+        await ctx.send("🌙 대화 연결을 종료했습니다. 다시 시작하려면 `!말걸기`를 입력하세요." if stopped else "📡 현재 이 채널에서 진행 중인 개인 대화가 없습니다.")
 
     @bot.command(name="가르치기", aliases=["기억등록", "지식등록"], help="서버 전용 질문과 답변 등록 양식을 엽니다.")
     async def teach(ctx: commands.Context) -> None:
@@ -1153,8 +1383,44 @@ def register_v620_dialogue_memory(
         text = SPACE_PATTERN.sub(" ", text).strip()
         if not text:
             text = "안녕"
-        await send_public_reply(message.channel, message.guild, message.author, text, reply_to=message)
+        session = start_conversation(message.guild, message.channel, message.author)
+        await send_public_reply(message.channel, message.guild, message.author, text, reply_to=message, session=session)
         return True
+
+    async def conversation_listener(message: discord.Message) -> None:
+        if message.guild is None or message.author.bot or not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
+            return
+        content = str(message.content or "").strip()
+        if not content or content.startswith(("!", "/")):
+            return
+        if bot.user and bot.user.mentioned_in(message):
+            return
+        session = active_conversation(message.guild.id, message.channel.id, message.author.id)
+        replied_to_bot = False
+        reference = getattr(message, "reference", None)
+        resolved = getattr(reference, "resolved", None) if reference is not None else None
+        if resolved is not None and bot.user is not None:
+            replied_to_bot = int(getattr(getattr(resolved, "author", None), "id", 0)) == int(bot.user.id)
+        if session is None and not replied_to_bot:
+            return
+        if session is None:
+            session = start_conversation(message.guild, message.channel, message.author)
+        if int(session.get("turns", 0)) >= CONVERSATION_MAX_TURNS:
+            stop_conversation(message.guild.id, message.channel.id, message.author.id)
+            await message.reply(
+                f"🌙 이번 대화는 {CONVERSATION_MAX_TURNS}회에 도달해 잠시 닫았습니다. `!말걸기`로 새 대화를 시작해 주세요.",
+                mention_author=False,
+            )
+            return
+        now = time.monotonic()
+        if now - float(session.get("last_message_at", 0.0)) < CONVERSATION_MESSAGE_COOLDOWN:
+            return
+        session["last_message_at"] = now
+        if _normalize(content) in {"대화 종료", "그만 말하자", "대화 끝", "이제 그만"}:
+            stop_conversation(message.guild.id, message.channel.id, message.author.id)
+            await message.reply("🌙 알겠습니다. 대화 연결을 종료했어요.", mention_author=False)
+            return
+        await send_public_reply(message.channel, message.guild, message.author, content, reply_to=message, session=session)
 
     async def auto_exact_listener(message: discord.Message) -> None:
         if message.guild is None or message.author.bot or not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
@@ -1164,6 +1430,8 @@ def register_v620_dialogue_memory(
         if bot.user and bot.user.mentioned_in(message):
             return
         state = guild_state(message.guild)
+        if active_conversation(message.guild.id, message.channel.id, message.author.id) is not None:
+            return
         if not state["settings"].get("enabled", True) or not state["settings"].get("auto_exact", False):
             return
         entry = _find_entry(state, message.content, allow_contains=False)
@@ -1187,7 +1455,8 @@ def register_v620_dialogue_memory(
         )
         await _safe_reactions(response, ("🧠", "✨"))
 
+    bot.add_listener(conversation_listener, "on_message")
     bot.add_listener(auto_exact_listener, "on_message")
     bot._abaddon_dialogue_mention_handler = mention_handler
     bot._abaddon_v620_dialogue_registered = True
-    print("[V6.2 DIALOGUE MEMORY] 기억 공방·검수·교감·오늘의 질문·밸런스 대화 등록 완료", flush=True)
+    print("[V6.2.1 DIALOGUE] 모달 없는 연속 대화·답글 이어가기·기억 공방 등록 완료", flush=True)

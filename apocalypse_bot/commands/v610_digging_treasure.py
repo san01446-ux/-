@@ -11,12 +11,14 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.1.0"
+VERSION = "6.2.1"
 KST = ZoneInfo("Asia/Seoul")
 DIG_DAILY_LIMIT = 50
 DIG_COOLDOWN_SECONDS = 60
 TREASURE_CHANCE = 0.08
 PENDING_LIMIT = 20
+DIG_CASH_MIN = 8
+DIG_CASH_MAX = 35
 
 GRADE_ORDER: Tuple[str, ...] = ("E", "D", "C", "B", "A")
 GRADE_WEIGHTS: Tuple[int, ...] = (500, 280, 140, 65, 15)
@@ -129,6 +131,7 @@ def _ensure_profile(user: Dict[str, Any]) -> Dict[str, Any]:
         "treasure_count": 0,
         "appraised_count": 0,
         "total_treasure_value": 0,
+        "total_cash_found": 0,
         "pending": [],
         "grade_counts": {grade: 0 for grade in GRADE_ORDER},
         "codex": [],
@@ -161,6 +164,20 @@ def _cooldown_remaining(profile: Dict[str, Any]) -> int:
         return 0
     elapsed = (_utc_now() - last).total_seconds()
     return max(0, int(DIG_COOLDOWN_SECONDS - elapsed + 0.999))
+
+
+
+def _grant_dig_cash(user: Dict[str, Any], profile: Dict[str, Any]) -> int:
+    """Every valid dig yields a small amount of the existing main currency (balance/food)."""
+    amount = random.randint(DIG_CASH_MIN, DIG_CASH_MAX)
+    user["balance"] = int(user.get("balance", 0)) + amount
+    stats = user.setdefault("stats", {})
+    if not isinstance(stats, dict):
+        stats = {}
+        user["stats"] = stats
+    stats["earned"] = int(stats.get("earned", 0)) + amount
+    profile["total_cash_found"] = int(profile.get("total_cash_found", 0)) + amount
+    return amount
 
 
 def _new_treasure() -> Dict[str, Any]:
@@ -374,6 +391,7 @@ def register_v610_digging_treasure(
         profile["last_at"] = _utc_now().isoformat()
         profile["total_attempts"] = int(profile.get("total_attempts", 0)) + 1
         remaining = DIG_DAILY_LIMIT - int(profile["attempts"])
+        cash_reward = _grant_dig_cash(user, profile)
 
         found_treasure = random.random() < TREASURE_CHANCE and len(profile["pending"]) < PENDING_LIMIT
         if found_treasure:
@@ -387,13 +405,14 @@ def register_v610_digging_treasure(
                         "💥 **삽 끝에서 봉인된 상자가 튀어나왔습니다!**\n"
                         f"❓ **미감정 보물 1개** 획득 · 보물 ID `{treasure['id']}`\n"
                         f"📦 미감정 보물함 **{len(profile['pending'])}/{PENDING_LIMIT}**\n"
+                        f"💰 잔해 속 생존 자금 **+{cash_reward:,} 식량**\n"
                         f"📅 오늘 남은 땅파기 **{remaining}회**\n\n"
                         "감정사를 선택하려면 `!보물감정`을 입력하세요."
                     )
                 )
             except (discord.Forbidden, discord.HTTPException, AttributeError):
                 pass
-            await _safe_reactions(suspense, ("💥", "📦", "💎", "❓", "✨", "⛏️"))
+            await _safe_reactions(suspense, ("💥", "📦", "💎", "💰", "❓", "✨", "⛏️"))
             return
 
         text, reactions = _ordinary_find(user)
@@ -406,13 +425,14 @@ def register_v610_digging_treasure(
             await suspense.edit(
                 content=(
                     f"{text}\n"
+                    f"💰 잔해 속 생존 자금 **+{cash_reward:,} 식량**\n"
                     f"📅 오늘 남은 땅파기 **{remaining}회** · 다음 굴착 **1분 후**"
                     f"{full_note}"
                 )
             )
         except (discord.Forbidden, discord.HTTPException, AttributeError):
             pass
-        await _safe_reactions(suspense, reactions)
+        await _safe_reactions(suspense, tuple(dict.fromkeys((*reactions, "💰"))))
 
     @bot.command(name="보물감정", aliases=["보물감정소", "감정소"])
     async def appraise(ctx: commands.Context, *, 감정사: str = "") -> None:
@@ -471,6 +491,7 @@ def register_v610_digging_treasure(
         embed.add_field(name="미감정 보물", value=f"**{len(profile['pending'])}개**\n{pending_text}", inline=False)
         embed.add_field(name="감정 등급 누계", value=grade_text, inline=False)
         embed.add_field(name="누적 감정 매입액", value=f"**{int(profile.get('total_treasure_value', 0)):,} 식량**", inline=True)
+        embed.add_field(name="굴착 잔돈 누계", value=f"**{int(profile.get('total_cash_found', 0)):,} 식량**", inline=True)
         embed.add_field(name="발견 도감", value=f"**{len(profile.get('codex', []))}종**", inline=True)
         embed.set_footer(text="수입 루트: !코인 → 소진 시 !알바 → 소진 시 !땅파기")
         message = await ctx.send(embed=embed)
