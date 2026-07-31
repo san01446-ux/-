@@ -4240,3 +4240,5 @@ register_v433_voice_sanctuary(bot, world_data, save_data)
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
+
+# V5.0.2: 자동 TTS 닉네임 낭독 제거 · 채팅 내용만 재생

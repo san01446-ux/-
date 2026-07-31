@@ -20,7 +20,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "5.0.1"
+VERSION = "5.0.2"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
@@ -487,7 +487,7 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
     tts.setdefault("speed", 1.0)
     tts.setdefault("volume", 1.0)
     tts.setdefault("idle_seconds", DEFAULT_IDLE_SECONDS)
-    tts.setdefault("announce_names", True)
+    tts["announce_names"] = False  # v5.0.2: 닉네임은 읽지 않고 채팅 내용만 낭독
     tts.setdefault("auto_join", True)
     tts.setdefault("require_author_in_voice", True)
     settings.setdefault("layout", {})
@@ -946,7 +946,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.1"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.2"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
             if response.status != 200:
@@ -985,7 +985,7 @@ async def _ensure_voice_connection(
     if not has_davey:
         return None, (
             "discord.py 2.7 음성 연결에 필요한 `davey`가 설치되지 않았습니다. "
-            "v5.0.1 requirements.txt를 반영하고 Render에서 `Clear build cache & deploy`를 실행하세요."
+            "v5.0.2 requirements.txt를 반영하고 Render에서 `Clear build cache & deploy`를 실행하세요."
         )
     me = guild.me
     if me is not None:
@@ -1061,7 +1061,7 @@ def register_v433_voice_sanctuary(
         queue = VOICE_RUNTIME.queue_for(guild.id)
         if queue.full():
             return False, f"대기열이 가득 찼습니다. 최대 {TTS_QUEUE_LIMIT}개까지 보관합니다."
-        spoken = f"{author.display_name}. {clean}" if announce_name else clean
+        spoken = clean  # v5.0.2: 모든 TTS는 작성자 이름 없이 내용만 낭독
         resolved_voice = _voice_name_or_default(voice_key, _personal_voice(settings, author.id))
         resolved_channel_id = int(target_voice_channel_id or settings.get("voice_channel_id") or 0)
         if not resolved_channel_id:
@@ -1195,7 +1195,7 @@ def register_v433_voice_sanctuary(
             guild,
             ctx.author,
             text,
-            announce_name=bool(settings.get("announce_names", True)),
+            announce_name=False,
             target_voice_channel_id=voice_channel_id,
         )
         await ctx.send(("✅ " if ok else "❌ ") + message, delete_after=8)
@@ -2744,7 +2744,7 @@ def register_v433_voice_sanctuary(
             message.guild,
             message.author,
             clean,
-            announce_name=bool(settings.get("announce_names", True)),
+            announce_name=False,
             target_voice_channel_id=target_channel_id,
         )
         if not ok:
