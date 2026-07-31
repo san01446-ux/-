@@ -4193,6 +4193,11 @@ register_v421_utility_pack(bot, world_data, save_data)
 from apocalypse_bot.commands.v422_security_center import register_v422_security_center
 register_v422_security_center(bot, world_data, save_data)
 
+# V4.2.3: 유형별 문의·신고·건의 접수/담당자/처리상태/빠른답변 센터
+# prefix 전용이라 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
+from apocalypse_bot.commands.v423_intake_center import register_v423_intake_center
+register_v423_intake_center(bot, world_data, save_data)
+
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands

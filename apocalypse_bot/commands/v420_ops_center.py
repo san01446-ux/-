@@ -194,7 +194,8 @@ def register_v420_ops_center(
                 f"사건 기록: **{len(settings.get('cases', []))}건**\n"
                 f"운영 메모: **{len(settings.get('ops_notes', []))}건**\n"
                 f"고정 메시지: **{len(settings.get('sticky_messages', {}))}개**\n"
-                f"셀프 역할: **{len(settings.get('self_roles', {}).get('items', {}))}개 항목 · {len(settings.get('self_roles', {}).get('panels', {}))}개 패널**"
+                f"셀프 역할: **{len(settings.get('self_roles', {}).get('items', {}))}개 항목 · {len(settings.get('self_roles', {}).get('panels', {}))}개 패널**\n"
+                f"접수 기록: **{len(settings.get('intake_center', {}).get('records', {}))}건 · 답변 양식 {len(settings.get('intake_center', {}).get('templates', {}))}개**"
             ),
             inline=True,
         )
@@ -213,7 +214,7 @@ def register_v420_ops_center(
             value=f"prefix 루트 **{prefix_count}개** · slash 최상위 **{slash_root}/100개** · slash 전체 **{slash_total}개**",
             inline=False,
         )
-        embed.set_footer(text="상세 도움말: !운영도구도움말 · 보안센터: !보안센터도움말 · 권한 점검: !봇권한")
+        embed.set_footer(text="도움말: !운영도구도움말 · !보안센터도움말 · !접수센터도움말 · 권한: !봇권한")
         await ctx.send(embed=embed)
 
     @bot.command(name="봇권한", aliases=["권한점검"], help="현재 서버와 채널에서 아바돈이 가진 권한을 점검합니다.")
@@ -261,7 +262,7 @@ def register_v420_ops_center(
         settings = get_settings(ctx.guild)
         payload = {
             "format": "ABADDON_SERVER_GUARD_SETTINGS",
-            "version": "4.2.2",
+            "version": "4.2.3",
             "guild_id": ctx.guild.id,
             "guild_name": ctx.guild.name,
             "exported_at": discord.utils.utcnow().isoformat(),

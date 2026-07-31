@@ -824,7 +824,7 @@ def register_v410_server_management(
             await ctx.send("❌ 서버 안에서만 사용할 수 있습니다.")
             return
         me = ctx.guild.me
-        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지", "운영대시보드", "셀프역할패널", "보안초기설정", "보안상태")
+        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지", "운영대시보드", "셀프역할패널", "보안초기설정", "보안상태", "접수패널", "접수센터상태")
         registered = [name for name in command_names if bot.get_command(name) is not None]
         missing = [name for name in command_names if bot.get_command(name) is None]
         perms = me.guild_permissions if me is not None else None
@@ -858,7 +858,7 @@ def register_v410_server_management(
             ),
             inline=True,
         )
-        embed.set_footer(text="초기 연결: !운영초기설정  |  확장 연결: !운영강화설정  |  보안 로그: !보안초기설정")
+        embed.set_footer(text="기본: !운영초기설정 | 보안: !보안초기설정 | 접수: !접수초기설정")
         await ctx.send(embed=embed)
 
     @bot.command(name="운영설정", help="현재 서버 관리 설정을 확인합니다.")
