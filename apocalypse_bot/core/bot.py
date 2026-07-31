@@ -4242,3 +4242,4 @@ from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
 # V5.0.2: 자동 TTS 닉네임 낭독 제거 · 채팅 내용만 재생
+# V5.0.3: Edge NoAudioReceived 재시도·백오프·안정 음성·Google 대체 합성 강화

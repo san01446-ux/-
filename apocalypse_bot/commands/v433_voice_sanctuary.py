@@ -20,11 +20,15 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "5.0.2"
+VERSION = "5.0.3"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
 DEFAULT_IDLE_SECONDS = 600
+TTS_MIN_AUDIO_BYTES = 512
+EDGE_FAILURE_BACKOFF_SECONDS = 120
+EDGE_RETRY_DELAYS = (0.0, 2.0)
+EDGE_STABLE_FALLBACK_VOICES = ("ko-KR-SunHiNeural", "ko-KR-InJoonNeural")
 RENEWAL_EDIT_DELAY = 6.0
 RENEWAL_API_TIMEOUT = 45.0
 RENEWAL_STEP_COOLDOWN = 90
@@ -911,6 +915,13 @@ class VoiceRuntime:
 
 
 VOICE_RUNTIME = VoiceRuntime()
+EDGE_TTS_RUNTIME: Dict[str, Any] = {
+    "backoff_until": 0.0,
+    "consecutive_failures": 0,
+    "last_error": "",
+    "last_success_at": 0,
+    "last_voice": "",
+}
 
 
 def _clean_spoken_text(text: str) -> str:
@@ -921,19 +932,85 @@ def _clean_spoken_text(text: str) -> str:
     return text[:TTS_MAX_TEXT]
 
 
-async def _synth_edge(text: str, voice: str, speed: float, output_path: str) -> bool:
+def _remove_audio_file(output_path: str) -> None:
+    with contextlib.suppress(OSError):
+        Path(output_path).unlink()
+
+
+def _valid_audio_file(output_path: str) -> bool:
+    path = Path(output_path)
+    return path.is_file() and path.stat().st_size >= TTS_MIN_AUDIO_BYTES
+
+
+async def _synth_edge_once(text: str, voice: str, speed: float, output_path: str) -> bool:
     try:
         import edge_tts  # type: ignore
     except ImportError:
         return False
-    try:
-        rate = int(round((speed - 1.0) * 100))
-        communicator = edge_tts.Communicate(text=text, voice=voice, rate=f"{rate:+d}%")
-        await communicator.save(output_path)
-        return Path(output_path).exists() and Path(output_path).stat().st_size > 0
-    except Exception as exc:
-        print(f"[TTS Edge 합성 실패] voice={voice} {type(exc).__name__}: {exc}", flush=True)
-        return False
+    _remove_audio_file(output_path)
+    rate = int(round((speed - 1.0) * 100))
+    communicator = edge_tts.Communicate(
+        text=text,
+        voice=voice,
+        rate=f"{rate:+d}%",
+        volume="+0%",
+        pitch="+0Hz",
+    )
+    await communicator.save(output_path)
+    if not _valid_audio_file(output_path):
+        _remove_audio_file(output_path)
+        raise RuntimeError("합성 결과가 비어 있거나 너무 작습니다.")
+    return True
+
+
+async def _synth_edge(text: str, voice: str, speed: float, output_path: str) -> Optional[str]:
+    """Try the selected Edge voice safely and return the voice actually used."""
+    now = time.monotonic()
+    if now < float(EDGE_TTS_RUNTIME.get("backoff_until", 0.0) or 0.0):
+        remaining = int(float(EDGE_TTS_RUNTIME["backoff_until"]) - now)
+        print(f"[TTS Edge 일시 우회] 외부 합성 백오프 {max(1, remaining)}초 남음", flush=True)
+        return None
+
+    candidates: List[str] = []
+    for candidate in (voice, *EDGE_STABLE_FALLBACK_VOICES):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    last_error = ""
+    for candidate_index, candidate in enumerate(candidates):
+        delays = EDGE_RETRY_DELAYS if candidate_index == 0 else (0.0,)
+        for attempt, delay in enumerate(delays, start=1):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                if await _synth_edge_once(text, candidate, speed, output_path):
+                    EDGE_TTS_RUNTIME.update({
+                        "backoff_until": 0.0,
+                        "consecutive_failures": 0,
+                        "last_error": "",
+                        "last_success_at": int(time.time()),
+                        "last_voice": candidate,
+                    })
+                    if candidate != voice:
+                        print(f"[TTS Edge 대체 음성] requested={voice} used={candidate}", flush=True)
+                    return candidate
+            except Exception as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                print(
+                    f"[TTS Edge 합성 실패] voice={candidate} attempt={attempt}/{len(delays)} {last_error}",
+                    flush=True,
+                )
+
+    failures = int(EDGE_TTS_RUNTIME.get("consecutive_failures", 0) or 0) + 1
+    backoff = min(600, EDGE_FAILURE_BACKOFF_SECONDS * failures)
+    EDGE_TTS_RUNTIME.update({
+        "backoff_until": time.monotonic() + backoff,
+        "consecutive_failures": failures,
+        "last_error": last_error,
+    })
+    _remove_audio_file(output_path)
+    print(f"[TTS Edge 우회 전환] Google 대체 합성 사용 · {backoff}초 백오프", flush=True)
+    return None
 
 
 async def _synth_google(text: str, speed: float, output_path: str) -> None:
@@ -946,21 +1023,29 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.2"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.3"}
+    _remove_audio_file(output_path)
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
             if response.status != 200:
                 raise RuntimeError(f"TTS HTTP {response.status}")
+            content_type = response.headers.get("Content-Type", "").lower()
             data = await response.read()
-    if not data:
-        raise RuntimeError("TTS 음성 데이터가 비어 있습니다.")
+    if len(data) < TTS_MIN_AUDIO_BYTES:
+        raise RuntimeError("Google TTS 음성 데이터가 비어 있거나 너무 작습니다.")
+    if content_type and "audio" not in content_type and "octet-stream" not in content_type:
+        raise RuntimeError(f"Google TTS 응답 형식 오류: {content_type[:80]}")
     await asyncio.to_thread(Path(output_path).write_bytes, data)
+    if not _valid_audio_file(output_path):
+        _remove_audio_file(output_path)
+        raise RuntimeError("Google TTS 파일 검증에 실패했습니다.")
 
 
 async def _synthesise(text: str, voice_key: str, speed: float, output_path: str) -> str:
     preset = VOICE_PRESETS.get(voice_key, VOICE_PRESETS["선히"])
-    if await _synth_edge(text, preset["edge"], speed, output_path):
-        return "edge-tts"
+    used_voice = await _synth_edge(text, preset["edge"], speed, output_path)
+    if used_voice:
+        return f"edge-tts:{used_voice}"
     await _synth_google(text, speed, output_path)
     return "google-fallback"
 
@@ -985,7 +1070,7 @@ async def _ensure_voice_connection(
     if not has_davey:
         return None, (
             "discord.py 2.7 음성 연결에 필요한 `davey`가 설치되지 않았습니다. "
-            "v5.0.2 requirements.txt를 반영하고 Render에서 `Clear build cache & deploy`를 실행하세요."
+            "v5.0.3 requirements.txt를 반영하고 Render에서 `Clear build cache & deploy`를 실행하세요."
         )
     me = guild.me
     if me is not None:
@@ -1110,6 +1195,12 @@ def register_v433_voice_sanctuary(
                     _voice_name_or_default(item.get("voice"), _voice_name_or_default(settings.get("voice"))),
                     float(settings.get("speed", 1.0)),
                     temp_path,
+                )
+                if not _valid_audio_file(temp_path):
+                    raise RuntimeError("재생 직전 TTS 음성 파일 검증에 실패했습니다.")
+                print(
+                    f"[TTS 합성 완료] guild={guild_id} provider={provider} bytes={Path(temp_path).stat().st_size}",
+                    flush=True,
                 )
                 await _play_file(voice, temp_path, float(settings.get("volume", 1.0)))
                 settings["last_provider"] = provider
@@ -1392,7 +1483,7 @@ def register_v433_voice_sanctuary(
                 name="Render 조치",
                 value=(
                     "1. Build Command를 `pip install --upgrade pip && pip install -r requirements.txt`로 확인\n"
-                    "2. `discord.py[voice]>=2.7`, `PyNaCl>=1.6.2`, `davey>=0.1.6` 확인\n"
+                    "2. `discord.py==2.7.1`, `PyNaCl==1.6.2`, `davey==0.1.6` 확인\n"
                     "3. Manual Deploy → Clear build cache & deploy"
                 ),
                 inline=False,
@@ -1400,7 +1491,7 @@ def register_v433_voice_sanctuary(
         elif not has_edge:
             embed.add_field(name="안내", value="edge-tts가 없어 Google 대체 음성을 사용합니다.", inline=False)
         else:
-            embed.add_field(name="결과", value="필수 음성 패키지가 정상적으로 감지됐습니다.", inline=False)
+            embed.add_field(name="결과", value="필수 음성 패키지가 정상적으로 감지됐습니다. 외부 Edge 합성 연결은 실제 낭독 때 별도로 확인됩니다.", inline=False)
         await ctx.send(embed=embed)
 
     @tts_group.command(name="상태", aliases=["status"])
@@ -1422,9 +1513,15 @@ def register_v433_voice_sanctuary(
         embed.add_field(name="목소리", value=f"{settings.get('voice', '선히')} · {settings.get('speed', 1.0)}배 · {int(float(settings.get('volume', 1.0))*100)}%", inline=True)
         embed.add_field(
             name="음성 의존성",
-            value=f"PyNaCl: {'✅' if has_nacl else '❌'}\nedge-tts: {'✅' if has_edge else '대체 음성 사용'}",
+            value=f"PyNaCl: {'✅' if has_nacl else '❌'}\ndavey: {'✅' if has_davey else '❌'}\nedge-tts: {'✅' if has_edge else '대체 음성 사용'}",
             inline=False,
         )
+        last_provider = str(settings.get("last_provider") or "아직 재생 기록 없음")
+        backoff_remaining = max(0, int(float(EDGE_TTS_RUNTIME.get("backoff_until", 0.0) or 0.0) - time.monotonic()))
+        provider_value = last_provider
+        if backoff_remaining:
+            provider_value += f"\nEdge 외부 합성 우회: 약 {backoff_remaining}초 남음"
+        embed.add_field(name="최근 합성 경로", value=provider_value[:1024], inline=False)
         await ctx.send(embed=embed)
 
     # Discord 슬래시 명령어: 일반 사용자는 개인 목소리/미리듣기, 관리자는 서버 설정을 변경합니다.
