@@ -24,6 +24,227 @@ ROOMS = ["일반 전투", "함정", "보물방", "구조 신호", "정예 감염
 HIDDEN_BOSSES = ["백색 포식자", "균열의 수문장", "지하왕 모르가나", "실험체 ZERO"]
 
 
+PATCH_HISTORY = [
+    {
+        "version": "6.2.2",
+        "date": "2026-08-01",
+        "title": "패치노트 기록실",
+        "summary": "접두사와 슬래시 명령 하나로 최신·이전 업데이트를 드롭다운과 버튼으로 열람합니다.",
+        "points": [
+            "`!패치노트`, `!업데이트`, `/패치노트` 통합",
+            "버전 선택 드롭다운과 이전·다음·최신 버튼",
+            "최근 주요 버전의 핵심 변경 사항 보관",
+            "기존 V2.1 고정 문구를 현재 통합 패치 기록으로 교체",
+            "새 슬래시 명령 추가 없이 기존 명령을 갱신",
+        ],
+    },
+    {
+        "version": "6.2.1",
+        "date": "2026-08-01",
+        "title": "자연 연속 대화 · 굴착 잔돈",
+        "summary": "모달 없이 대화를 시작하고 일반 채팅과 답글로 이어가며, 땅파기마다 소량의 생존 자금을 얻습니다.",
+        "points": [
+            "`!말걸기` 이후 15분·최대 30회 연속 대화",
+            "아바돈 메시지 답글과 멘션 대화 연결",
+            "감정·게임·TTS·스토리·보물 관련 응답 확장",
+            "`!땅파기`마다 8~35 식량 추가 지급",
+        ],
+    },
+    {
+        "version": "6.2.0",
+        "date": "2026-08-01",
+        "title": "독립 대화 코어 · 기억 공방",
+        "summary": "서버 구성원이 지식을 제출하고 운영진이 검수하며, 아바돈과 대화·질문·교감 기능을 이용합니다.",
+        "points": [
+            "`!가르치기` 기억 등록 양식",
+            "일반 사용자 제출 검수 대기와 운영진 승인·반려",
+            "`!대화`, `!아바돈`, 오늘의 질문·밸런스게임",
+            "민감정보·멘션·도배 방지 안전 필터",
+        ],
+    },
+    {
+        "version": "6.1.0",
+        "date": "2026-08-01",
+        "title": "채널 규칙 일괄설치 · 땅파기 · 보물 감정",
+        "summary": "여러 채널의 안내 규칙을 안전하게 설치하고, 굴착과 감정사 기반 보물 경제를 추가했습니다.",
+        "points": [
+            "최대 25개 채널 규칙 일괄 선택·미리보기",
+            "채널별 자동 규칙 추천과 안전 간격 설치",
+            "하루 50회·1분 쿨타임 `!땅파기`",
+            "A~E 보물 등급과 감정사 4명",
+        ],
+    },
+    {
+        "version": "6.0.2",
+        "date": "2026-08-01",
+        "title": "채널 규칙 자동 작성·고정",
+        "summary": "채널 성격에 맞는 규칙을 미리보고 작성·고정하며 기존 메시지는 중복 없이 갱신합니다.",
+        "points": [
+            "25종 채널 규칙 템플릿",
+            "채널 이름·주제 기반 자동 추천",
+            "작성·미리보기·갱신·제거 제어실",
+            "메시지 관리 권한 진단",
+        ],
+    },
+    {
+        "version": "6.0.1",
+        "date": "2026-08-01",
+        "title": "게임 즐겨찾기 · 검색 · 안전 미리보기",
+        "summary": "게임 기능을 바로 실행하지 않고 확인한 뒤 실행하며 즐겨찾기와 최근 실행, 검색을 제공합니다.",
+        "points": [
+            "게임 기능 상세 미리보기 후 실행",
+            "사용자별 즐겨찾기 최대 20개",
+            "최근 실행 최대 10개",
+            "이름·설명·명령어 통합 검색",
+        ],
+    },
+    {
+        "version": "6.0.0",
+        "date": "2026-08-01",
+        "title": "통합 게임 제어실 · 종말의 왕좌",
+        "summary": "기존 게임 기능을 카테고리 드롭다운으로 묶고 스토리 시즌 3을 추가했습니다.",
+        "points": [
+            "9개 게임 카테고리 통합 제어실",
+            "기존 직접 입력 명령 호환 유지",
+            "스토리 시즌 3 종말의 왕좌",
+            "신규 장면·선택지·엔딩·보상",
+        ],
+    },
+    {
+        "version": "5.2.1",
+        "date": "2026-08-01",
+        "title": "통합 진단 · 설정 제어실",
+        "summary": "봇 상태와 서버 주요 설정을 드롭다운에서 확인하고 관리합니다.",
+        "points": [
+            "`!아바돈진단` 통합 점검",
+            "TTS·리뉴얼·슬래시·피드·권한 진단",
+            "`!설정` 채널·엔진·환영·로그 관리",
+            "오류 보고서 생성",
+        ],
+    },
+    {
+        "version": "5.2.0",
+        "date": "2026-08-01",
+        "title": "리뉴얼 안전 자동진행 · TTS 음성 격리",
+        "summary": "서버 리뉴얼을 안전 간격으로 진행하고 반복 실패하는 Edge 음성만 임시 격리합니다.",
+        "points": [
+            "리뉴얼 계획 안전 자동 진행",
+            "429 감지 시 자동 격리·중지",
+            "Edge 목소리별 회로 차단",
+            "대체 음성과 최근 합성 경로 표시",
+        ],
+    },
+    {
+        "version": "5.1.0",
+        "date": "2026-08-01",
+        "title": "TTS 엔진 · 캐시 · 대기열",
+        "summary": "Edge와 대체 엔진을 선택하고 긴 문장·중복 합성·재생 대기열을 안정화했습니다.",
+        "points": [
+            "자동·Edge·대체 TTS 엔진 선택",
+            "같은 문장 합성 캐시",
+            "긴 문장 자동 분할",
+            "재생 대기열과 상태 표시",
+        ],
+    },
+]
+
+PATCH_HISTORY_BY_VERSION = {entry["version"]: entry for entry in PATCH_HISTORY}
+
+
+def _patch_note_embed(index: int) -> discord.Embed:
+    index = max(0, min(index, len(PATCH_HISTORY) - 1))
+    entry = PATCH_HISTORY[index]
+    latest = index == 0
+    embed = discord.Embed(
+        title=f"{'🔥' if latest else '📜'} ABADDON v{entry['version']} · {entry['title']}",
+        description=entry["summary"],
+        color=0xE67E22 if latest else 0x5B2C6F,
+    )
+    embed.add_field(
+        name="주요 변경",
+        value="\n".join(f"• {point}" for point in entry["points"]),
+        inline=False,
+    )
+    embed.add_field(name="배포 기록", value=f"{entry['date']} · {'현재 최신 통합본' if latest else '이전 통합 패치'}", inline=False)
+    embed.set_footer(text=f"기록 {index + 1}/{len(PATCH_HISTORY)} · 드롭다운 또는 버튼으로 이동")
+    return embed
+
+
+class PatchNotesView(discord.ui.View):
+    def __init__(self, owner_id: int):
+        super().__init__(timeout=600)
+        self.owner_id = int(owner_id)
+        self.index = 0
+        self.message = None
+
+        self.selector = discord.ui.Select(
+            placeholder="열람할 패치 버전을 선택하세요",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=f"v{entry['version']} · {entry['title']}",
+                    value=str(i),
+                    description=entry["summary"][:100],
+                    emoji="🔥" if i == 0 else "📜",
+                    default=i == 0,
+                )
+                for i, entry in enumerate(PATCH_HISTORY)
+            ],
+        )
+        self.selector.callback = self._select_callback
+        self.add_item(self.selector)
+
+        self.previous_button = discord.ui.Button(label="이전", emoji="◀️", style=discord.ButtonStyle.secondary, disabled=True)
+        self.latest_button = discord.ui.Button(label="최신", emoji="🔥", style=discord.ButtonStyle.primary, disabled=True)
+        self.next_button = discord.ui.Button(label="다음", emoji="▶️", style=discord.ButtonStyle.secondary, disabled=len(PATCH_HISTORY) <= 1)
+        self.previous_button.callback = self._previous_callback
+        self.latest_button.callback = self._latest_callback
+        self.next_button.callback = self._next_callback
+        self.add_item(self.previous_button)
+        self.add_item(self.latest_button)
+        self.add_item(self.next_button)
+
+    def _sync_controls(self) -> None:
+        self.previous_button.disabled = self.index <= 0
+        self.latest_button.disabled = self.index == 0
+        self.next_button.disabled = self.index >= len(PATCH_HISTORY) - 1
+        for option in self.selector.options:
+            option.default = option.value == str(self.index)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.owner_id:
+            return True
+        await interaction.response.send_message("⚠️ 이 패치노트 제어실은 명령을 실행한 사용자만 조작할 수 있습니다.", ephemeral=True)
+        return False
+
+    async def _show(self, interaction: discord.Interaction, index: int) -> None:
+        self.index = max(0, min(int(index), len(PATCH_HISTORY) - 1))
+        self._sync_controls()
+        await interaction.response.edit_message(embed=_patch_note_embed(self.index), view=self)
+
+    async def _select_callback(self, interaction: discord.Interaction) -> None:
+        await self._show(interaction, int(self.selector.values[0]))
+
+    async def _previous_callback(self, interaction: discord.Interaction) -> None:
+        await self._show(interaction, self.index - 1)
+
+    async def _latest_callback(self, interaction: discord.Interaction) -> None:
+        await self._show(interaction, 0)
+
+    async def _next_callback(self, interaction: discord.Interaction) -> None:
+        await self._show(interaction, self.index + 1)
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+
 def _ensure_user(u):
     u.setdefault("equipment_options", {})
     u.setdefault("dungeon_v21", {"max_floor": 1, "best_floor": 0, "clears": 0, "hidden_kills": 0})
@@ -94,18 +315,14 @@ def register_v21_commands(
         if material not in materials:
             materials.append(material)
 
-    @bot.hybrid_command(name="패치노트", aliases=["업데이트"], description="아바돈의 최신 업데이트 내역을 확인합니다.")
+    @bot.hybrid_command(
+        name="패치노트",
+        aliases=["업데이트", "변경내역"],
+        description="아바돈의 최신·이전 업데이트 기록을 드롭다운으로 확인합니다.",
+    )
     async def patch_notes(ctx):
-        await ctx.send(
-            "🔥 **V2.1 Apocalypse Reborn**\n"
-            "• 상태 메시지 대폭 추가 및 실제 서버 데이터 연동\n"
-            "• 심층 던전: 층 진행·함정·보물방·히든 보스\n"
-            "• 강화석·강화보호권·강화 정보·강화 랭킹\n"
-            "• 장비 랜덤 옵션·옵션 재설정·세트 효과\n"
-            "• 월드보스 도감·광폭화·특수 패턴\n"
-            "• 생활 숙련도·통합 랭킹\n"
-            "• 기존 거래소 확장: 검색·경매·입찰·거래 기록"
-        )
+        view = PatchNotesView(ctx.author.id)
+        view.message = await ctx.send(embed=_patch_note_embed(0), view=view)
 
     @bot.command(name="강화정보")
     async def enhance_info(ctx, *, item_name: str):
