@@ -1496,8 +1496,11 @@ async def 명령어(ctx):
 `!시즌패스` `!시즌보상 레벨`
 `!업적`
 
-🔹 **스토리 / 도감 / 서버 설정**
+🔹 **스토리 / 원정 / 도감 / 서버 설정**
 `!스토리` `!스토리 시작` `!스토리 선택 번호` `!스토리 기록` `!스토리 재시작`
+`!시즌2` `!시즌2 시작` `!시즌2 선택 번호` `!시즌2 기록` `!시즌2 재시작`
+`!원정 도움말` `!원정 목록` `!원정 출발 지역명` `!원정 행동 공격/방어/집중/응급/도주`
+`!원정 보급` `!원정 유물` `!원정 기록` `!원정 랭킹`
 `!도감` `!도감 장비/펫/몬스터` `!도감보상` `!튜토리얼`
 `!서버설정` `!서버세팅 미리보기/실행/상태/취소`
 `!퀴즈알림설정` `!퀴즈알림상태` `!퀴즈알림해제`
@@ -4197,6 +4200,15 @@ register_v422_security_center(bot, world_data, save_data)
 # prefix 전용이라 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
 from apocalypse_bot.commands.v423_intake_center import register_v423_intake_center
 register_v423_intake_center(bot, world_data, save_data)
+
+# V4.3.0: 스토리 시즌 2 "백색 방주" + 턴제 원정 전투/평판/유물
+# prefix 전용 그룹으로 추가하여 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
+from apocalypse_bot.commands.v430_story_expedition import register_v430_story_expedition
+register_v430_story_expedition(
+    bot, get_user, check_registered, save_data, calculate_user_power,
+    spend_stamina, apply_damage, get_max_hp, get_max_stamina,
+    add_title, add_season_points,
+)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
