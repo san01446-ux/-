@@ -20,7 +20,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "4.3.3.6"
+VERSION = "5.0.0"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
@@ -28,6 +28,7 @@ DEFAULT_IDLE_SECONDS = 600
 RENEWAL_EDIT_DELAY = 6.0
 RENEWAL_API_TIMEOUT = 45.0
 RENEWAL_STEP_COOLDOWN = 90
+BACKUP_LIMIT = 10
 RENEWAL_RATE_LIMIT_CAP = 30.0
 RENEWAL_TASKS: Dict[int, asyncio.Task[Any]] = {}
 
@@ -469,6 +470,9 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
     tts.setdefault("enabled", False)
     tts.setdefault("text_channel_id", None)
     tts.setdefault("voice_channel_id", None)
+    tts.setdefault("mode", "author_voice")
+    if tts.get("mode") not in {"author_voice", "fixed"}:
+        tts["mode"] = "author_voice"
     # v4.3.3.3부터 실제 Microsoft 음성 이름과 표시 이름을 일치시킵니다.
     # 구버전의 "서현"은 실제로 SunHi 음성을 사용했으므로 선히로 자동 이관합니다.
     if int(tts.get("voice_schema_version", 0) or 0) < 2:
@@ -485,34 +489,100 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
     tts.setdefault("idle_seconds", DEFAULT_IDLE_SECONDS)
     tts.setdefault("announce_names", True)
     tts.setdefault("auto_join", True)
-    tts.setdefault("require_author_in_voice", False)
+    tts.setdefault("require_author_in_voice", True)
     settings.setdefault("layout", {})
     settings["layout"].setdefault("style", None)
     settings["layout"].setdefault("backup", None)
     settings["layout"].setdefault("backup_history", [])
     if not isinstance(settings["layout"].get("backup_history"), list):
         settings["layout"]["backup_history"] = []
+    for backup_item in _backup_candidates(settings["layout"]):
+        backup_item.setdefault("backup_id", f"legacy-{backup_item.get('created_at', 0)}")
+        backup_item.setdefault("name", "기존 자동 백업")
+    settings["layout"].setdefault("renewal_plan", None)
     settings["layout"].setdefault("menu_channel_id", None)
     settings["layout"].setdefault("menu_message_id", None)
     return settings
 
 
+
+def _serialize_overwrites(channel: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for target, overwrite in getattr(channel, "overwrites", {}).items():
+        allow, deny = overwrite.pair()
+        rows.append({
+            "id": int(target.id),
+            "type": "role" if isinstance(target, discord.Role) else "member",
+            "allow": int(allow.value),
+            "deny": int(deny.value),
+        })
+    rows.sort(key=lambda row: (row["type"], row["id"]))
+    return rows
+
+
+def _backup_id(guild_id: int) -> str:
+    return f"{guild_id}-{int(time.time() * 1000)}"
+
+
+def _backup_candidates(layout: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    current = layout.get("backup")
+    if isinstance(current, dict):
+        items.append(current)
+    history = layout.get("backup_history", [])
+    if isinstance(history, list):
+        items.extend(reversed([item for item in history if isinstance(item, dict)]))
+
+    unique: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:
+        identity = str(item.get("backup_id") or f"legacy-{item.get('created_at', 0)}")
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique.append(item)
+    return unique[:BACKUP_LIMIT]
+
+
+def _backup_title(item: Dict[str, Any], index: int) -> str:
+    name = str(item.get("name") or item.get("backup_name") or "자동 백업")
+    operation = str(item.get("operation") or "legacy")
+    return f"{index}. {name} · {operation}"[:100]
+
+
+def _find_backup(layout: Dict[str, Any], backup_id: str) -> Optional[Dict[str, Any]]:
+    for item in _backup_candidates(layout):
+        identity = str(item.get("backup_id") or f"legacy-{item.get('created_at', 0)}")
+        if identity == str(backup_id):
+            return item
+    return None
+
 def _snapshot_guild(
     guild: discord.Guild,
     *,
-    operation: str = "renewal",
+    operation: str = "manual",
     style: Optional[str] = None,
+    name: Optional[str] = None,
 ) -> Dict[str, Any]:
+    created_at = int(time.time())
     return {
-        "snapshot_version": 2,
-        "created_at": int(time.time()),
+        "snapshot_version": 3,
+        "backup_id": _backup_id(guild.id),
+        "name": (str(name or "").strip() or "현재 서버 상태")[:60],
+        "created_at": created_at,
         "operation": operation,
         "style": style,
+        "guild_id": guild.id,
         "created_category_ids": [],
         "created_channel_ids": [],
         "reused_category_ids": [],
         "categories": [
-            {"id": category.id, "name": category.name, "position": category.position}
+            {
+                "id": category.id,
+                "name": category.name,
+                "position": category.position,
+                "overwrites": _serialize_overwrites(category),
+            }
             for category in guild.categories
         ],
         "channels": [
@@ -522,23 +592,33 @@ def _snapshot_guild(
                 "category_id": channel.category_id,
                 "position": channel.position,
                 "type": "voice" if isinstance(channel, discord.VoiceChannel) else "text",
+                "overwrites": _serialize_overwrites(channel),
+                "nsfw": bool(getattr(channel, "nsfw", False)),
+                "slowmode_delay": int(getattr(channel, "slowmode_delay", 0) or 0),
+                "bitrate": int(getattr(channel, "bitrate", 0) or 0),
+                "user_limit": int(getattr(channel, "user_limit", 0) or 0),
             }
             for channel in [*guild.text_channels, *guild.voice_channels]
         ],
     }
 
-
 def _store_backup(layout: Dict[str, Any], snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    snapshot.setdefault("backup_id", f"legacy-{snapshot.get('created_at', int(time.time()))}")
+    snapshot.setdefault("name", "자동 백업")
     previous = layout.get("backup")
     history = layout.setdefault("backup_history", [])
+    if not isinstance(history, list):
+        history = []
+        layout["backup_history"] = history
     if isinstance(previous, dict):
-        previous_time = int(previous.get("created_at", 0) or 0)
-        if not history or int(history[-1].get("created_at", 0) or 0) != previous_time:
+        previous.setdefault("backup_id", f"legacy-{previous.get('created_at', 0)}")
+        previous.setdefault("name", "기존 백업")
+        previous_id = str(previous.get("backup_id"))
+        if not history or str(history[-1].get("backup_id")) != previous_id:
             history.append(previous)
-    history[:] = history[-4:]
+    history[:] = history[-(BACKUP_LIMIT - 1):]
     layout["backup"] = snapshot
     return snapshot
-
 
 def _record_created(backup: Dict[str, Any], kind: str, object_id: int) -> None:
     key = "created_category_ids" if kind == "category" else "created_channel_ids"
@@ -794,6 +874,7 @@ class VoiceRuntime:
         self.queues: Dict[int, asyncio.Queue[Dict[str, Any]]] = {}
         self.workers: Dict[int, asyncio.Task[None]] = {}
         self.user_cooldowns: Dict[Tuple[int, int], float] = {}
+        self.active_channel_ids: Dict[int, int] = {}
 
     def queue_for(self, guild_id: int) -> asyncio.Queue[Dict[str, Any]]:
         queue = self.queues.get(guild_id)
@@ -802,7 +883,16 @@ class VoiceRuntime:
             self.queues[guild_id] = queue
         return queue
 
+    def queued_channel_ids(self, guild_id: int) -> set[int]:
+        queue = self.queue_for(guild_id)
+        return {
+            int(item.get("voice_channel_id"))
+            for item in list(getattr(queue, "_queue", []))
+            if item.get("voice_channel_id")
+        }
+
     def clear(self, guild_id: int) -> int:
+        self.active_channel_ids.pop(guild_id, None)
         queue = self.queue_for(guild_id)
         removed = 0
         while True:
@@ -850,7 +940,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/4.3.3.5"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.0"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
             if response.status != 200:
@@ -951,6 +1041,7 @@ def register_v433_voice_sanctuary(
         *,
         announce_name: bool,
         voice_key: Optional[str] = None,
+        target_voice_channel_id: Optional[int] = None,
     ) -> Tuple[bool, str]:
         settings = _layout_settings(world_data, guild.id)["tts"]
         clean = _clean_spoken_text(text)
@@ -961,10 +1052,14 @@ def register_v433_voice_sanctuary(
             return False, f"대기열이 가득 찼습니다. 최대 {TTS_QUEUE_LIMIT}개까지 보관합니다."
         spoken = f"{author.display_name}. {clean}" if announce_name else clean
         resolved_voice = _voice_name_or_default(voice_key, _personal_voice(settings, author.id))
+        resolved_channel_id = int(target_voice_channel_id or settings.get("voice_channel_id") or 0)
+        if not resolved_channel_id:
+            return False, "입장할 음성 채널을 찾지 못했습니다."
         await queue.put({
             "text": spoken,
             "author_id": author.id,
             "voice": resolved_voice,
+            "voice_channel_id": resolved_channel_id,
             "queued_at": time.time(),
         })
         task = VOICE_RUNTIME.workers.get(guild.id)
@@ -987,14 +1082,16 @@ def register_v433_voice_sanctuary(
                 if voice is not None and voice.is_connected():
                     with contextlib.suppress(discord.ClientException, discord.HTTPException):
                         await voice.disconnect(force=False)
+                VOICE_RUNTIME.active_channel_ids.pop(guild_id, None)
                 return
 
             temp_path = ""
             try:
-                voice, error = await _ensure_voice_connection(bot, guild, settings.get("voice_channel_id"))
+                voice, error = await _ensure_voice_connection(bot, guild, item.get("voice_channel_id"))
                 if voice is None:
                     print(f"[TTS 연결 실패] guild={guild_id} error={error}", flush=True)
                     continue
+                VOICE_RUNTIME.active_channel_ids[guild_id] = int(item.get("voice_channel_id") or 0)
                 fd, temp_path = tempfile.mkstemp(prefix="abaddon_tts_", suffix=".mp3")
                 os.close(fd)
                 provider = await _synthesise(
@@ -1026,7 +1123,7 @@ def register_v433_voice_sanctuary(
             description=(
                 "텍스트를 음성 채널에서 읽고, 지정한 채팅 채널의 메시지를 자동 낭독합니다.\n\n"
                 "`!음성입장` · `!말해 내용` · `!음성퇴장`\n"
-                "`!TTS 채널설정 #텍스트채널 음성채널` · `!TTS 켜기` · `!TTS 끄기`\n"
+                "`!TTS채널` · `!TTS 켜기` · `!TTS 끄기`\n"
                 "`/tts 목소리` · `/tts 내설정` · `!TTS 기본목소리 선히` · `!TTS 진단`"
             ),
             color=0x6D2335,
@@ -1072,10 +1169,10 @@ def register_v433_voice_sanctuary(
         if guild is None or not isinstance(ctx.author, discord.Member):
             return
         settings = _layout_settings(world_data, guild.id)["tts"]
-        voice_channel_id = settings.get("voice_channel_id")
-        if not ctx.author.voice or ctx.author.voice.channel.id != voice_channel_id:
-            await ctx.send("❌ 설정된 음성 채널에 함께 들어가 있어야 사용할 수 있습니다.")
+        if not ctx.author.voice or not isinstance(ctx.author.voice.channel, discord.VoiceChannel):
+            await ctx.send("❌ 먼저 음성 채널에 들어가 주세요.")
             return
+        voice_channel_id = ctx.author.voice.channel.id
         now = time.monotonic()
         key = (guild.id, ctx.author.id)
         remaining = TTS_USER_COOLDOWN - (now - VOICE_RUNTIME.user_cooldowns.get(key, 0.0))
@@ -1088,13 +1185,13 @@ def register_v433_voice_sanctuary(
             ctx.author,
             text,
             announce_name=bool(settings.get("announce_names", True)),
+            target_voice_channel_id=voice_channel_id,
         )
         await ctx.send(("✅ " if ok else "❌ ") + message, delete_after=8)
 
-    async def configure_tts_channels(
+    async def configure_tts_text_channel(
         ctx: commands.Context,
         text_channel: discord.TextChannel,
-        voice_channel: discord.VoiceChannel,
         *,
         enable: bool = True,
     ) -> None:
@@ -1103,67 +1200,56 @@ def register_v433_voice_sanctuary(
             return
         settings = _layout_settings(world_data, guild.id)["tts"]
         settings["text_channel_id"] = text_channel.id
-        settings["voice_channel_id"] = voice_channel.id
         settings["enabled"] = bool(enable)
         settings["auto_join"] = True
-        settings["require_author_in_voice"] = False
+        settings["require_author_in_voice"] = True
+        settings["mode"] = "author_voice"
         save_data()
         state = "켜짐" if enable else "꺼짐"
         await ctx.send(
-            "✅ TTS 자동 채널 설정을 저장했습니다.\n"
-            f"텍스트: {text_channel.mention}\n"
-            f"음성: {voice_channel.mention}\n"
+            "✅ TTS 채팅 채널을 저장했습니다.\n"
+            f"채팅: {text_channel.mention}\n"
             f"자동 낭독: **{state}**\n\n"
-            "이제 지정 텍스트 채널에 일반 메시지가 올라오면, 작성자가 음성방에 없어도 "
-            "아바돈이 지정 음성 채널로 자동 입장해 읽습니다."
+            "이 채널에서 메시지를 쓴 사용자가 들어가 있는 음성방을 자동으로 찾아 입장합니다."
         )
 
-    @tts_group.command(name="채널설정", aliases=["자동채널", "setchannel"])
-    async def tts_channel_setup(
-        ctx: commands.Context,
-        text_channel: discord.TextChannel,
-        voice_channel: discord.VoiceChannel,
-    ):
-        await configure_tts_channels(ctx, text_channel, voice_channel, enable=True)
+    @tts_group.command(name="채널", aliases=["채널설정", "자동채널", "setchannel"])
+    async def tts_channel_setup(ctx: commands.Context, text_channel: Optional[discord.TextChannel] = None):
+        target = text_channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
+        if target is None:
+            await ctx.send("❌ TTS 채팅 채널에서 실행하거나 채널을 지정해 주세요.")
+            return
+        await configure_tts_text_channel(ctx, target, enable=True)
 
-    @bot.command(name="채널설정", aliases=["TTS채널설정"])
-    async def tts_channel_setup_shortcut(
-        ctx: commands.Context,
-        text_channel: discord.TextChannel,
-        voice_channel: discord.VoiceChannel,
-    ):
-        await configure_tts_channels(ctx, text_channel, voice_channel, enable=True)
+    @bot.command(name="TTS채널", aliases=["채널설정", "TTS채널설정"])
+    async def tts_channel_setup_shortcut(ctx: commands.Context, text_channel: Optional[discord.TextChannel] = None):
+        target = text_channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
+        if target is None:
+            await ctx.send("❌ TTS 채팅 채널에서 실행하거나 채널을 지정해 주세요.")
+            return
+        await configure_tts_text_channel(ctx, target, enable=True)
 
     @tts_group.command(name="켜기", aliases=["on"])
     async def tts_enable(ctx: commands.Context):
         guild = await require_admin(ctx)
-        if guild is None or not isinstance(ctx.author, discord.Member):
+        if guild is None:
             return
         settings = _layout_settings(world_data, guild.id)["tts"]
-        if ctx.author.voice and isinstance(ctx.author.voice.channel, discord.VoiceChannel):
-            settings["voice_channel_id"] = ctx.author.voice.channel.id
-        if not settings.get("voice_channel_id"):
-            await ctx.send(
-                "❌ 음성 채널이 설정되지 않았습니다.\n"
-                "`!TTS 채널설정 #텍스트채널 음성채널` 또는 `!채널설정 #텍스트채널 음성채널`을 사용하세요."
-            )
-            return
         if isinstance(ctx.channel, discord.TextChannel) and not settings.get("text_channel_id"):
             settings["text_channel_id"] = ctx.channel.id
         if not settings.get("text_channel_id"):
-            await ctx.send("❌ 자동 낭독 텍스트 채널을 먼저 설정해 주세요.")
+            await ctx.send("❌ TTS 채팅 채널에서 `!TTS채널` 또는 `/tts 채널`을 먼저 실행하세요.")
             return
         settings["enabled"] = True
         settings["auto_join"] = True
-        settings["require_author_in_voice"] = False
+        settings["require_author_in_voice"] = True
+        settings["mode"] = "author_voice"
         save_data()
         text_channel = guild.get_channel(int(settings["text_channel_id"]))
-        voice_channel = guild.get_channel(int(settings["voice_channel_id"]))
         await ctx.send(
             "✅ 자동 TTS를 켰습니다.\n"
-            f"텍스트: {getattr(text_channel, 'mention', '미설정')}\n"
-            f"음성: {getattr(voice_channel, 'mention', '미설정')}\n"
-            "지정 텍스트 채널에 메시지가 올라오면 아바돈이 자동 입장해 읽습니다."
+            f"채팅: {getattr(text_channel, 'mention', '미설정')}\n"
+            "메시지 작성자가 들어가 있는 음성방으로 자동 입장합니다."
         )
 
     @tts_group.command(name="끄기", aliases=["off"])
@@ -1177,20 +1263,6 @@ def register_v433_voice_sanctuary(
         save_data()
         await ctx.send(f"✅ 자동 TTS를 껐습니다. 대기 메시지 **{removed}개**를 비웠습니다.")
 
-    @tts_group.command(name="채널")
-    async def tts_channel(ctx: commands.Context, channel: Optional[discord.TextChannel] = None):
-        guild = await require_admin(ctx)
-        if guild is None:
-            return
-        target = channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
-        if target is None:
-            await ctx.send("❌ 텍스트 채널을 지정해 주세요.")
-            return
-        settings = _layout_settings(world_data, guild.id)["tts"]
-        settings["text_channel_id"] = target.id
-        save_data()
-        await ctx.send(f"✅ 자동 낭독 채널을 {target.mention}로 지정했습니다.")
-
     @tts_group.command(name="음성채널", aliases=["보이스채널"])
     async def tts_voice_channel(ctx: commands.Context, channel: discord.VoiceChannel):
         guild = await require_admin(ctx)
@@ -1199,8 +1271,10 @@ def register_v433_voice_sanctuary(
         settings = _layout_settings(world_data, guild.id)["tts"]
         settings["voice_channel_id"] = channel.id
         settings["auto_join"] = True
+        settings["mode"] = "fixed"
+        settings["require_author_in_voice"] = False
         save_data()
-        await ctx.send(f"✅ 자동 낭독 음성 채널을 {channel.mention}로 지정했습니다.")
+        await ctx.send(f"✅ 고정 음성방 모드를 켰습니다: {channel.mention}\n자동 감지로 복귀: TTS 채팅방에서 `!TTS채널`")
 
     @tts_group.command(name="목소리", aliases=["음성"])
     async def tts_voice(ctx: commands.Context, voice_name: Optional[str] = None):
@@ -1332,7 +1406,7 @@ def register_v433_voice_sanctuary(
         embed.add_field(name="음성 연결", value="연결됨" if guild.voice_client else "연결 안 됨", inline=True)
         embed.add_field(name="대기열", value=f"{VOICE_RUNTIME.queue_for(guild.id).qsize()}/{TTS_QUEUE_LIMIT}", inline=True)
         embed.add_field(name="텍스트 채널", value=getattr(text_channel, "mention", "미설정"), inline=True)
-        embed.add_field(name="음성 채널", value=getattr(voice_channel, "mention", "미설정"), inline=True)
+        embed.add_field(name="음성 대상", value=("작성자 음성방 자동 감지" if settings.get("mode") == "author_voice" else getattr(voice_channel, "mention", "미설정")), inline=True)
         embed.add_field(name="자동 입장", value="켜짐" if settings.get("auto_join", True) else "꺼짐", inline=True)
         embed.add_field(name="목소리", value=f"{settings.get('voice', '선히')} · {settings.get('speed', 1.0)}배 · {int(float(settings.get('volume', 1.0))*100)}%", inline=True)
         embed.add_field(
@@ -1420,9 +1494,10 @@ def register_v433_voice_sanctuary(
         if guild is None or member is None:
             return
         settings = _layout_settings(world_data, guild.id)["tts"]
-        if not settings.get("voice_channel_id"):
-            await interaction.response.send_message("❌ 관리자가 TTS 음성 채널을 먼저 설정해야 합니다.", ephemeral=True)
+        if not member.voice or not isinstance(member.voice.channel, discord.VoiceChannel):
+            await interaction.response.send_message("❌ 목소리 미리듣기는 먼저 음성 채널에 들어가 주세요.", ephemeral=True)
             return
+        preview_voice_channel_id = member.voice.channel.id
         now = time.monotonic()
         key = (guild.id, member.id)
         remaining = TTS_USER_COOLDOWN - (now - VOICE_RUNTIME.user_cooldowns.get(key, 0.0))
@@ -1436,6 +1511,7 @@ def register_v433_voice_sanctuary(
             f"{voice.value} 목소리 미리 듣기입니다. 검은 성역에 오신 것을 환영합니다.",
             announce_name=False,
             voice_key=voice.value,
+            target_voice_channel_id=preview_voice_channel_id,
         )
         await interaction.response.send_message(("✅ " if ok else "❌ ") + message, ephemeral=True)
 
@@ -1451,25 +1527,25 @@ def register_v433_voice_sanctuary(
         save_data()
         await interaction.response.send_message(f"✅ 서버 기본 TTS 목소리를 **{voice.value}**으로 변경했습니다.", ephemeral=True)
 
-    @tts_slash.command(name="채널설정", description="자동 낭독 텍스트 채널과 음성 채널을 지정합니다.")
-    @app_commands.describe(text_channel="메시지를 읽을 텍스트 채널", voice_channel="봇이 입장할 음성 채널")
-    async def slash_tts_channels(
-        interaction: discord.Interaction,
-        text_channel: discord.TextChannel,
-        voice_channel: discord.VoiceChannel,
-    ):
+    @tts_slash.command(name="채널", description="현재 채널을 TTS 채팅 채널로 지정합니다.")
+    @app_commands.describe(channel="다른 채널을 지정할 때만 선택")
+    async def slash_tts_channel(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
         guild, member = await slash_require_admin(interaction)
         if guild is None or member is None:
             return
+        target = channel or (interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None)
+        if target is None:
+            await interaction.response.send_message("❌ 텍스트 채널에서 실행하거나 채널을 선택해 주세요.", ephemeral=True)
+            return
         settings = _layout_settings(world_data, guild.id)["tts"]
-        settings["text_channel_id"] = text_channel.id
-        settings["voice_channel_id"] = voice_channel.id
+        settings["text_channel_id"] = target.id
         settings["enabled"] = True
         settings["auto_join"] = True
-        settings["require_author_in_voice"] = False
+        settings["require_author_in_voice"] = True
+        settings["mode"] = "author_voice"
         save_data()
         await interaction.response.send_message(
-            f"✅ 자동 TTS를 설정했습니다.\n텍스트: {text_channel.mention}\n음성: {voice_channel.mention}",
+            f"✅ TTS 채팅 채널: {target.mention}\n메시지 작성자의 현재 음성방을 자동 감지합니다.",
             ephemeral=True,
         )
 
@@ -1479,12 +1555,14 @@ def register_v433_voice_sanctuary(
         if guild is None or member is None:
             return
         settings = _layout_settings(world_data, guild.id)["tts"]
-        if not settings.get("text_channel_id") or not settings.get("voice_channel_id"):
-            await interaction.response.send_message("❌ `/tts 채널설정`을 먼저 실행하세요.", ephemeral=True)
+        if not settings.get("text_channel_id"):
+            await interaction.response.send_message("❌ `/tts 채널`을 먼저 실행하세요.", ephemeral=True)
             return
         settings["enabled"] = True
+        settings["mode"] = "author_voice"
+        settings["require_author_in_voice"] = True
         save_data()
-        await interaction.response.send_message("✅ 자동 TTS를 켰습니다.", ephemeral=True)
+        await interaction.response.send_message("✅ 자동 TTS를 켰습니다. 작성자의 현재 음성방을 자동 감지합니다.", ephemeral=True)
 
     @tts_slash.command(name="끄기", description="자동 TTS를 끄고 대기열을 비웁니다.")
     async def slash_tts_disable(interaction: discord.Interaction):
@@ -1501,6 +1579,166 @@ def register_v433_voice_sanctuary(
         raise RuntimeError("슬래시 명령어 충돌: /tts가 이미 등록되어 있습니다.")
     bot.tree.add_command(tts_slash)
 
+    def build_recovery_plan(guild: discord.Guild, backup: Dict[str, Any]) -> Dict[str, Any]:
+        category_map = {category.id: category for category in guild.categories}
+        channel_map = {channel.id: channel for channel in [*guild.text_channels, *guild.voice_channels]}
+        actions: List[Dict[str, Any]] = []
+
+        for row in backup.get("categories", []):
+            category = category_map.get(int(row.get("id", 0)))
+            if category is None:
+                continue
+            original_name = str(row.get("name", category.name))
+            if category.name != original_name:
+                actions.append({"kind": "rename", "id": category.id, "name": original_name, "label": f"카테고리 이름 → {original_name}"})
+
+        for row in backup.get("channels", []):
+            channel = channel_map.get(int(row.get("id", 0)))
+            if channel is None:
+                continue
+            original_name = str(row.get("name", channel.name))
+            if channel.name != original_name:
+                actions.append({"kind": "rename", "id": channel.id, "name": original_name, "label": f"채널 이름 → {original_name}"})
+            original_parent = int(row.get("category_id")) if row.get("category_id") else None
+            if channel.category_id != original_parent:
+                parent = category_map.get(original_parent) if original_parent else None
+                parent_label = parent.name if parent else "카테고리 없음"
+                actions.append({"kind": "move", "id": channel.id, "parent_id": original_parent, "label": f"{channel.name} → {parent_label}"})
+
+        return {
+            "backup_id": str(backup.get("backup_id") or f"legacy-{backup.get('created_at', 0)}"),
+            "backup_created_at": int(backup.get("created_at", 0) or 0),
+            "created_at": int(time.time()),
+            "cursor": 0,
+            "actions": actions,
+            "next_allowed_at": 0,
+            "status": "ready",
+            "last_error": None,
+        }
+
+    def build_theme_plan(guild: discord.Guild, style: str, operation: str = "layout") -> List[Dict[str, Any]]:
+        actions: List[Dict[str, Any]] = []
+        used_category_ids: set[int] = set()
+        category_targets: Dict[str, Optional[int]] = {}
+
+        if operation == "game_zone":
+            text_matches, voices, _, _, _ = _detect_game_zone_channels(guild, style)
+            category_names = _game_zone_category_names(style)
+            required_names: List[str] = []
+            for spec, channel in text_matches:
+                if channel is not None and spec["category"] not in required_names:
+                    required_names.append(spec["category"])
+            if voices and category_names["voice"] not in required_names:
+                required_names.append(category_names["voice"])
+            for name in required_names:
+                category = _find_semantic_category(guild, name, used_category_ids, family="game")
+                if category is None:
+                    actions.append({"kind": "create_category", "name": name, "label": f"카테고리 생성 → {name}"})
+                    category_targets[name] = None
+                else:
+                    used_category_ids.add(category.id)
+                    category_targets[name] = category.id
+                    if category.name != name:
+                        actions.append({"kind": "rename", "id": category.id, "name": name, "label": f"카테고리 이름 → {name}"})
+            for spec, channel in text_matches:
+                if channel is None:
+                    continue
+                if channel.name != spec["name"] or channel.category_id != category_targets.get(spec["category"]):
+                    actions.append({"kind": "edit_channel", "id": channel.id, "name": spec["name"], "category_name": spec["category"], "label": f"{channel.name} → {spec['name']}"})
+            voice_category = category_names["voice"]
+            for index, channel in enumerate(voices):
+                target_name = f"🔊・음성-{_roman_label(index)}"
+                if channel.name != target_name or channel.category_id != category_targets.get(voice_category):
+                    actions.append({"kind": "edit_channel", "id": channel.id, "name": target_name, "category_name": voice_category, "label": f"{channel.name} → {target_name}"})
+            return actions
+
+        text_matches, voice_matches = _detect_layout(guild, style)
+        planned = [
+            (spec, channel, "text") for spec, channel in text_matches
+            if channel is not None or spec["key"] in ESSENTIAL_KEYS
+        ] + [
+            (spec, channel, "voice") for spec, channel in voice_matches
+            if channel is not None or spec["key"] in ESSENTIAL_KEYS
+        ]
+        category_names: List[str] = []
+        for spec, _, _ in planned:
+            if spec["category"] not in category_names:
+                category_names.append(spec["category"])
+        for name in category_names:
+            category = _find_semantic_category(guild, name, used_category_ids, family="layout")
+            if category is None:
+                admin_only = any(spec["category"] == name and spec["key"] in ADMIN_KEYS for spec, _, _ in planned)
+                actions.append({"kind": "create_category", "name": name, "admin_only": admin_only, "label": f"카테고리 생성 → {name}"})
+                category_targets[name] = None
+            else:
+                used_category_ids.add(category.id)
+                category_targets[name] = category.id
+                if category.name != name:
+                    actions.append({"kind": "rename", "id": category.id, "name": name, "label": f"카테고리 이름 → {name}"})
+        for spec, channel, channel_type in planned:
+            if channel is None:
+                actions.append({
+                    "kind": "create_text" if channel_type == "text" else "create_voice",
+                    "name": spec["name"],
+                    "category_name": spec["category"],
+                    "read_only": spec["key"] in READ_ONLY_KEYS,
+                    "allow_reactions": spec["key"] == "roles",
+                    "label": f"채널 생성 → {spec['name']}",
+                })
+            elif channel.name != spec["name"] or channel.category_id != category_targets.get(spec["category"]):
+                actions.append({"kind": "edit_channel", "id": channel.id, "name": spec["name"], "category_name": spec["category"], "label": f"{channel.name} → {spec['name']}"})
+        return actions
+
+    def locate_category(guild: discord.Guild, category_name: str) -> Optional[discord.CategoryChannel]:
+        return discord.utils.get(guild.categories, name=category_name)
+
+    async def execute_renewal_action(ctx: commands.Context, guild: discord.Guild, action: Dict[str, Any], plan: Dict[str, Any]) -> None:
+        bot_member = guild.me
+        if bot_member is None:
+            raise RuntimeError("봇 멤버 정보를 찾지 못했습니다.")
+        reason = f"ABADDON v{VERSION} 단계별 서버 리뉴얼 / {ctx.author}"
+        kind = str(action.get("kind"))
+        if kind == "create_category":
+            kwargs: Dict[str, Any] = {"reason": reason}
+            if action.get("admin_only") and isinstance(ctx.author, discord.Member):
+                kwargs["overwrites"] = _admin_category_overwrites(guild, ctx.author, bot_member)
+            created = await guild.create_category(str(action["name"]), **kwargs)
+            backup = _find_backup(_layout_settings(world_data, guild.id)["layout"], str(plan.get("backup_id")))
+            if backup is not None:
+                _record_created(backup, "category", created.id)
+            return
+        if kind in {"create_text", "create_voice"}:
+            category = locate_category(guild, str(action.get("category_name")))
+            if category is None:
+                raise RuntimeError("대상 카테고리가 아직 생성되지 않았습니다. `다음`을 다시 실행하세요.")
+            if kind == "create_text":
+                kwargs = {"category": category, "reason": reason}
+                if action.get("read_only") and isinstance(ctx.author, discord.Member):
+                    kwargs["overwrites"] = _public_read_only_overwrites(guild, ctx.author, bot_member, bool(action.get("allow_reactions")))
+                created = await guild.create_text_channel(str(action["name"]), **kwargs)
+            else:
+                created = await guild.create_voice_channel(str(action["name"]), category=category, reason=reason)
+            backup = _find_backup(_layout_settings(world_data, guild.id)["layout"], str(plan.get("backup_id")))
+            if backup is not None:
+                _record_created(backup, "channel", created.id)
+            return
+        channel = guild.get_channel(int(action.get("id", 0)))
+        if channel is None:
+            raise LookupError("대상 채널이 없어 건너뜁니다.")
+        if kind == "rename":
+            await bot.http.edit_channel(channel.id, name=str(action.get("name", channel.name)), reason=reason)
+            return
+        if kind == "move":
+            await bot.http.edit_channel(channel.id, parent_id=action.get("parent_id"), reason=reason)
+            return
+        if kind == "edit_channel":
+            category = locate_category(guild, str(action.get("category_name")))
+            if category is None:
+                raise RuntimeError("대상 카테고리를 찾지 못했습니다.")
+            await bot.http.edit_channel(channel.id, name=str(action.get("name", channel.name)), parent_id=category.id, reason=reason)
+            return
+        raise RuntimeError(f"알 수 없는 작업: {kind}")
+
     @bot.group(name="서버리뉴얼", aliases=["서버정리", "서버디자인"], invoke_without_command=True, case_insensitive=True)
     async def server_renewal(ctx: commands.Context):
         guild = await require_admin(ctx)
@@ -1510,19 +1748,19 @@ def register_v433_voice_sanctuary(
             title="🕯 ABADDON 서버 리뉴얼",
             description=(
                 "현재 채널을 삭제하지 않고 카테고리·채널명·순서를 정돈합니다.\n"
-                "현재는 429 재발 방지를 위한 안전 모드입니다. 미리보기와 한 단계씩 복구·삭제만 지원합니다."
+                "v5 안전 엔진은 계획을 먼저 만들고 관리자 명령마다 Discord 변경을 한 개씩만 처리합니다."
             ),
             color=0x6D2335,
         )
         embed.add_field(
             name="사용 순서",
             value=(
+                "`!서버리뉴얼 백업 현재정상`\n"
                 "`!서버리뉴얼 미리보기 고딕`\n"
                 "`!서버리뉴얼 적용 고딕`\n"
-                "`!서버메뉴 생성`\n"
-                "`!서버리뉴얼 되돌리기`\n"
-                "`!서버리뉴얼 중지`\n"
-                "`!서버리뉴얼 긴급정리`"
+                "`!서버리뉴얼 다음`\n"
+                "`!서버리뉴얼 계획상태`\n"
+                "`!서버리뉴얼 되돌리기`"
             ),
             inline=False,
         )
@@ -1554,160 +1792,37 @@ def register_v433_voice_sanctuary(
             return
         await ctx.send(embed=_layout_preview_embed(guild, style))
 
-    @server_renewal.command(name="적용", aliases=["apply"])
+    @server_renewal.command(name="적용", aliases=["apply", "계획"])
     async def server_renewal_apply(ctx: commands.Context, style: str = "깔끔"):
         guild = await require_admin(ctx)
-        if guild is None or not isinstance(ctx.author, discord.Member):
+        if guild is None:
             return
-        await ctx.send("⛔ v4.3.3.6 안전 모드에서는 대량 서버 리뉴얼 적용을 잠시 잠갔습니다. 현재는 `미리보기`, 단계별 복구, 빈 카테고리 1개 삭제만 사용할 수 있습니다.")
-        return
         if style not in STYLE_NAMES:
             await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
             return
-        if _renewal_running(guild.id):
-            await ctx.send("⚠️ 이미 서버 리뉴얼 작업이 진행 중입니다. 멈추려면 `!서버리뉴얼 중지`를 실행하세요.")
-            return
-        bot_member = guild.me
-        if bot_member is None or not bot_member.guild_permissions.manage_channels:
-            await ctx.send("❌ 봇에 `채널 관리` 권한이 필요합니다.")
-            return
-
-        current_task = asyncio.current_task()
-        if current_task is not None:
-            RENEWAL_TASKS[guild.id] = current_task
         settings = _layout_settings(world_data, guild.id)["layout"]
-        backup = _store_backup(settings, _snapshot_guild(guild, operation="layout", style=style))
+        backup = _store_backup(settings, _snapshot_guild(guild, operation="layout", style=style, name=f"{style} 적용 전"))
+        actions = build_theme_plan(guild, style, "layout")
+        settings["renewal_plan"] = {
+            "plan_id": f"layout-{int(time.time() * 1000)}",
+            "backup_id": backup["backup_id"],
+            "operation": "layout",
+            "style": style,
+            "created_at": int(time.time()),
+            "cursor": 0,
+            "actions": actions,
+            "next_allowed_at": 0,
+            "status": "ready",
+            "last_error": None,
+        }
+        settings["last_operation_status"] = "renewal_plan_ready"
         save_data()
-        progress = await ctx.send(f"🕯 **{style} 테마로 서버 메뉴를 정돈하는 중입니다...**\n중지: `!서버리뉴얼 중지`")
-        text_matches, voice_matches = _detect_layout(guild, style)
-
-        # 실제로 옮길 채널 또는 꼭 필요한 필수 채널이 있는 카테고리만 준비합니다.
-        planned_text = [
-            (spec, channel) for spec, channel in text_matches
-            if channel is not None or spec["key"] in ESSENTIAL_KEYS
-        ]
-        planned_voice = [
-            (spec, channel) for spec, channel in voice_matches
-            if channel is not None or spec["key"] in ESSENTIAL_KEYS
-        ]
-        category_names: List[str] = []
-        for spec, _ in [*planned_text, *planned_voice]:
-            if spec["category"] not in category_names:
-                category_names.append(spec["category"])
-
-        categories: Dict[str, discord.CategoryChannel] = {}
-        used_category_ids: set[int] = set()
-        created_categories = 0
-        reused_categories = 0
-        changed_channels = 0
-        created_channels = 0
-        skipped_channels = 0
-        reason = f"ABADDON v{VERSION} 서버 리뉴얼 / {ctx.author} ({ctx.author.id})"
-        try:
-            for category_name in category_names:
-                category = _find_semantic_category(guild, category_name, used_category_ids, family="layout")
-                if category is None:
-                    admin_only = any(
-                        spec["category"] == category_name and spec["key"] in ADMIN_KEYS
-                        for spec, _ in planned_text
-                    )
-                    kwargs: Dict[str, Any] = {"reason": reason}
-                    if admin_only:
-                        kwargs["overwrites"] = _admin_category_overwrites(guild, ctx.author, bot_member)
-                    category = await _renewal_api(guild.create_category(category_name, **kwargs))
-                    _record_created(backup, "category", category.id)
-                    save_data()
-                    await _renewal_pause()
-                    created_categories += 1
-                else:
-                    used_category_ids.add(category.id)
-                    if category.name != category_name:
-                        await _renewal_api(category.edit(name=category_name, reason=reason))
-                        await _renewal_pause()
-                        reused_categories += 1
-                        reused_ids = backup.setdefault("reused_category_ids", [])
-                        if category.id not in reused_ids:
-                            reused_ids.append(category.id)
-                            save_data()
-                used_category_ids.add(category.id)
-                categories[category_name] = category
-
-            # 카테고리 위치를 한 개씩 PATCH하지 않습니다. 이 호출이 429 폭주 원인이었습니다.
-            for spec, channel in planned_text:
-                category = categories[spec["category"]]
-                if channel is None and spec["key"] in ESSENTIAL_KEYS:
-                    kwargs: Dict[str, Any] = {"category": category, "reason": reason}
-                    if spec["key"] in READ_ONLY_KEYS:
-                        kwargs["overwrites"] = _public_read_only_overwrites(
-                            guild,
-                            ctx.author,
-                            bot_member,
-                            allow_reactions=spec["key"] == "roles",
-                        )
-                    created_channel = await _renewal_api(guild.create_text_channel(spec["name"], **kwargs))
-                    _record_created(backup, "channel", created_channel.id)
-                    save_data()
-                    await _renewal_pause()
-                    created_channels += 1
-                elif channel is not None:
-                    if channel.name == spec["name"] and channel.category_id == category.id:
-                        skipped_channels += 1
-                        continue
-                    await _renewal_api(channel.edit(name=spec["name"], category=category, reason=reason))
-                    await _renewal_pause()
-                    changed_channels += 1
-
-            for spec, channel in planned_voice:
-                category = categories[spec["category"]]
-                if channel is None and spec["key"] in ESSENTIAL_KEYS:
-                    created_channel = await _renewal_api(
-                        guild.create_voice_channel(spec["name"], category=category, reason=reason)
-                    )
-                    _record_created(backup, "channel", created_channel.id)
-                    save_data()
-                    await _renewal_pause()
-                    created_channels += 1
-                elif channel is not None:
-                    if channel.name == spec["name"] and channel.category_id == category.id:
-                        skipped_channels += 1
-                        continue
-                    await _renewal_api(channel.edit(name=spec["name"], category=category, reason=reason))
-                    await _renewal_pause()
-                    changed_channels += 1
-
-            settings["style"] = style
-            settings["applied_at"] = int(time.time())
-            settings["applied_by"] = ctx.author.id
-            settings["last_operation_status"] = "completed"
-            save_data()
-            await progress.edit(
-                content=(
-                    f"✅ **{style} 서버 리뉴얼 완료**\n"
-                    f"새 카테고리: **{created_categories}개**\n"
-                    f"재사용한 기존 카테고리: **{reused_categories}개**\n"
-                    f"정돈한 기존 채널: **{changed_channels}개**\n"
-                    f"새 필수 채널: **{created_channels}개**\n"
-                    f"이미 정돈되어 건너뜀: **{skipped_channels}개**\n\n"
-                    "빈 잔여 카테고리 정리: `!서버리뉴얼 긴급정리`"
-                )
-            )
-        except asyncio.CancelledError:
-            settings["last_operation_status"] = "cancelled"
-            save_data()
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                await progress.edit(content="⛔ 서버 리뉴얼 작업을 중지했습니다. 이미 반영된 변경은 `!서버리뉴얼 되돌리기 1`로 복구할 수 있습니다.")
-        except RenewalApiTimeout as exc:
-            settings["last_operation_status"] = "rate_limit_timeout"
-            save_data()
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                await progress.edit(content=f"⏸️ **안전 중단** · {exc}\n잠시 뒤 `!서버리뉴얼 되돌리기 1`을 실행하세요.")
-        except discord.Forbidden:
-            await progress.edit(content="❌ 권한 부족으로 중단됐습니다. 봇 역할에 `채널 관리` 권한을 확인하세요.")
-        except discord.HTTPException as exc:
-            await progress.edit(content=f"❌ Discord API 오류로 중단됐습니다: `{type(exc).__name__}: {str(exc)[:250]}`")
-        finally:
-            if RENEWAL_TASKS.get(guild.id) is current_task:
-                RENEWAL_TASKS.pop(guild.id, None)
+        await ctx.send(
+            f"🧭 **{style} 테마 안전 계획 생성 완료**\n"
+            f"변경 항목: **{len(actions)}개** · 자동 백업: **{backup.get('name')}**\n\n"
+            "아직 채널을 수정하지 않았습니다. 실제 적용은 `!서버리뉴얼 다음`을 한 번씩 실행하세요.\n"
+            "상태: `!서버리뉴얼 계획상태` · 취소: `!서버리뉴얼 계획취소`"
+        )
 
     @server_renewal.command(name="게임미리보기", aliases=["봇게임미리보기", "게임프리뷰"])
     async def server_renewal_game_preview(ctx: commands.Context, style: str = "깔끔"):
@@ -1722,168 +1837,49 @@ def register_v433_voice_sanctuary(
     @server_renewal.command(name="게임정리", aliases=["봇게임정리", "게임채널정리"])
     async def server_renewal_game_apply(ctx: commands.Context, style: str = "깔끔"):
         guild = await require_admin(ctx)
-        if guild is None or not isinstance(ctx.author, discord.Member):
+        if guild is None:
             return
-        await ctx.send("⛔ v4.3.3.6 안전 모드에서는 게임·음성 구역 일괄 정리를 잠시 잠갔습니다. `게임미리보기`만 확인할 수 있습니다.")
-        return
         if style not in STYLE_NAMES:
             await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
             return
-        if _renewal_running(guild.id):
-            await ctx.send("⚠️ 이미 서버 리뉴얼 작업이 진행 중입니다. 멈추려면 `!서버리뉴얼 중지`를 실행하세요.")
-            return
-        bot_member = guild.me
-        if bot_member is None or not bot_member.guild_permissions.manage_channels:
-            await ctx.send("❌ 봇에 `채널 관리` 권한이 필요합니다.")
-            return
-
-        text_matches, voices, bot_game_category, voice_category, test_category = _detect_game_zone_channels(guild, style)
-        if not any(channel is not None for _, channel in text_matches) and not voices:
-            await ctx.send("❌ 정리할 봇 게임·음성 채널을 찾지 못했습니다. 채널 이름을 확인해 주세요.")
-            return
-
-        current_task = asyncio.current_task()
-        if current_task is not None:
-            RENEWAL_TASKS[guild.id] = current_task
         settings = _layout_settings(world_data, guild.id)["layout"]
-        backup = _store_backup(settings, _snapshot_guild(guild, operation="game_zone", style=style))
+        backup = _store_backup(settings, _snapshot_guild(guild, operation="game_zone", style=style, name=f"게임구역 {style} 적용 전"))
+        actions = build_theme_plan(guild, style, "game_zone")
+        settings["renewal_plan"] = {
+            "plan_id": f"game-{int(time.time() * 1000)}",
+            "backup_id": backup["backup_id"],
+            "operation": "game_zone",
+            "style": style,
+            "created_at": int(time.time()),
+            "cursor": 0,
+            "actions": actions,
+            "next_allowed_at": 0,
+            "status": "ready",
+            "last_error": None,
+        }
+        settings["last_operation_status"] = "game_plan_ready"
         save_data()
-        progress = await ctx.send(f"🎮 **{style} 테마로 봇 게임·음성 구역을 나누는 중입니다...**\n중지: `!서버리뉴얼 중지`")
-        category_names = _game_zone_category_names(style)
-        reason = f"ABADDON v{VERSION} 봇 게임·음성 구역 정리 / {ctx.author} ({ctx.author.id})"
-        categories: Dict[str, discord.CategoryChannel] = {}
-        used_category_ids: set[int] = set()
-        created_categories = 0
-        changed_channels = 0
-        reused_categories = 0
-        skipped_channels = 0
+        await ctx.send(
+            f"🎮 **게임·음성 구역 {style} 안전 계획 생성 완료**\n"
+            f"변경 항목: **{len(actions)}개** · 자동 백업 저장 완료\n"
+            "실제 적용: `!서버리뉴얼 다음` · 상태: `!서버리뉴얼 계획상태`"
+        )
 
-        spec_to_key = {
-            "rpg": "growth", "level_notice": "growth", "daily_quiz": "growth",
-            "gambling": "game", "ksi": "game", "tiktok": "media",
-            "karaoke": "media", "bot_test": "test",
-        }
-        required_keys: set[str] = set()
-        for spec, channel in text_matches:
-            if channel is not None:
-                required_keys.add(spec_to_key[spec["key"]])
-        if bot_game_category is not None and bot_game_category.text_channels:
-            required_keys.add("game")
-        if test_category is not None and test_category.channels:
-            required_keys.add("test")
-        if voices:
-            required_keys.add("voice")
-
-        preferred_by_key = {
-            "growth": bot_game_category,
-            "game": None,
-            "media": None,
-            "test": test_category,
-            "voice": voice_category,
-        }
-
-        async def prepare_category(key: str) -> discord.CategoryChannel:
-            nonlocal created_categories, reused_categories
-            target_name = category_names[key]
-            existing = _find_semantic_category(guild, target_name, used_category_ids, family="game")
-            preferred = preferred_by_key.get(key)
-            if existing is None and preferred is not None and preferred.id not in used_category_ids:
-                existing = preferred
-            if existing is None:
-                created = await _renewal_api(guild.create_category(target_name, reason=reason))
-                _record_created(backup, "category", created.id)
-                save_data()
-                await _renewal_pause()
-                created_categories += 1
-                used_category_ids.add(created.id)
-                categories[key] = created
-                return created
-            used_category_ids.add(existing.id)
-            if existing.name != target_name:
-                await _renewal_api(existing.edit(name=target_name, reason=reason))
-                await _renewal_pause()
-                reused_categories += 1
-                reused_ids = backup.setdefault("reused_category_ids", [])
-                if existing.id not in reused_ids:
-                    reused_ids.append(existing.id)
-                    save_data()
-            categories[key] = existing
-            return existing
-
-        try:
-            for key in ("growth", "game", "media", "test", "voice"):
-                if key in required_keys:
-                    await prepare_category(key)
-
-            moved_ids: set[int] = set()
-            for spec, channel in text_matches:
-                if channel is None:
-                    continue
-                target_key = spec_to_key[spec["key"]]
-                category = categories.get(target_key)
-                if category is None:
-                    continue
-                if channel.name == spec["name"] and channel.category_id == category.id:
-                    skipped_channels += 1
-                    moved_ids.add(channel.id)
-                    continue
-                await _renewal_api(channel.edit(name=spec["name"], category=category, reason=reason))
-                await _renewal_pause()
-                moved_ids.add(channel.id)
-                changed_channels += 1
-
-            if bot_game_category is not None and "game" in categories:
-                leftovers = [channel for channel in list(bot_game_category.text_channels) if channel.id not in moved_ids]
-                for channel in leftovers:
-                    if channel.category_id == categories["game"].id:
-                        skipped_channels += 1
-                        continue
-                    await _renewal_api(channel.edit(category=categories["game"], reason=reason))
-                    await _renewal_pause()
-                    changed_channels += 1
-
-            if "voice" in categories:
-                for index, channel in enumerate(voices):
-                    target_name = f"🔊・음성-{_roman_label(index)}"
-                    if channel.name == target_name and channel.category_id == categories["voice"].id:
-                        skipped_channels += 1
-                        continue
-                    await _renewal_api(channel.edit(name=target_name, category=categories["voice"], reason=reason))
-                    await _renewal_pause()
-                    changed_channels += 1
-
-            settings["style"] = style
-            settings["game_zone_applied_at"] = int(time.time())
-            settings["game_zone_applied_by"] = ctx.author.id
-            settings["last_operation_status"] = "completed"
-            save_data()
-            await progress.edit(
-                content=(
-                    f"✅ **봇 게임·음성 구역 정리 완료 · {style}**\n"
-                    f"정돈한 채널: **{changed_channels}개**\n"
-                    f"재사용한 카테고리: **{reused_categories}개**\n"
-                    f"새 카테고리: **{created_categories}개**\n"
-                    f"이미 정돈되어 건너뜀: **{skipped_channels}개**\n\n"
-                    "빈 잔여 카테고리 정리: `!서버리뉴얼 긴급정리`"
-                )
-            )
-        except asyncio.CancelledError:
-            settings["last_operation_status"] = "cancelled"
-            save_data()
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                await progress.edit(content="⛔ 게임·음성 구역 정리를 중지했습니다. `!서버리뉴얼 되돌리기 1`로 복구할 수 있습니다.")
-        except RenewalApiTimeout as exc:
-            settings["last_operation_status"] = "rate_limit_timeout"
-            save_data()
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                await progress.edit(content=f"⏸️ **안전 중단** · {exc}\n잠시 뒤 `!서버리뉴얼 되돌리기 1`을 실행하세요.")
-        except discord.Forbidden:
-            await progress.edit(content="❌ 권한 부족으로 중단됐습니다. 봇 역할의 `채널 관리` 권한과 역할 순서를 확인하세요.")
-        except discord.HTTPException as exc:
-            await progress.edit(content=f"❌ Discord API 오류로 중단됐습니다: `{type(exc).__name__}: {str(exc)[:250]}`")
-        finally:
-            if RENEWAL_TASKS.get(guild.id) is current_task:
-                RENEWAL_TASKS.pop(guild.id, None)
+    @server_renewal.command(name="백업", aliases=["수동백업", "backup"])
+    async def server_renewal_manual_backup(ctx: commands.Context, *, name: str = "현재 정상 상태"):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        snapshot = _store_backup(settings, _snapshot_guild(guild, operation="manual", name=name))
+        settings["last_operation_status"] = "manual_backup_saved"
+        save_data()
+        await ctx.send(
+            f"✅ **수동 백업 저장 완료**\n"
+            f"이름: **{snapshot['name']}**\n"
+            f"카테고리: **{len(snapshot['categories'])}개** · 채널: **{len(snapshot['channels'])}개**\n"
+            f"백업 ID: `{snapshot['backup_id']}`"
+        )
 
     @server_renewal.command(name="백업목록", aliases=["backups", "복구목록"])
     async def server_renewal_backup_list(ctx: commands.Context):
@@ -1891,36 +1887,67 @@ def register_v433_voice_sanctuary(
         if guild is None:
             return
         settings = _layout_settings(world_data, guild.id)["layout"]
-        backups: List[Dict[str, Any]] = []
-        current = settings.get("backup")
-        if isinstance(current, dict):
-            backups.append(current)
-        history = settings.get("backup_history", [])
-        if isinstance(history, list):
-            backups.extend(reversed([item for item in history if isinstance(item, dict)]))
-        unique: List[Dict[str, Any]] = []
-        seen: set[int] = set()
-        for item in backups:
-            stamp = int(item.get("created_at", 0) or 0)
-            if stamp in seen:
-                continue
-            seen.add(stamp)
-            unique.append(item)
-        if not unique:
+        backups = _backup_candidates(settings)
+        if not backups:
             await ctx.send("⚠️ 저장된 서버 리뉴얼 백업이 없습니다.")
             return
+
+        class BackupSelect(discord.ui.Select):
+            def __init__(self) -> None:
+                options: List[discord.SelectOption] = []
+                for index, item in enumerate(backups[:25], start=1):
+                    stamp = int(item.get("created_at", 0) or 0)
+                    description = f"{item.get('operation', 'legacy')} · 채널 {len(item.get('channels', []))}개 · {stamp}"
+                    options.append(discord.SelectOption(
+                        label=_backup_title(item, index),
+                        value=str(item.get("backup_id") or f"legacy-{stamp}"),
+                        description=description[:100],
+                    ))
+                super().__init__(placeholder="복구 기준 백업을 선택하세요", min_values=1, max_values=1, options=options)
+
+            async def callback(self, interaction: discord.Interaction) -> None:
+                member = interaction.user if isinstance(interaction.user, discord.Member) else None
+                if member is None or not (member.guild_permissions.administrator or member.guild_permissions.manage_guild):
+                    await interaction.response.send_message("❌ 서버 관리자만 선택할 수 있습니다.", ephemeral=True)
+                    return
+                selected = _find_backup(settings, self.values[0])
+                if selected is None:
+                    await interaction.response.send_message("❌ 선택한 백업을 찾지 못했습니다. 목록을 다시 열어주세요.", ephemeral=True)
+                    return
+                plan = build_recovery_plan(guild, selected)
+                settings["recovery_plan"] = plan
+                settings["last_operation_status"] = "recovery_plan_ready"
+                save_data()
+                count = len(plan.get("actions", []))
+                if count == 0:
+                    await interaction.response.send_message(
+                        "✅ 선택한 백업과 현재 기존 채널 구조가 같습니다. 복구할 변경이 없습니다.",
+                        ephemeral=True,
+                    )
+                else:
+                    await interaction.response.send_message(
+                        f"🛟 복구 계획 생성 완료 · **{count}개**\n실제 복구: `!서버리뉴얼 복구다음`",
+                        ephemeral=True,
+                    )
+
+        class BackupView(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=300)
+                self.add_item(BackupSelect())
+
         lines = []
-        for index, item in enumerate(unique[:5], start=1):
+        for index, item in enumerate(backups, start=1):
             stamp = int(item.get("created_at", 0) or 0)
             dt = f"<t:{stamp}:F>" if stamp else "시간 미상"
             lines.append(
-                f"**{index}.** {dt} · `{item.get('operation', 'legacy')}` · "
-                f"테마 `{item.get('style') or '없음'}` · 채널 {len(item.get('channels', []))}개"
+                f"**{index}.** {dt} · **{item.get('name', '기존 백업')}** · "
+                f"`{item.get('operation', 'legacy')}` · 채널 {len(item.get('channels', []))}개"
             )
         await ctx.send(
             "🗃️ **서버 리뉴얼 복구 지점**\n"
             + "\n".join(lines)
-            + "\n\n복구: `!서버리뉴얼 되돌리기 번호` (기본 1번)"
+            + "\n\n아래 목록에서 선택하거나 `!서버리뉴얼 되돌리기 번호`를 입력하세요.",
+            view=BackupView(),
         )
 
     @server_renewal.command(name="되돌리기", aliases=["undo", "복원"])
@@ -1929,79 +1956,30 @@ def register_v433_voice_sanctuary(
         guild = await require_admin(ctx)
         if guild is None:
             return
-        if _renewal_running(guild.id):
-            await ctx.send("⚠️ 진행 중인 작업을 먼저 `!서버리뉴얼 중지`로 멈춰주세요.")
-            return
         settings = _layout_settings(world_data, guild.id)["layout"]
-        backups: List[Dict[str, Any]] = []
-        current = settings.get("backup")
-        if isinstance(current, dict):
-            backups.append(current)
-        history = settings.get("backup_history", [])
-        if isinstance(history, list):
-            backups.extend(reversed([item for item in history if isinstance(item, dict)]))
-        unique: List[Dict[str, Any]] = []
-        seen: set[int] = set()
-        for item in backups:
-            stamp = int(item.get("created_at", 0) or 0)
-            if stamp in seen:
-                continue
-            seen.add(stamp)
-            unique.append(item)
-        if not unique:
+        backups = _backup_candidates(settings)
+        if not backups:
             await ctx.send("⚠️ 되돌릴 서버 리뉴얼 백업이 없습니다.")
             return
-        if backup_number < 1 or backup_number > len(unique):
-            await ctx.send(f"❌ 백업 번호는 1부터 {len(unique)} 사이여야 합니다. `!서버리뉴얼 백업목록`을 확인하세요.")
+        if backup_number < 1 or backup_number > len(backups):
+            await ctx.send(f"❌ 백업 번호는 1부터 {len(backups)} 사이여야 합니다. `!서버리뉴얼 백업목록`을 확인하세요.")
             return
-
-        backup = unique[backup_number - 1]
-        category_map = {category.id: category for category in guild.categories}
-        channel_map = {channel.id: channel for channel in [*guild.text_channels, *guild.voice_channels]}
-        actions: List[Dict[str, Any]] = []
-
-        for row in backup.get("categories", []):
-            category = category_map.get(int(row.get("id", 0)))
-            if category is None:
-                continue
-            original_name = str(row.get("name", category.name))
-            if category.name != original_name:
-                actions.append({"kind": "rename", "id": category.id, "name": original_name, "label": f"카테고리 이름 → {original_name}"})
-
-        for row in backup.get("channels", []):
-            channel = channel_map.get(int(row.get("id", 0)))
-            if channel is None:
-                continue
-            original_name = str(row.get("name", channel.name))
-            if channel.name != original_name:
-                actions.append({"kind": "rename", "id": channel.id, "name": original_name, "label": f"채널 이름 → {original_name}"})
-            original_parent = int(row.get("category_id")) if row.get("category_id") else None
-            if channel.category_id != original_parent:
-                parent = category_map.get(original_parent) if original_parent else None
-                parent_label = parent.name if parent else "카테고리 없음"
-                actions.append({"kind": "move", "id": channel.id, "parent_id": original_parent, "label": f"{channel.name} → {parent_label}"})
-
-        plan = {
-            "backup_number": backup_number,
-            "backup_created_at": int(backup.get("created_at", 0) or 0),
-            "created_at": int(time.time()),
-            "cursor": 0,
-            "actions": actions,
-            "next_allowed_at": 0,
-            "status": "ready",
-            "last_error": None,
-        }
+        backup = backups[backup_number - 1]
+        plan = build_recovery_plan(guild, backup)
         settings["recovery_plan"] = plan
         settings["last_operation_status"] = "recovery_plan_ready"
         save_data()
+        actions = plan.get("actions", [])
         if not actions:
-            await ctx.send("✅ 이 백업 기준으로 복원할 기존 채널 변경이 없습니다. 남은 복제 카테고리는 `!서버리뉴얼 빈카테고리선택`으로 정리하세요.")
+            await ctx.send(
+                "✅ 선택한 백업과 현재 기존 채널 구조가 같습니다. 복구할 변경이 없습니다.\n"
+                "현재 상태를 새 기준점으로 저장하려면 `!서버리뉴얼 백업 현재정상`을 사용하세요."
+            )
             return
         await ctx.send(
             "🛟 **안전 복구 계획을 만들었습니다.**\n"
-            f"백업: **{backup_number}번** · 처리 항목: **{len(actions)}개**\n\n"
-            "이 명령은 채널을 수정하지 않았습니다. Discord 429 재발을 막기 위해 아래 명령이 **한 번에 1개만** 복구합니다.\n"
-            "`!서버리뉴얼 복구다음`\n"
+            f"백업: **{backup_number}번 · {backup.get('name', '기존 백업')}** · 처리 항목: **{len(actions)}개**\n\n"
+            "이 명령은 채널을 수정하지 않았습니다. 실제 복구: `!서버리뉴얼 복구다음`\n"
             "진행 확인: `!서버리뉴얼 복구상태`"
         )
 
@@ -2035,6 +2013,116 @@ def register_v433_voice_sanctuary(
         except (TypeError, ValueError):
             wait = 180
         return max(120, min(wait + 30, 900))
+
+    @server_renewal.command(name="다음", aliases=["next", "계속"])
+    async def server_renewal_next(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        plan = settings.get("renewal_plan")
+        if not isinstance(plan, dict):
+            await ctx.send("ℹ️ 실행할 서버 리뉴얼 계획이 없습니다. 먼저 `!서버리뉴얼 적용 테마`를 실행하세요.")
+            return
+        actions = plan.get("actions", [])
+        cursor = int(plan.get("cursor", 0) or 0)
+        if cursor >= len(actions):
+            plan["status"] = "complete"
+            settings["style"] = plan.get("style")
+            settings["last_operation_status"] = "renewal_complete"
+            save_data()
+            await ctx.send("✅ 서버 리뉴얼 계획이 모두 끝났습니다.")
+            return
+        now = int(time.time())
+        next_allowed = int(plan.get("next_allowed_at", 0) or 0)
+        if now < next_allowed:
+            await ctx.send(f"⏳ 안전 대기 중입니다. <t:{next_allowed}:R> 다시 실행하세요.")
+            return
+        action = actions[cursor]
+        current_task = asyncio.current_task()
+        if current_task is not None:
+            RENEWAL_TASKS[guild.id] = current_task
+        cap_state = _recovery_rate_limit_cap()
+        try:
+            await execute_renewal_action(ctx, guild, action, plan)
+            plan["cursor"] = cursor + 1
+            plan["next_allowed_at"] = int(time.time()) + RENEWAL_STEP_COOLDOWN
+            plan["status"] = "running" if cursor + 1 < len(actions) else "complete"
+            plan["last_error"] = None
+            settings["last_operation_status"] = "renewal_step_ok"
+            if cursor + 1 >= len(actions):
+                settings["style"] = plan.get("style")
+            save_data()
+            await ctx.send(
+                f"✅ **서버 변경 1개 완료** · {cursor + 1}/{len(actions)}\n"
+                f"처리: `{action.get('label', action.get('kind'))}`\n"
+                + ("모든 계획이 끝났습니다." if cursor + 1 >= len(actions) else f"다음 실행: <t:{plan['next_allowed_at']}:R>")
+            )
+        except LookupError as exc:
+            plan["cursor"] = cursor + 1
+            plan["last_error"] = str(exc)
+            save_data()
+            await ctx.send(f"⚠️ 대상이 없어 건너뛰었습니다. 진행: **{cursor + 1}/{len(actions)}**")
+        except Exception as exc:
+            name = exc.__class__.__name__
+            status = getattr(exc, "status", None)
+            if name == "RateLimited" or status == 429:
+                wait = _rate_limit_wait(exc)
+                plan["next_allowed_at"] = int(time.time()) + wait
+                plan["status"] = "cooldown"
+                plan["last_error"] = f"429 / {wait}초 대기"
+                settings["last_operation_status"] = "renewal_rate_limited"
+                save_data()
+                await ctx.send(f"⏸️ Discord 429를 감지해 변경 없이 중단했습니다. <t:{plan['next_allowed_at']}:R> 다시 실행하세요.")
+            elif isinstance(exc, discord.Forbidden):
+                plan["status"] = "blocked"
+                plan["last_error"] = "권한 부족"
+                save_data()
+                await ctx.send("❌ 채널 관리 권한이 부족합니다.")
+            else:
+                plan["status"] = "error"
+                plan["last_error"] = f"{name}: {str(exc)[:180]}"
+                save_data()
+                await ctx.send(f"❌ 단계 처리 실패: `{name}: {str(exc)[:180]}`")
+        finally:
+            _restore_recovery_rate_limit_cap(cap_state)
+            if RENEWAL_TASKS.get(guild.id) is current_task:
+                RENEWAL_TASKS.pop(guild.id, None)
+
+    @server_renewal.command(name="계획상태", aliases=["planstatus", "적용상태"])
+    async def server_renewal_plan_status(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        plan = _layout_settings(world_data, guild.id)["layout"].get("renewal_plan")
+        if not isinstance(plan, dict):
+            await ctx.send("ℹ️ 저장된 리뉴얼 계획이 없습니다.")
+            return
+        actions = plan.get("actions", [])
+        cursor = int(plan.get("cursor", 0) or 0)
+        next_label = "완료" if cursor >= len(actions) else str(actions[cursor].get("label", "다음 항목"))
+        next_allowed = int(plan.get("next_allowed_at", 0) or 0)
+        cooldown = f"<t:{next_allowed}:R>" if next_allowed > int(time.time()) else "지금 가능"
+        await ctx.send(
+            "🧭 **서버 리뉴얼 계획 상태**\n"
+            f"테마: **{plan.get('style', '없음')}** · 작업: `{plan.get('operation', 'layout')}`\n"
+            f"진행: **{cursor}/{len(actions)}** · 상태: `{plan.get('status', 'unknown')}`\n"
+            f"다음: `{next_label}` · 실행 가능: {cooldown}\n"
+            f"최근 오류: `{plan.get('last_error') or '없음'}`"
+        )
+
+    @server_renewal.command(name="계획취소", aliases=["plancancel", "적용취소"])
+    async def server_renewal_plan_cancel(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        if settings.pop("renewal_plan", None) is None:
+            await ctx.send("ℹ️ 취소할 리뉴얼 계획이 없습니다.")
+            return
+        settings["last_operation_status"] = "renewal_plan_cancelled"
+        save_data()
+        await ctx.send("✅ 리뉴얼 계획을 취소했습니다. 추가 채널 변경은 없습니다.")
 
     @server_renewal.command(name="복구다음", aliases=["recovernext", "복구계속"])
     async def server_renewal_recover_next(ctx: commands.Context):
@@ -2169,11 +2257,19 @@ def register_v433_voice_sanctuary(
         if guild is None:
             return
         task = RENEWAL_TASKS.get(guild.id)
-        if task is None or task.done():
-            await ctx.send("ℹ️ 현재 진행 중인 서버 리뉴얼 작업이 없습니다.")
-            return
-        task.cancel()
-        await ctx.send("⛔ 서버 리뉴얼 작업에 중지 신호를 보냈습니다. 몇 초 안에 멈춥니다.")
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        stopped = False
+        if task is not None and not task.done():
+            task.cancel()
+            stopped = True
+        if isinstance(settings.get("renewal_plan"), dict):
+            settings["renewal_plan"]["status"] = "paused"
+            stopped = True
+        if isinstance(settings.get("recovery_plan"), dict):
+            settings["recovery_plan"]["status"] = "paused"
+            stopped = True
+        save_data()
+        await ctx.send("⛔ 작업을 일시정지했습니다." if stopped else "ℹ️ 현재 진행 중이거나 준비된 작업이 없습니다.")
 
     @server_renewal.command(name="작업상태", aliases=["progress", "진행상태"])
     async def server_renewal_progress(ctx: commands.Context):
@@ -2183,9 +2279,10 @@ def register_v433_voice_sanctuary(
         settings = _layout_settings(world_data, guild.id)["layout"]
         running = _renewal_running(guild.id)
         await ctx.send(
-            f"🔧 진행 중: **{'예' if running else '아니오'}**\n"
-            f"마지막 상태: `{settings.get('last_operation_status', '기록 없음')}`\n"
-            f"중지 명령: `!서버리뉴얼 중지`"
+            f"🔧 실행 중: **{'예' if running else '아니오'}**\n"
+            f"리뉴얼 계획: **{'있음' if isinstance(settings.get('renewal_plan'), dict) else '없음'}**\n"
+            f"복구 계획: **{'있음' if isinstance(settings.get('recovery_plan'), dict) else '없음'}**\n"
+            f"마지막 상태: `{settings.get('last_operation_status', '기록 없음')}`"
         )
 
     @server_renewal.command(name="긴급정리", aliases=["cleanup", "잔여정리"])
@@ -2480,7 +2577,7 @@ def register_v433_voice_sanctuary(
         await ctx.send("✅ 저장된 서버 메뉴를 해제했습니다.")
 
     async def handle_auto_tts(message: discord.Message) -> None:
-        if message.guild is None or message.author.bot:
+        if message.guild is None or message.author.bot or message.webhook_id is not None:
             return
         if message.content.startswith("!"):
             return
@@ -2491,12 +2588,27 @@ def register_v433_voice_sanctuary(
             return
         if message.channel.id != settings.get("text_channel_id"):
             return
-        voice_channel_id = settings.get("voice_channel_id")
-        if not voice_channel_id:
-            return
-        if settings.get("require_author_in_voice", False):
-            if not message.author.voice or message.author.voice.channel.id != voice_channel_id:
+
+        if settings.get("mode") == "fixed":
+            target_channel_id = int(settings.get("voice_channel_id") or 0)
+        else:
+            if not message.author.voice or not isinstance(message.author.voice.channel, discord.VoiceChannel):
                 return
+            target_channel_id = message.author.voice.channel.id
+
+        if not target_channel_id:
+            return
+        voice_client = message.guild.voice_client
+        queued_targets = VOICE_RUNTIME.queued_channel_ids(message.guild.id)
+        active_target = VOICE_RUNTIME.active_channel_ids.get(message.guild.id)
+        current_target = int(getattr(getattr(voice_client, "channel", None), "id", 0) or 0)
+        occupied_target = active_target or current_target
+        if occupied_target and occupied_target != target_channel_id:
+            if (voice_client is not None and voice_client.is_playing()) or queued_targets:
+                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                    await message.add_reaction("⏳")
+                return
+
         now = time.monotonic()
         key = (message.guild.id, message.author.id)
         if now - VOICE_RUNTIME.user_cooldowns.get(key, 0.0) < TTS_USER_COOLDOWN:
@@ -2510,6 +2622,7 @@ def register_v433_voice_sanctuary(
             message.author,
             clean,
             announce_name=bool(settings.get("announce_names", True)),
+            target_voice_channel_id=target_channel_id,
         )
         if not ok:
             with contextlib.suppress(discord.Forbidden, discord.HTTPException):
