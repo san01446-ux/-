@@ -21,7 +21,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "5.1.0"
+VERSION = "5.2.0"
 TTS_MAX_TEXT = 450
 TTS_CHUNK_LENGTH = 180
 TTS_CACHE_TTL = 21600
@@ -33,6 +33,8 @@ TTS_MIN_AUDIO_BYTES = 512
 EDGE_FAILURE_BACKOFF_SECONDS = 120
 EDGE_RETRY_DELAYS = (0.0, 2.0)
 EDGE_STABLE_FALLBACK_VOICES = ("ko-KR-SunHiNeural", "ko-KR-InJoonNeural")
+EDGE_VOICE_FAILURE_THRESHOLD = 2
+EDGE_VOICE_QUARANTINE_SECONDS = 1800
 RENEWAL_EDIT_DELAY = 6.0
 RENEWAL_API_TIMEOUT = 45.0
 RENEWAL_STEP_COOLDOWN = 300
@@ -41,6 +43,7 @@ RENEWAL_429_QUARANTINE = 900
 BACKUP_LIMIT = 10
 RENEWAL_RATE_LIMIT_CAP = 30.0
 RENEWAL_TASKS: Dict[int, asyncio.Task[Any]] = {}
+RENEWAL_AUTOPILOT_TASKS: Dict[int, asyncio.Task[Any]] = {}
 RENEWAL_HTTP_429_UNTIL = 0
 RENEWAL_HTTP_429_LAST = ""
 
@@ -66,6 +69,7 @@ VOICE_APP_CHOICES: List[app_commands.Choice[str]] = [
     app_commands.Choice(name=label[:100], value=name)
     for name, label in VOICE_CHOICE_LABELS.items()
 ]
+EDGE_VOICE_TO_NAME: Dict[str, str] = {data["edge"]: name for name, data in VOICE_PRESETS.items()}
 
 
 def _voice_name_or_default(value: Any, default: str = "선히") -> str:
@@ -546,6 +550,18 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
         backup_item.setdefault("backup_id", f"legacy-{backup_item.get('created_at', 0)}")
         backup_item.setdefault("name", "기존 자동 백업")
     settings["layout"].setdefault("renewal_plan", None)
+    settings["layout"].setdefault("autopilot", {})
+    autopilot = settings["layout"]["autopilot"]
+    if not isinstance(autopilot, dict):
+        autopilot = {}
+        settings["layout"]["autopilot"] = autopilot
+    autopilot.setdefault("enabled", False)
+    autopilot.setdefault("mode", None)
+    autopilot.setdefault("channel_id", None)
+    autopilot.setdefault("started_by", None)
+    autopilot.setdefault("started_at", 0)
+    autopilot.setdefault("next_run_at", 0)
+    autopilot.setdefault("last_reason", "아직 실행 기록 없음")
     settings["layout"].setdefault("menu_channel_id", None)
     settings["layout"].setdefault("menu_message_id", None)
     return settings
@@ -968,7 +984,20 @@ EDGE_TTS_RUNTIME: Dict[str, Any] = {
     "last_error": "",
     "last_success_at": 0,
     "last_voice": "",
+    "last_requested_voice": "",
+    "last_used_voice": "",
+    "voice_failures": {},
+    "voice_backoff_until": {},
 }
+
+
+def _edge_voice_quarantine_remaining(voice: str) -> int:
+    untils = EDGE_TTS_RUNTIME.setdefault("voice_backoff_until", {})
+    try:
+        until = float(untils.get(voice, 0.0) or 0.0)
+    except (TypeError, ValueError):
+        until = 0.0
+    return max(0, int(until - time.monotonic()))
 
 
 def _clean_spoken_text(text: str) -> str:
@@ -1045,8 +1074,9 @@ async def _synth_edge_once(text: str, voice: str, speed: float, output_path: str
 
 
 async def _synth_edge(text: str, voice: str, speed: float, output_path: str) -> Optional[str]:
-    """Try the selected Edge voice safely and return the voice actually used."""
+    """Try Edge voices safely and quarantine repeatedly failing individual voices."""
     now = time.monotonic()
+    EDGE_TTS_RUNTIME["last_requested_voice"] = voice
     if now < float(EDGE_TTS_RUNTIME.get("backoff_until", 0.0) or 0.0):
         remaining = int(float(EDGE_TTS_RUNTIME["backoff_until"]) - now)
         print(f"[TTS Edge 일시 우회] 외부 합성 백오프 {max(1, remaining)}초 남음", flush=True)
@@ -1057,37 +1087,54 @@ async def _synth_edge(text: str, voice: str, speed: float, output_path: str) -> 
         if candidate and candidate not in candidates:
             candidates.append(candidate)
 
+    failures_by_voice = EDGE_TTS_RUNTIME.setdefault("voice_failures", {})
+    backoff_by_voice = EDGE_TTS_RUNTIME.setdefault("voice_backoff_until", {})
     last_error = ""
+    attempted_any = False
     for candidate_index, candidate in enumerate(candidates):
+        remaining = _edge_voice_quarantine_remaining(candidate)
+        if remaining > 0:
+            label = EDGE_VOICE_TO_NAME.get(candidate, candidate)
+            print(f"[TTS Edge 음성 격리] voice={label} skip={remaining}s", flush=True)
+            continue
+        attempted_any = True
         delays = EDGE_RETRY_DELAYS if candidate_index == 0 else (0.0,)
         for attempt, delay in enumerate(delays, start=1):
             if delay:
                 await asyncio.sleep(delay)
             try:
                 if await _synth_edge_once(text, candidate, speed, output_path):
+                    failures_by_voice[candidate] = 0
+                    backoff_by_voice.pop(candidate, None)
                     EDGE_TTS_RUNTIME.update({
                         "backoff_until": 0.0,
                         "consecutive_failures": 0,
                         "last_error": "",
                         "last_success_at": int(time.time()),
                         "last_voice": candidate,
+                        "last_used_voice": candidate,
                     })
                     if candidate != voice:
                         print(f"[TTS Edge 대체 음성] requested={voice} used={candidate}", flush=True)
                     return candidate
             except Exception as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
+                count = int(failures_by_voice.get(candidate, 0) or 0) + 1
+                failures_by_voice[candidate] = count
+                if count >= EDGE_VOICE_FAILURE_THRESHOLD:
+                    backoff_by_voice[candidate] = time.monotonic() + EDGE_VOICE_QUARANTINE_SECONDS
                 print(
-                    f"[TTS Edge 합성 실패] voice={candidate} attempt={attempt}/{len(delays)} {last_error}",
+                    f"[TTS Edge 합성 실패] voice={candidate} attempt={attempt}/{len(delays)} "
+                    f"failures={count} {last_error}",
                     flush=True,
                 )
 
     failures = int(EDGE_TTS_RUNTIME.get("consecutive_failures", 0) or 0) + 1
-    backoff = min(600, EDGE_FAILURE_BACKOFF_SECONDS * failures)
+    backoff = min(600, EDGE_FAILURE_BACKOFF_SECONDS * failures) if attempted_any else 60
     EDGE_TTS_RUNTIME.update({
         "backoff_until": time.monotonic() + backoff,
         "consecutive_failures": failures,
-        "last_error": last_error,
+        "last_error": last_error or "사용 가능한 Edge 음성이 모두 임시 격리됨",
     })
     _remove_audio_file(output_path)
     print(f"[TTS Edge 우회 전환] Google 대체 합성 사용 · {backoff}초 백오프", flush=True)
@@ -1104,7 +1151,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.1.0"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.2.0"}
     _remove_audio_file(output_path)
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
@@ -1557,6 +1604,18 @@ def register_v433_voice_sanctuary(
     async def tts_engine_shortcut(ctx: commands.Context, engine: Optional[str] = None):
         await ctx.invoke(tts_engine, engine=engine)
 
+    @tts_group.command(name="음성격리초기화", aliases=["음성복구", "voice-reset"])
+    async def tts_voice_quarantine_reset(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        EDGE_TTS_RUNTIME.setdefault("voice_failures", {}).clear()
+        EDGE_TTS_RUNTIME.setdefault("voice_backoff_until", {}).clear()
+        EDGE_TTS_RUNTIME["backoff_until"] = 0.0
+        EDGE_TTS_RUNTIME["consecutive_failures"] = 0
+        EDGE_TTS_RUNTIME["last_error"] = ""
+        await ctx.send("✅ Edge 목소리별 임시 격리와 전체 백오프를 초기화했습니다. 다음 낭독부터 다시 시험합니다.")
+
     @tts_group.command(name="속도")
     async def tts_speed(ctx: commands.Context, speed: float):
         guild = await require_admin(ctx)
@@ -1658,6 +1717,25 @@ def register_v433_voice_sanctuary(
         if backoff_remaining:
             provider_value += f"\nEdge 외부 합성 우회: 약 {backoff_remaining}초 남음"
         embed.add_field(name="최근 합성 경로", value=provider_value[:1024], inline=False)
+        requested_voice = str(EDGE_TTS_RUNTIME.get("last_requested_voice") or "")
+        used_voice = str(EDGE_TTS_RUNTIME.get("last_used_voice") or "")
+        if requested_voice and used_voice and requested_voice != used_voice:
+            embed.add_field(
+                name="최근 음성 자동 우회",
+                value=f"{EDGE_VOICE_TO_NAME.get(requested_voice, requested_voice)} → {EDGE_VOICE_TO_NAME.get(used_voice, used_voice)}",
+                inline=False,
+            )
+        quarantined: List[str] = []
+        for edge_voice, display_name in EDGE_VOICE_TO_NAME.items():
+            remaining = _edge_voice_quarantine_remaining(edge_voice)
+            if remaining > 0:
+                quarantined.append(f"{display_name} · 약 {remaining // 60 + 1}분")
+        if quarantined:
+            embed.add_field(
+                name="Edge 임시 격리 음성",
+                value="\n".join(quarantined[:10]) + "\n초기화: `!TTS 음성격리초기화`",
+                inline=False,
+            )
         await ctx.send(embed=embed)
 
     # Discord 슬래시 명령어: 일반 사용자는 개인 목소리/미리듣기, 관리자는 서버 설정을 변경합니다.
@@ -2071,6 +2149,9 @@ def register_v433_voice_sanctuary(
                     discord.SelectOption(label="현재 상태 수동 백업", value="backup", emoji="💾", description="현재 깨끗한 서버 구조 저장"),
                     discord.SelectOption(label="백업 목록·복구 선택", value="backups", emoji="🗃️", description="드롭다운으로 복구 기준 선택"),
                     discord.SelectOption(label="계획 상태 확인", value="plan_status", emoji="📋", description="진행률과 다음 작업 확인"),
+                    discord.SelectOption(label="안전 자동 진행 시작", value="auto_start", emoji="⏯️", description="대기시간을 지키며 한 단계씩 자동 실행"),
+                    discord.SelectOption(label="자동 진행 일시정지", value="auto_stop", emoji="⏸️", description="자동 실행만 멈추고 계획은 보존"),
+                    discord.SelectOption(label="자동 진행 상태", value="auto_status", emoji="🛰️", description="진행률·다음 실행시간 확인"),
                     discord.SelectOption(label="다음 단계 1개 실행", value="next", emoji="▶️", description="Discord 변경을 한 개만 처리"),
                     discord.SelectOption(label="복구 다음 단계 1개", value="recover_next", emoji="🛟", description="선택한 백업 복구를 한 개 진행"),
                     discord.SelectOption(label="계획 취소", value="cancel", emoji="⏹️", description="남은 리뉴얼 계획 제거"),
@@ -2094,6 +2175,9 @@ def register_v433_voice_sanctuary(
                 command_map = {
                     "backups": ("백업목록", (), {}),
                     "plan_status": ("계획상태", (), {}),
+                    "auto_start": ("자동시작", (), {}),
+                    "auto_stop": ("자동중지", (), {}),
+                    "auto_status": ("자동상태", (), {}),
                     "next": ("다음", (), {}),
                     "recover_next": ("복구다음", (), {}),
                     "cancel": ("계획취소", (), {}),
@@ -2117,8 +2201,8 @@ def register_v433_voice_sanctuary(
             ),
             color=0x6D2335,
         )
-        embed.add_field(name="권장 순서", value="수동 백업 → 미리보기 → 적용 계획 → 다음 단계", inline=False)
-        embed.add_field(name="안전 원칙", value="미인식 채널 유지 · 적용 전 자동 백업 · 5분 단계 간격 · 429 시 15분 격리", inline=False)
+        embed.add_field(name="권장 순서", value="수동 백업 → 미리보기 → 적용 계획 → 안전 자동 진행", inline=False)
+        embed.add_field(name="안전 원칙", value="미인식 채널 유지 · 적용 전 자동 백업 · 수동/자동 모두 5분 간격 · 429 시 15분 격리", inline=False)
         await ctx.send(embed=embed, view=RenewalMenuView())
 
     @server_renewal.command(name="테마목록", aliases=["themes", "테마"])
@@ -2169,6 +2253,11 @@ def register_v433_voice_sanctuary(
             "status": "warming_up",
             "last_error": None,
         }
+        auto_task = RENEWAL_AUTOPILOT_TASKS.get(guild.id)
+        if auto_task is not None and not auto_task.done():
+            auto_task.cancel()
+        settings["autopilot"]["enabled"] = False
+        settings["autopilot"]["last_reason"] = "새 리뉴얼 계획 생성"
         settings["last_operation_status"] = "renewal_plan_ready"
         save_data()
         action_lines = [f"{index}. {item.get('label', item.get('kind', '작업'))}" for index, item in enumerate(actions[:12], start=1)]
@@ -2225,6 +2314,11 @@ def register_v433_voice_sanctuary(
             "status": "warming_up",
             "last_error": None,
         }
+        auto_task = RENEWAL_AUTOPILOT_TASKS.get(guild.id)
+        if auto_task is not None and not auto_task.done():
+            auto_task.cancel()
+        settings["autopilot"]["enabled"] = False
+        settings["autopilot"]["last_reason"] = "새 게임·음성 구역 계획 생성"
         settings["last_operation_status"] = "game_plan_ready"
         save_data()
         action_lines = [f"{index}. {item.get('label', item.get('kind', '작업'))}" for index, item in enumerate(actions[:12], start=1)]
@@ -2514,6 +2608,169 @@ def register_v433_voice_sanctuary(
             f"최근 오류: `{plan.get('last_error') or '없음'}`"
         )
 
+    def _active_autopilot_plan(layout: Dict[str, Any], requested_mode: Optional[str] = None) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        modes = [requested_mode] if requested_mode in {"renewal", "recovery"} else ["renewal", "recovery"]
+        for mode in modes:
+            key = "renewal_plan" if mode == "renewal" else "recovery_plan"
+            plan = layout.get(key)
+            if not isinstance(plan, dict):
+                continue
+            actions = plan.get("actions", [])
+            cursor = int(plan.get("cursor", 0) or 0)
+            if cursor < len(actions):
+                return mode, plan
+        return None, None
+
+    async def _renewal_autopilot_loop(ctx: commands.Context, mode: str) -> None:
+        guild = ctx.guild
+        if guild is None:
+            return
+        guild_id = guild.id
+        current_task = asyncio.current_task()
+        layout = _layout_settings(world_data, guild_id)["layout"]
+        auto = layout["autopilot"]
+        try:
+            while bool(auto.get("enabled")):
+                plan_key = "renewal_plan" if mode == "renewal" else "recovery_plan"
+                plan = layout.get(plan_key)
+                if not isinstance(plan, dict):
+                    auto["last_reason"] = "실행할 계획이 없어 종료"
+                    break
+                actions = plan.get("actions", [])
+                cursor = int(plan.get("cursor", 0) or 0)
+                if cursor >= len(actions):
+                    auto["last_reason"] = "모든 단계 완료"
+                    await ctx.send(f"✅ 서버 리뉴얼 안전 자동 진행이 완료됐습니다. **{cursor}/{len(actions)}**")
+                    break
+                if str(plan.get("status")) in {"blocked", "error", "paused"}:
+                    auto["last_reason"] = f"계획 상태 {plan.get('status')}로 자동 정지"
+                    await ctx.send(f"⏸️ 자동 진행을 멈췄습니다. 계획 상태: `{plan.get('status')}` · 오류: `{plan.get('last_error') or '없음'}`")
+                    break
+                next_allowed = max(
+                    int(plan.get("next_allowed_at", 0) or 0),
+                    int(RENEWAL_HTTP_429_UNTIL),
+                )
+                auto["next_run_at"] = next_allowed
+                save_data()
+                now = int(time.time())
+                if now < next_allowed:
+                    await asyncio.sleep(min(60, max(1, next_allowed - now)))
+                    continue
+
+                before_cursor = cursor
+                if mode == "renewal":
+                    await server_renewal_next.callback(ctx)
+                else:
+                    await server_renewal_recover_next.callback(ctx)
+
+                layout = _layout_settings(world_data, guild_id)["layout"]
+                auto = layout["autopilot"]
+                plan = layout.get(plan_key)
+                if not isinstance(plan, dict):
+                    auto["last_reason"] = "계획이 제거되어 종료"
+                    break
+                after_cursor = int(plan.get("cursor", 0) or 0)
+                if after_cursor <= before_cursor and int(plan.get("next_allowed_at", 0) or 0) <= int(time.time()):
+                    auto["last_reason"] = "단계가 진행되지 않아 안전 정지"
+                    await ctx.send("⏸️ 자동 진행에서 단계 변화가 없어 안전 정지했습니다. `!서버리뉴얼 자동상태`를 확인하세요.")
+                    break
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            auto["last_reason"] = "관리자가 자동 진행을 일시정지"
+            raise
+        except Exception as exc:
+            auto["last_reason"] = f"{type(exc).__name__}: {str(exc)[:160]}"
+            await ctx.send(f"❌ 서버 리뉴얼 자동 진행 오류로 정지했습니다: `{auto['last_reason']}`")
+        finally:
+            auto["enabled"] = False
+            auto["next_run_at"] = 0
+            save_data()
+            if RENEWAL_AUTOPILOT_TASKS.get(guild_id) is current_task:
+                RENEWAL_AUTOPILOT_TASKS.pop(guild_id, None)
+
+    @server_renewal.command(name="자동시작", aliases=["autostart", "자동진행"])
+    async def server_renewal_auto_start(ctx: commands.Context, mode: Optional[str] = None):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        existing = RENEWAL_AUTOPILOT_TASKS.get(guild.id)
+        if existing is not None and not existing.done():
+            await ctx.send("ℹ️ 이미 서버 리뉴얼 안전 자동 진행이 실행 중입니다. `!서버리뉴얼 자동상태`를 확인하세요.")
+            return
+        normalized = None
+        if mode:
+            normalized = {"리뉴얼": "renewal", "적용": "renewal", "renewal": "renewal", "복구": "recovery", "recovery": "recovery"}.get(mode.casefold())
+            if normalized is None:
+                await ctx.send("❌ 자동시작 모드는 `리뉴얼` 또는 `복구`로 입력하세요.")
+                return
+        layout = _layout_settings(world_data, guild.id)["layout"]
+        selected_mode, plan = _active_autopilot_plan(layout, normalized)
+        if selected_mode is None or plan is None:
+            await ctx.send("ℹ️ 자동 진행할 미완료 리뉴얼·복구 계획이 없습니다. 먼저 드롭다운에서 계획을 만들어주세요.")
+            return
+        auto = layout["autopilot"]
+        auto.update({
+            "enabled": True,
+            "mode": selected_mode,
+            "channel_id": getattr(ctx.channel, "id", None),
+            "started_by": ctx.author.id,
+            "started_at": int(time.time()),
+            "next_run_at": max(int(plan.get("next_allowed_at", 0) or 0), int(RENEWAL_HTTP_429_UNTIL)),
+            "last_reason": "자동 진행 시작",
+        })
+        save_data()
+        task = asyncio.create_task(_renewal_autopilot_loop(ctx, selected_mode), name=f"abaddon-renewal-auto-{guild.id}")
+        RENEWAL_AUTOPILOT_TASKS[guild.id] = task
+        actions = plan.get("actions", [])
+        cursor = int(plan.get("cursor", 0) or 0)
+        next_at = int(auto.get("next_run_at", 0) or 0)
+        mode_label = "테마 적용" if selected_mode == "renewal" else "백업 복구"
+        await ctx.send(
+            f"⏯️ **{mode_label} 안전 자동 진행을 시작했습니다.**\n"
+            f"진행: **{cursor}/{len(actions)}** · 다음 실행: "
+            + (f"<t:{next_at}:R>" if next_at > int(time.time()) else "곧 실행")
+            + "\n각 단계는 기존 5분 간격과 429 격리를 그대로 지킵니다. 중지: `!서버리뉴얼 자동중지`"
+        )
+
+    @server_renewal.command(name="자동중지", aliases=["autostop", "자동일시정지"])
+    async def server_renewal_auto_stop(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        task = RENEWAL_AUTOPILOT_TASKS.get(guild.id)
+        layout = _layout_settings(world_data, guild.id)["layout"]
+        auto = layout["autopilot"]
+        auto["enabled"] = False
+        auto["last_reason"] = "관리자가 자동 진행을 일시정지"
+        auto["next_run_at"] = 0
+        if task is not None and not task.done():
+            task.cancel()
+        save_data()
+        await ctx.send("⏸️ 서버 리뉴얼 안전 자동 진행을 멈췄습니다. 현재 계획과 진행률은 그대로 보존됩니다.")
+
+    @server_renewal.command(name="자동상태", aliases=["autostatus"])
+    async def server_renewal_auto_status(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        layout = _layout_settings(world_data, guild.id)["layout"]
+        auto = layout["autopilot"]
+        task = RENEWAL_AUTOPILOT_TASKS.get(guild.id)
+        running = task is not None and not task.done() and bool(auto.get("enabled"))
+        mode = auto.get("mode")
+        plan_key = "renewal_plan" if mode == "renewal" else "recovery_plan"
+        plan = layout.get(plan_key) if mode in {"renewal", "recovery"} else None
+        actions = plan.get("actions", []) if isinstance(plan, dict) else []
+        cursor = int(plan.get("cursor", 0) or 0) if isinstance(plan, dict) else 0
+        next_at = int(auto.get("next_run_at", 0) or 0)
+        await ctx.send(
+            "🛰️ **서버 리뉴얼 안전 자동 진행 상태**\n"
+            f"실행: **{'켜짐' if running else '꺼짐'}** · 모드: `{mode or '없음'}`\n"
+            f"진행: **{cursor}/{len(actions)}** · 다음 실행: "
+            + (f"<t:{next_at}:R>" if running and next_at > int(time.time()) else "대기 없음")
+            + f"\n마지막 상태: `{auto.get('last_reason', '기록 없음')}`"
+        )
+
     @server_renewal.command(name="429상태", aliases=["ratelimit", "쿨다운", "안전대기"])
     async def server_renewal_rate_limit_status(ctx: commands.Context):
         guild = await require_admin(ctx)
@@ -2542,8 +2799,14 @@ def register_v433_voice_sanctuary(
         if guild is None:
             return
         settings = _layout_settings(world_data, guild.id)["layout"]
+        auto_task = RENEWAL_AUTOPILOT_TASKS.get(guild.id)
+        if auto_task is not None and not auto_task.done():
+            auto_task.cancel()
+        settings["autopilot"]["enabled"] = False
+        settings["autopilot"]["last_reason"] = "리뉴얼 계획 취소"
         if settings.pop("renewal_plan", None) is None:
-            await ctx.send("ℹ️ 취소할 리뉴얼 계획이 없습니다.")
+            save_data()
+            await ctx.send("ℹ️ 취소할 리뉴얼 계획이 없습니다. 자동 진행은 중지했습니다.")
             return
         settings["last_operation_status"] = "renewal_plan_cancelled"
         save_data()
@@ -2710,8 +2973,14 @@ def register_v433_voice_sanctuary(
         if guild is None:
             return
         task = RENEWAL_TASKS.get(guild.id)
+        auto_task = RENEWAL_AUTOPILOT_TASKS.get(guild.id)
         settings = _layout_settings(world_data, guild.id)["layout"]
         stopped = False
+        if auto_task is not None and not auto_task.done():
+            settings["autopilot"]["enabled"] = False
+            settings["autopilot"]["last_reason"] = "전체 작업 중지"
+            auto_task.cancel()
+            stopped = True
         if task is not None and not task.done():
             task.cancel()
             stopped = True
@@ -2735,6 +3004,7 @@ def register_v433_voice_sanctuary(
             f"🔧 실행 중: **{'예' if running else '아니오'}**\n"
             f"리뉴얼 계획: **{'있음' if isinstance(settings.get('renewal_plan'), dict) else '없음'}**\n"
             f"복구 계획: **{'있음' if isinstance(settings.get('recovery_plan'), dict) else '없음'}**\n"
+            f"자동 진행: **{'켜짐' if settings.get('autopilot', {}).get('enabled') else '꺼짐'}**\n"
             f"마지막 상태: `{settings.get('last_operation_status', '기록 없음')}`"
         )
 

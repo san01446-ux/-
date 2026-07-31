@@ -4245,3 +4245,5 @@ register_grouped_slash_commands(bot)
 # V5.0.3: Edge NoAudioReceived 재시도·백오프·안정 음성·Google 대체 합성 강화
 
 # V5.0.4: 서버 리뉴얼 5분 단계 간격·HTTP 429 감지·15분 격리·45초 안전 중단
+
+# V5.2.0: 서버 리뉴얼 안전 자동진행·Edge 개별 음성 격리 회로
