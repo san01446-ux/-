@@ -20,12 +20,16 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "4.3.3.4"
+VERSION = "4.3.3.6"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
 DEFAULT_IDLE_SECONDS = 600
-RENEWAL_EDIT_DELAY = 1.0
+RENEWAL_EDIT_DELAY = 6.0
+RENEWAL_API_TIMEOUT = 45.0
+RENEWAL_STEP_COOLDOWN = 90
+RENEWAL_RATE_LIMIT_CAP = 30.0
+RENEWAL_TASKS: Dict[int, asyncio.Task[Any]] = {}
 
 VOICE_PRESETS: Dict[str, Dict[str, str]] = {
     "선히": {"edge": "ko-KR-SunHiNeural", "label": "밝고 자연스러운 여성 음성", "gender": "여성"},
@@ -243,9 +247,88 @@ def _roman_label(index: int) -> str:
     return romans[index] if 0 <= index < len(romans) else str(index + 1)
 
 
+class RenewalApiTimeout(RuntimeError):
+    pass
+
+
+async def _renewal_api(awaitable):
+    """Discord 채널 변경 요청이 장시간 429 대기에 갇히는 것을 차단합니다."""
+    try:
+        return await asyncio.wait_for(awaitable, timeout=RENEWAL_API_TIMEOUT)
+    except asyncio.TimeoutError as exc:
+        raise RenewalApiTimeout(
+            f"Discord 채널 변경 응답이 {int(RENEWAL_API_TIMEOUT)}초 안에 오지 않아 안전 중단했습니다."
+        ) from exc
+
+
 async def _renewal_pause() -> None:
-    # Discord의 채널 위치/이름 변경 라우트는 짧은 시간에 몰리면 429가 발생할 수 있습니다.
+    # 채널 이름·카테고리 변경은 같은 Discord 라우트 제한을 공유하므로 넉넉히 간격을 둡니다.
     await asyncio.sleep(RENEWAL_EDIT_DELAY)
+
+
+def _renewal_running(guild_id: int) -> bool:
+    task = RENEWAL_TASKS.get(guild_id)
+    return task is not None and not task.done()
+
+
+def _layout_category_aliases(target_name: str) -> set[str]:
+    target_signature = None
+    style_groups = []
+    for style in STYLE_NAMES:
+        groups: Dict[str, set[str]] = {}
+        for spec in [*_text_channel_specs(style), *_voice_channel_specs(style)]:
+            groups.setdefault(spec["category"], set()).add(spec["key"])
+        style_groups.append(groups)
+        if target_name in groups:
+            target_signature = frozenset(groups[target_name])
+    if target_signature is None:
+        return {target_name}
+    aliases = {
+        category_name
+        for groups in style_groups
+        for category_name, keys in groups.items()
+        if frozenset(keys) == target_signature
+    }
+    aliases.add(target_name)
+    return aliases
+
+
+def _game_category_aliases(target_name: str) -> set[str]:
+    role = None
+    mappings = []
+    for style in STYLE_NAMES:
+        mapping = _game_zone_category_names(style)
+        mappings.append(mapping)
+        for key, value in mapping.items():
+            if value == target_name:
+                role = key
+                break
+    if role is None:
+        return {target_name}
+    aliases = {mapping[role] for mapping in mappings if role in mapping}
+    aliases.add(target_name)
+    return aliases
+
+
+def _find_semantic_category(
+    guild: discord.Guild,
+    target_name: str,
+    used_ids: set[int],
+    *,
+    family: str,
+) -> Optional[discord.CategoryChannel]:
+    exact = discord.utils.get(guild.categories, name=target_name)
+    if exact is not None and exact.id not in used_ids:
+        return exact
+    aliases = _layout_category_aliases(target_name) if family == "layout" else _game_category_aliases(target_name)
+    normalised = {_normalise_name(name) for name in aliases}
+    candidates = [
+        category for category in guild.categories
+        if category.id not in used_ids and _normalise_name(category.name) in normalised
+    ]
+    # 빈 카테고리를 우선 재사용해 중복 생성 가능성을 낮춥니다.
+    candidates.sort(key=lambda category: (bool(category.channels), category.position, category.id))
+    return candidates[0] if candidates else None
 
 
 def _category_score(category: discord.CategoryChannel, keywords: Iterable[str]) -> int:
@@ -767,7 +850,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/4.3.3.4"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/4.3.3.5"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
             if response.status != 200:
@@ -1427,7 +1510,7 @@ def register_v433_voice_sanctuary(
             title="🕯 ABADDON 서버 리뉴얼",
             description=(
                 "현재 채널을 삭제하지 않고 카테고리·채널명·순서를 정돈합니다.\n"
-                "사진처럼 길어진 메뉴를 7종 테마로 정리하고, 선택형 빈 카테고리 삭제와 복구 기록을 관리합니다."
+                "현재는 429 재발 방지를 위한 안전 모드입니다. 미리보기와 한 단계씩 복구·삭제만 지원합니다."
             ),
             color=0x6D2335,
         )
@@ -1437,7 +1520,9 @@ def register_v433_voice_sanctuary(
                 "`!서버리뉴얼 미리보기 고딕`\n"
                 "`!서버리뉴얼 적용 고딕`\n"
                 "`!서버메뉴 생성`\n"
-                "`!서버리뉴얼 되돌리기`"
+                "`!서버리뉴얼 되돌리기`\n"
+                "`!서버리뉴얼 중지`\n"
+                "`!서버리뉴얼 긴급정리`"
             ),
             inline=False,
         )
@@ -1474,53 +1559,81 @@ def register_v433_voice_sanctuary(
         guild = await require_admin(ctx)
         if guild is None or not isinstance(ctx.author, discord.Member):
             return
+        await ctx.send("⛔ v4.3.3.6 안전 모드에서는 대량 서버 리뉴얼 적용을 잠시 잠갔습니다. 현재는 `미리보기`, 단계별 복구, 빈 카테고리 1개 삭제만 사용할 수 있습니다.")
+        return
         if style not in STYLE_NAMES:
             await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
+            return
+        if _renewal_running(guild.id):
+            await ctx.send("⚠️ 이미 서버 리뉴얼 작업이 진행 중입니다. 멈추려면 `!서버리뉴얼 중지`를 실행하세요.")
             return
         bot_member = guild.me
         if bot_member is None or not bot_member.guild_permissions.manage_channels:
             await ctx.send("❌ 봇에 `채널 관리` 권한이 필요합니다.")
             return
 
+        current_task = asyncio.current_task()
+        if current_task is not None:
+            RENEWAL_TASKS[guild.id] = current_task
         settings = _layout_settings(world_data, guild.id)["layout"]
         backup = _store_backup(settings, _snapshot_guild(guild, operation="layout", style=style))
         save_data()
-        progress = await ctx.send(f"🕯 **{style} 테마로 서버 메뉴를 정돈하는 중입니다...**")
+        progress = await ctx.send(f"🕯 **{style} 테마로 서버 메뉴를 정돈하는 중입니다...**\n중지: `!서버리뉴얼 중지`")
         text_matches, voice_matches = _detect_layout(guild, style)
+
+        # 실제로 옮길 채널 또는 꼭 필요한 필수 채널이 있는 카테고리만 준비합니다.
+        planned_text = [
+            (spec, channel) for spec, channel in text_matches
+            if channel is not None or spec["key"] in ESSENTIAL_KEYS
+        ]
+        planned_voice = [
+            (spec, channel) for spec, channel in voice_matches
+            if channel is not None or spec["key"] in ESSENTIAL_KEYS
+        ]
         category_names: List[str] = []
-        for spec, _ in [*text_matches, *voice_matches]:
+        for spec, _ in [*planned_text, *planned_voice]:
             if spec["category"] not in category_names:
                 category_names.append(spec["category"])
 
         categories: Dict[str, discord.CategoryChannel] = {}
+        used_category_ids: set[int] = set()
         created_categories = 0
+        reused_categories = 0
         changed_channels = 0
         created_channels = 0
+        skipped_channels = 0
         reason = f"ABADDON v{VERSION} 서버 리뉴얼 / {ctx.author} ({ctx.author.id})"
         try:
             for category_name in category_names:
-                category = discord.utils.get(guild.categories, name=category_name)
+                category = _find_semantic_category(guild, category_name, used_category_ids, family="layout")
                 if category is None:
                     admin_only = any(
                         spec["category"] == category_name and spec["key"] in ADMIN_KEYS
-                        for spec, _ in text_matches
+                        for spec, _ in planned_text
                     )
                     kwargs: Dict[str, Any] = {"reason": reason}
                     if admin_only:
                         kwargs["overwrites"] = _admin_category_overwrites(guild, ctx.author, bot_member)
-                    category = await guild.create_category(category_name, **kwargs)
+                    category = await _renewal_api(guild.create_category(category_name, **kwargs))
                     _record_created(backup, "category", category.id)
                     save_data()
                     await _renewal_pause()
                     created_categories += 1
+                else:
+                    used_category_ids.add(category.id)
+                    if category.name != category_name:
+                        await _renewal_api(category.edit(name=category_name, reason=reason))
+                        await _renewal_pause()
+                        reused_categories += 1
+                        reused_ids = backup.setdefault("reused_category_ids", [])
+                        if category.id not in reused_ids:
+                            reused_ids.append(category.id)
+                            save_data()
+                used_category_ids.add(category.id)
                 categories[category_name] = category
 
-            for index, category_name in enumerate(category_names):
-                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    await categories[category_name].edit(position=index, reason=reason)
-                    await _renewal_pause()
-
-            for spec, channel in text_matches:
+            # 카테고리 위치를 한 개씩 PATCH하지 않습니다. 이 호출이 429 폭주 원인이었습니다.
+            for spec, channel in planned_text:
                 category = categories[spec["category"]]
                 if channel is None and spec["key"] in ESSENTIAL_KEYS:
                     kwargs: Dict[str, Any] = {"category": category, "reason": reason}
@@ -1531,45 +1644,70 @@ def register_v433_voice_sanctuary(
                             bot_member,
                             allow_reactions=spec["key"] == "roles",
                         )
-                    created_channel = await guild.create_text_channel(spec["name"], **kwargs)
+                    created_channel = await _renewal_api(guild.create_text_channel(spec["name"], **kwargs))
                     _record_created(backup, "channel", created_channel.id)
                     save_data()
                     await _renewal_pause()
                     created_channels += 1
                 elif channel is not None:
-                    await channel.edit(name=spec["name"], category=category, reason=reason)
+                    if channel.name == spec["name"] and channel.category_id == category.id:
+                        skipped_channels += 1
+                        continue
+                    await _renewal_api(channel.edit(name=spec["name"], category=category, reason=reason))
                     await _renewal_pause()
                     changed_channels += 1
 
-            for spec, channel in voice_matches:
+            for spec, channel in planned_voice:
                 category = categories[spec["category"]]
                 if channel is None and spec["key"] in ESSENTIAL_KEYS:
-                    created_channel = await guild.create_voice_channel(spec["name"], category=category, reason=reason)
+                    created_channel = await _renewal_api(
+                        guild.create_voice_channel(spec["name"], category=category, reason=reason)
+                    )
                     _record_created(backup, "channel", created_channel.id)
                     save_data()
                     await _renewal_pause()
                     created_channels += 1
                 elif channel is not None:
-                    await channel.edit(name=spec["name"], category=category, reason=reason)
+                    if channel.name == spec["name"] and channel.category_id == category.id:
+                        skipped_channels += 1
+                        continue
+                    await _renewal_api(channel.edit(name=spec["name"], category=category, reason=reason))
+                    await _renewal_pause()
                     changed_channels += 1
 
             settings["style"] = style
             settings["applied_at"] = int(time.time())
             settings["applied_by"] = ctx.author.id
+            settings["last_operation_status"] = "completed"
             save_data()
             await progress.edit(
                 content=(
                     f"✅ **{style} 서버 리뉴얼 완료**\n"
                     f"새 카테고리: **{created_categories}개**\n"
+                    f"재사용한 기존 카테고리: **{reused_categories}개**\n"
                     f"정돈한 기존 채널: **{changed_channels}개**\n"
-                    f"새 필수 채널: **{created_channels}개**\n\n"
-                    "인식되지 않은 채널은 그대로 유지했습니다. 메뉴 패널: `!서버메뉴 생성`"
+                    f"새 필수 채널: **{created_channels}개**\n"
+                    f"이미 정돈되어 건너뜀: **{skipped_channels}개**\n\n"
+                    "빈 잔여 카테고리 정리: `!서버리뉴얼 긴급정리`"
                 )
             )
+        except asyncio.CancelledError:
+            settings["last_operation_status"] = "cancelled"
+            save_data()
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                await progress.edit(content="⛔ 서버 리뉴얼 작업을 중지했습니다. 이미 반영된 변경은 `!서버리뉴얼 되돌리기 1`로 복구할 수 있습니다.")
+        except RenewalApiTimeout as exc:
+            settings["last_operation_status"] = "rate_limit_timeout"
+            save_data()
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                await progress.edit(content=f"⏸️ **안전 중단** · {exc}\n잠시 뒤 `!서버리뉴얼 되돌리기 1`을 실행하세요.")
         except discord.Forbidden:
             await progress.edit(content="❌ 권한 부족으로 중단됐습니다. 봇 역할에 `채널 관리` 권한을 확인하세요.")
         except discord.HTTPException as exc:
             await progress.edit(content=f"❌ Discord API 오류로 중단됐습니다: `{type(exc).__name__}: {str(exc)[:250]}`")
+        finally:
+            if RENEWAL_TASKS.get(guild.id) is current_task:
+                RENEWAL_TASKS.pop(guild.id, None)
 
     @server_renewal.command(name="게임미리보기", aliases=["봇게임미리보기", "게임프리뷰"])
     async def server_renewal_game_preview(ctx: commands.Context, style: str = "깔끔"):
@@ -1586,8 +1724,13 @@ def register_v433_voice_sanctuary(
         guild = await require_admin(ctx)
         if guild is None or not isinstance(ctx.author, discord.Member):
             return
+        await ctx.send("⛔ v4.3.3.6 안전 모드에서는 게임·음성 구역 일괄 정리를 잠시 잠갔습니다. `게임미리보기`만 확인할 수 있습니다.")
+        return
         if style not in STYLE_NAMES:
             await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
+            return
+        if _renewal_running(guild.id):
+            await ctx.send("⚠️ 이미 서버 리뉴얼 작업이 진행 중입니다. 멈추려면 `!서버리뉴얼 중지`를 실행하세요.")
             return
         bot_member = guild.me
         if bot_member is None or not bot_member.guild_permissions.manage_channels:
@@ -1599,122 +1742,148 @@ def register_v433_voice_sanctuary(
             await ctx.send("❌ 정리할 봇 게임·음성 채널을 찾지 못했습니다. 채널 이름을 확인해 주세요.")
             return
 
+        current_task = asyncio.current_task()
+        if current_task is not None:
+            RENEWAL_TASKS[guild.id] = current_task
         settings = _layout_settings(world_data, guild.id)["layout"]
         backup = _store_backup(settings, _snapshot_guild(guild, operation="game_zone", style=style))
         save_data()
-        progress = await ctx.send(f"🎮 **{style} 테마로 봇 게임·음성 구역을 나누는 중입니다...**")
+        progress = await ctx.send(f"🎮 **{style} 테마로 봇 게임·음성 구역을 나누는 중입니다...**\n중지: `!서버리뉴얼 중지`")
         category_names = _game_zone_category_names(style)
         reason = f"ABADDON v{VERSION} 봇 게임·음성 구역 정리 / {ctx.author} ({ctx.author.id})"
         categories: Dict[str, discord.CategoryChannel] = {}
+        used_category_ids: set[int] = set()
         created_categories = 0
         changed_channels = 0
         reused_categories = 0
+        skipped_channels = 0
 
-        detected_positions = [
-            category.position
-            for category in (bot_game_category, voice_category, test_category)
-            if category is not None
-        ]
-        base_position = min(detected_positions) if detected_positions else max(0, len(guild.categories) - 1)
+        spec_to_key = {
+            "rpg": "growth", "level_notice": "growth", "daily_quiz": "growth",
+            "gambling": "game", "ksi": "game", "tiktok": "media",
+            "karaoke": "media", "bot_test": "test",
+        }
+        required_keys: set[str] = set()
+        for spec, channel in text_matches:
+            if channel is not None:
+                required_keys.add(spec_to_key[spec["key"]])
+        if bot_game_category is not None and bot_game_category.text_channels:
+            required_keys.add("game")
+        if test_category is not None and test_category.channels:
+            required_keys.add("test")
+        if voices:
+            required_keys.add("voice")
 
-        async def prepare_category(
-            key: str,
-            preferred: Optional[discord.CategoryChannel] = None,
-        ) -> discord.CategoryChannel:
+        preferred_by_key = {
+            "growth": bot_game_category,
+            "game": None,
+            "media": None,
+            "test": test_category,
+            "voice": voice_category,
+        }
+
+        async def prepare_category(key: str) -> discord.CategoryChannel:
             nonlocal created_categories, reused_categories
             target_name = category_names[key]
-            existing = discord.utils.get(guild.categories, name=target_name)
-            if existing is not None:
-                categories[key] = existing
-                return existing
-            if preferred is not None and preferred.id not in {category.id for category in categories.values()}:
-                await preferred.edit(name=target_name, reason=reason)
+            existing = _find_semantic_category(guild, target_name, used_category_ids, family="game")
+            preferred = preferred_by_key.get(key)
+            if existing is None and preferred is not None and preferred.id not in used_category_ids:
+                existing = preferred
+            if existing is None:
+                created = await _renewal_api(guild.create_category(target_name, reason=reason))
+                _record_created(backup, "category", created.id)
+                save_data()
                 await _renewal_pause()
-                categories[key] = preferred
+                created_categories += 1
+                used_category_ids.add(created.id)
+                categories[key] = created
+                return created
+            used_category_ids.add(existing.id)
+            if existing.name != target_name:
+                await _renewal_api(existing.edit(name=target_name, reason=reason))
+                await _renewal_pause()
                 reused_categories += 1
                 reused_ids = backup.setdefault("reused_category_ids", [])
-                if preferred.id not in reused_ids:
-                    reused_ids.append(preferred.id)
+                if existing.id not in reused_ids:
+                    reused_ids.append(existing.id)
                     save_data()
-                return preferred
-            created = await guild.create_category(target_name, reason=reason)
-            _record_created(backup, "category", created.id)
-            save_data()
-            await _renewal_pause()
-            categories[key] = created
-            created_categories += 1
-            return created
+            categories[key] = existing
+            return existing
 
         try:
-            await prepare_category("growth", bot_game_category)
-            await prepare_category("game")
-            await prepare_category("media")
-            await prepare_category("test", test_category)
-            await prepare_category("voice", voice_category)
+            for key in ("growth", "game", "media", "test", "voice"):
+                if key in required_keys:
+                    await prepare_category(key)
 
-            for offset, key in enumerate(("growth", "game", "media", "test", "voice")):
-                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    await categories[key].edit(position=base_position + offset, reason=reason)
-                    await _renewal_pause()
-
-            spec_to_key = {
-                "rpg": "growth",
-                "level_notice": "growth",
-                "daily_quiz": "growth",
-                "gambling": "game",
-                "ksi": "game",
-                "tiktok": "media",
-                "karaoke": "media",
-                "bot_test": "test",
-            }
             moved_ids: set[int] = set()
             for spec, channel in text_matches:
                 if channel is None:
                     continue
                 target_key = spec_to_key[spec["key"]]
-                await channel.edit(name=spec["name"], category=categories[target_key], reason=reason)
+                category = categories.get(target_key)
+                if category is None:
+                    continue
+                if channel.name == spec["name"] and channel.category_id == category.id:
+                    skipped_channels += 1
+                    moved_ids.add(channel.id)
+                    continue
+                await _renewal_api(channel.edit(name=spec["name"], category=category, reason=reason))
                 await _renewal_pause()
                 moved_ids.add(channel.id)
                 changed_channels += 1
 
-            # BOT GAME 안에 남은 미인식 텍스트 채널은 삭제하지 않고 게임·도박 구역으로 옮깁니다.
-            if bot_game_category is not None:
-                leftovers = [
-                    channel for channel in list(bot_game_category.text_channels)
-                    if channel.id not in moved_ids
-                ]
+            if bot_game_category is not None and "game" in categories:
+                leftovers = [channel for channel in list(bot_game_category.text_channels) if channel.id not in moved_ids]
                 for channel in leftovers:
-                    await channel.edit(category=categories["game"], reason=reason)
+                    if channel.category_id == categories["game"].id:
+                        skipped_channels += 1
+                        continue
+                    await _renewal_api(channel.edit(category=categories["game"], reason=reason))
                     await _renewal_pause()
                     changed_channels += 1
 
-            for index, channel in enumerate(voices):
-                await channel.edit(
-                    name=f"🔊・음성-{_roman_label(index)}",
-                    category=categories["voice"],
-                    reason=reason,
-                )
-                await _renewal_pause()
-                changed_channels += 1
+            if "voice" in categories:
+                for index, channel in enumerate(voices):
+                    target_name = f"🔊・음성-{_roman_label(index)}"
+                    if channel.name == target_name and channel.category_id == categories["voice"].id:
+                        skipped_channels += 1
+                        continue
+                    await _renewal_api(channel.edit(name=target_name, category=categories["voice"], reason=reason))
+                    await _renewal_pause()
+                    changed_channels += 1
 
             settings["style"] = style
             settings["game_zone_applied_at"] = int(time.time())
             settings["game_zone_applied_by"] = ctx.author.id
+            settings["last_operation_status"] = "completed"
             save_data()
             await progress.edit(
                 content=(
                     f"✅ **봇 게임·음성 구역 정리 완료 · {style}**\n"
                     f"정돈한 채널: **{changed_channels}개**\n"
                     f"재사용한 카테고리: **{reused_categories}개**\n"
-                    f"새 카테고리: **{created_categories}개**\n\n"
-                    "사용 중인 채널·메시지는 삭제하지 않았습니다. 빈 옛 카테고리는 "
-                    "`!서버리뉴얼 빈카테고리`로 확인한 뒤 정리하세요."
+                    f"새 카테고리: **{created_categories}개**\n"
+                    f"이미 정돈되어 건너뜀: **{skipped_channels}개**\n\n"
+                    "빈 잔여 카테고리 정리: `!서버리뉴얼 긴급정리`"
                 )
             )
+        except asyncio.CancelledError:
+            settings["last_operation_status"] = "cancelled"
+            save_data()
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                await progress.edit(content="⛔ 게임·음성 구역 정리를 중지했습니다. `!서버리뉴얼 되돌리기 1`로 복구할 수 있습니다.")
+        except RenewalApiTimeout as exc:
+            settings["last_operation_status"] = "rate_limit_timeout"
+            save_data()
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                await progress.edit(content=f"⏸️ **안전 중단** · {exc}\n잠시 뒤 `!서버리뉴얼 되돌리기 1`을 실행하세요.")
         except discord.Forbidden:
             await progress.edit(content="❌ 권한 부족으로 중단됐습니다. 봇 역할의 `채널 관리` 권한과 역할 순서를 확인하세요.")
         except discord.HTTPException as exc:
             await progress.edit(content=f"❌ Discord API 오류로 중단됐습니다: `{type(exc).__name__}: {str(exc)[:250]}`")
+        finally:
+            if RENEWAL_TASKS.get(guild.id) is current_task:
+                RENEWAL_TASKS.pop(guild.id, None)
 
     @server_renewal.command(name="백업목록", aliases=["backups", "복구목록"])
     async def server_renewal_backup_list(ctx: commands.Context):
@@ -1756,8 +1925,12 @@ def register_v433_voice_sanctuary(
 
     @server_renewal.command(name="되돌리기", aliases=["undo", "복원"])
     async def server_renewal_undo(ctx: commands.Context, backup_number: int = 1):
+        """복구 계획만 생성합니다. 이 명령 자체는 Discord 채널을 수정하지 않습니다."""
         guild = await require_admin(ctx)
         if guild is None:
+            return
+        if _renewal_running(guild.id):
+            await ctx.send("⚠️ 진행 중인 작업을 먼저 `!서버리뉴얼 중지`로 멈춰주세요.")
             return
         settings = _layout_settings(world_data, guild.id)["layout"]
         backups: List[Dict[str, Any]] = []
@@ -1781,158 +1954,286 @@ def register_v433_voice_sanctuary(
         if backup_number < 1 or backup_number > len(unique):
             await ctx.send(f"❌ 백업 번호는 1부터 {len(unique)} 사이여야 합니다. `!서버리뉴얼 백업목록`을 확인하세요.")
             return
+
         backup = unique[backup_number - 1]
-        progress = await ctx.send(f"↩️ **{backup_number}번 복구 지점으로 서버를 복구하는 중입니다...**")
-        restored = 0
-        deleted_created_channels = 0
-        kept_created_channels = 0
-        deleted_created_categories = 0
-        legacy_cleaned = 0
-        legacy_channels_cleaned = 0
         category_map = {category.id: category for category in guild.categories}
         channel_map = {channel.id: channel for channel in [*guild.text_channels, *guild.voice_channels]}
-        reason = f"ABADDON v{VERSION} 서버 리뉴얼 되돌리기 / {ctx.author}"
+        actions: List[Dict[str, Any]] = []
 
-        # 원래 존재하던 카테고리 이름과 위치를 먼저 복원합니다.
         for row in backup.get("categories", []):
             category = category_map.get(int(row.get("id", 0)))
             if category is None:
-                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    category = await guild.create_category(str(row.get("name", "복구된 카테고리")), reason=reason)
-                    await _renewal_pause()
-                    await category.edit(position=int(row.get("position", category.position)), reason=reason)
-                    await _renewal_pause()
-                    restored += 1
                 continue
-            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                await category.edit(name=str(row.get("name", category.name)), position=int(row.get("position", category.position)), reason=reason)
-                await _renewal_pause()
-                restored += 1
+            original_name = str(row.get("name", category.name))
+            if category.name != original_name:
+                actions.append({"kind": "rename", "id": category.id, "name": original_name, "label": f"카테고리 이름 → {original_name}"})
 
-        # 원래 채널의 이름·카테고리·위치를 복원합니다.
-        category_map = {category.id: category for category in guild.categories}
         for row in backup.get("channels", []):
             channel = channel_map.get(int(row.get("id", 0)))
             if channel is None:
                 continue
-            category_id = row.get("category_id")
-            category = category_map.get(int(category_id)) if category_id else None
-            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                await channel.edit(
-                    name=str(row.get("name", channel.name)),
-                    category=category,
-                    position=int(row.get("position", channel.position)),
-                    reason=reason,
-                )
-                await _renewal_pause()
-                restored += 1
+            original_name = str(row.get("name", channel.name))
+            if channel.name != original_name:
+                actions.append({"kind": "rename", "id": channel.id, "name": original_name, "label": f"채널 이름 → {original_name}"})
+            original_parent = int(row.get("category_id")) if row.get("category_id") else None
+            if channel.category_id != original_parent:
+                parent = category_map.get(original_parent) if original_parent else None
+                parent_label = parent.name if parent else "카테고리 없음"
+                actions.append({"kind": "move", "id": channel.id, "parent_id": original_parent, "label": f"{channel.name} → {parent_label}"})
 
-        # v4.3.3.4 이후 생성된 채널은 ID로 추적합니다. 사용 흔적이 있으면 보존합니다.
-        for channel_id in list(backup.get("created_channel_ids", [])):
-            channel = guild.get_channel(int(channel_id))
-            if channel is None:
-                continue
-            safe_to_delete = False
-            if isinstance(channel, discord.VoiceChannel):
-                safe_to_delete = not channel.members
-            elif isinstance(channel, discord.TextChannel):
-                try:
-                    latest = [message async for message in channel.history(limit=1)]
-                    safe_to_delete = not latest
-                except (discord.Forbidden, discord.HTTPException):
-                    safe_to_delete = False
-            if safe_to_delete:
-                try:
-                    await channel.delete(reason=reason)
-                    await _renewal_pause()
-                    deleted_created_channels += 1
-                except (discord.Forbidden, discord.HTTPException):
-                    kept_created_channels += 1
-            else:
-                kept_created_channels += 1
-
-        # 추적된 신규 카테고리는 비어 있을 때만 삭제합니다.
-        for category_id in list(backup.get("created_category_ids", [])):
-            category = guild.get_channel(int(category_id))
-            if isinstance(category, discord.CategoryChannel) and not category.channels:
-                try:
-                    await category.delete(reason=reason)
-                    await _renewal_pause()
-                    deleted_created_categories += 1
-                except (discord.Forbidden, discord.HTTPException):
-                    pass
-
-        # 구버전 백업에는 생성 ID가 없었습니다. 원본에 없던 알려진 테마 채널·카테고리만 보수적으로 정리합니다.
-        if int(backup.get("snapshot_version", 1) or 1) < 2 or not backup.get("created_category_ids"):
-            original_channel_ids = {int(row.get("id", 0)) for row in backup.get("channels", [])}
-            original_category_ids = {int(row.get("id", 0)) for row in backup.get("categories", [])}
-            known_channel_names = {_normalise_name(name) for name in _all_theme_channel_names()}
-            known_category_names = {_normalise_name(name) for name in _all_theme_category_names()}
-            tts_settings = _layout_settings(world_data, guild.id)["tts"]
-            protected_ids = {
-                int(value) for value in (
-                    tts_settings.get("text_channel_id"),
-                    tts_settings.get("voice_channel_id"),
-                    settings.get("menu_channel_id"),
-                ) if value
-            }
-            for channel in list([*guild.text_channels, *guild.voice_channels]):
-                if channel.id in original_channel_ids or channel.id in protected_ids:
-                    continue
-                if _normalise_name(channel.name) not in known_channel_names:
-                    continue
-                safe_to_delete = False
-                if isinstance(channel, discord.VoiceChannel):
-                    safe_to_delete = not channel.members
-                elif isinstance(channel, discord.TextChannel):
-                    try:
-                        latest = [message async for message in channel.history(limit=1)]
-                        safe_to_delete = not latest
-                    except (discord.Forbidden, discord.HTTPException):
-                        safe_to_delete = False
-                if not safe_to_delete:
-                    continue
-                try:
-                    await channel.delete(reason=f"{reason} / 구버전 잔여 채널")
-                    await _renewal_pause()
-                    legacy_channels_cleaned += 1
-                except (discord.Forbidden, discord.HTTPException):
-                    pass
-            for category in list(guild.categories):
-                if category.id in original_category_ids or category.channels:
-                    continue
-                if _normalise_name(category.name) not in known_category_names:
-                    continue
-                try:
-                    await category.delete(reason=f"{reason} / 구버전 잔여 카테고리")
-                    await _renewal_pause()
-                    legacy_cleaned += 1
-                except (discord.Forbidden, discord.HTTPException):
-                    pass
-
-        settings["style"] = None
-        settings["restored_at"] = int(time.time())
-        settings["last_restore_report"] = {
-            "restored": restored,
-            "deleted_created_channels": deleted_created_channels,
-            "kept_created_channels": kept_created_channels,
-            "deleted_created_categories": deleted_created_categories,
-            "legacy_cleaned": legacy_cleaned,
-            "legacy_channels_cleaned": legacy_channels_cleaned,
+        plan = {
+            "backup_number": backup_number,
+            "backup_created_at": int(backup.get("created_at", 0) or 0),
+            "created_at": int(time.time()),
+            "cursor": 0,
+            "actions": actions,
+            "next_allowed_at": 0,
+            "status": "ready",
+            "last_error": None,
         }
+        settings["recovery_plan"] = plan
+        settings["last_operation_status"] = "recovery_plan_ready"
         save_data()
-        await progress.edit(
-            content=(
-                f"✅ **서버 리뉴얼 복구 완료**\n"
-                f"원래 이름·위치 복원: **{restored}개**\n"
-                f"빈 신규 채널 삭제: **{deleted_created_channels}개**\n"
-                f"사용 흔적으로 보존: **{kept_created_channels}개**\n"
-                f"빈 신규 카테고리 삭제: **{deleted_created_categories}개**\n"
-                f"구버전 잔여 채널 정리: **{legacy_channels_cleaned}개**\n"
-                f"구버전 잔여 카테고리 정리: **{legacy_cleaned}개**\n\n"
-                "보존된 항목은 `!서버리뉴얼 빈카테고리선택`에서 직접 고를 수 있습니다."
-            )
+        if not actions:
+            await ctx.send("✅ 이 백업 기준으로 복원할 기존 채널 변경이 없습니다. 남은 복제 카테고리는 `!서버리뉴얼 빈카테고리선택`으로 정리하세요.")
+            return
+        await ctx.send(
+            "🛟 **안전 복구 계획을 만들었습니다.**\n"
+            f"백업: **{backup_number}번** · 처리 항목: **{len(actions)}개**\n\n"
+            "이 명령은 채널을 수정하지 않았습니다. Discord 429 재발을 막기 위해 아래 명령이 **한 번에 1개만** 복구합니다.\n"
+            "`!서버리뉴얼 복구다음`\n"
+            "진행 확인: `!서버리뉴얼 복구상태`"
         )
+
+    def _recovery_rate_limit_cap(seconds: float = RENEWAL_RATE_LIMIT_CAP):
+        http = bot.http
+        old_main = getattr(http, "max_ratelimit_timeout", None)
+        old_buckets = []
+        setattr(http, "max_ratelimit_timeout", seconds)
+        for bucket in getattr(http, "_buckets", {}).values():
+            if hasattr(bucket, "_max_ratelimit_timeout"):
+                old_buckets.append((bucket, getattr(bucket, "_max_ratelimit_timeout", None)))
+                setattr(bucket, "_max_ratelimit_timeout", seconds)
+        return http, old_main, old_buckets
+
+    def _restore_recovery_rate_limit_cap(state) -> None:
+        http, old_main, old_buckets = state
+        setattr(http, "max_ratelimit_timeout", old_main)
+        restored = {id(bucket) for bucket, _ in old_buckets}
+        for bucket, old_value in old_buckets:
+            with contextlib.suppress(Exception):
+                setattr(bucket, "_max_ratelimit_timeout", old_value)
+        for bucket in getattr(http, "_buckets", {}).values():
+            if id(bucket) not in restored and hasattr(bucket, "_max_ratelimit_timeout"):
+                with contextlib.suppress(Exception):
+                    setattr(bucket, "_max_ratelimit_timeout", old_main)
+
+    def _rate_limit_wait(exc: BaseException) -> int:
+        value = getattr(exc, "retry_after", None)
+        try:
+            wait = int(float(value)) if value is not None else 180
+        except (TypeError, ValueError):
+            wait = 180
+        return max(120, min(wait + 30, 900))
+
+    @server_renewal.command(name="복구다음", aliases=["recovernext", "복구계속"])
+    async def server_renewal_recover_next(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        if _renewal_running(guild.id):
+            await ctx.send("⚠️ 다른 리뉴얼 작업이 진행 중입니다. `!서버리뉴얼 중지` 후 다시 시도하세요.")
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        plan = settings.get("recovery_plan")
+        if not isinstance(plan, dict):
+            await ctx.send("⚠️ 복구 계획이 없습니다. 먼저 `!서버리뉴얼 되돌리기 1`을 실행하세요.")
+            return
+        actions = plan.get("actions", [])
+        cursor = int(plan.get("cursor", 0) or 0)
+        if cursor >= len(actions):
+            plan["status"] = "complete"
+            settings["style"] = None
+            settings["last_operation_status"] = "restored_stepwise"
+            save_data()
+            await ctx.send("✅ 단계별 복구가 모두 끝났습니다. 남은 빈 복제 카테고리는 `!서버리뉴얼 빈카테고리선택`으로 한 개씩 정리하세요.")
+            return
+        now = int(time.time())
+        next_allowed = int(plan.get("next_allowed_at", 0) or 0)
+        if now < next_allowed:
+            await ctx.send(f"⏳ Discord 채널 변경 제한을 식히는 중입니다. <t:{next_allowed}:R> 다시 실행하세요.")
+            return
+        action = actions[cursor]
+        channel = guild.get_channel(int(action.get("id", 0)))
+        if channel is None:
+            plan["cursor"] = cursor + 1
+            plan["last_error"] = "대상 채널 없음 — 건너뜀"
+            save_data()
+            await ctx.send(f"⚠️ 대상이 없어 **{cursor + 1}/{len(actions)}** 항목을 건너뛰었습니다. 다시 `!서버리뉴얼 복구다음`을 실행하세요.")
+            return
+
+        current_task = asyncio.current_task()
+        if current_task is not None:
+            RENEWAL_TASKS[guild.id] = current_task
+        reason = f"ABADDON v{VERSION} 단계별 안전 복구 / {ctx.author}"
+        cap_state = _recovery_rate_limit_cap()
+        try:
+            kind = str(action.get("kind"))
+            if kind == "rename":
+                await bot.http.edit_channel(channel.id, name=str(action.get("name", channel.name)), reason=reason)
+            elif kind == "move":
+                await bot.http.edit_channel(channel.id, parent_id=action.get("parent_id"), reason=reason)
+            else:
+                raise RuntimeError(f"알 수 없는 복구 작업: {kind}")
+            plan["cursor"] = cursor + 1
+            plan["next_allowed_at"] = int(time.time()) + RENEWAL_STEP_COOLDOWN
+            plan["status"] = "running" if cursor + 1 < len(actions) else "complete"
+            plan["last_error"] = None
+            settings["last_operation_status"] = "recovery_step_ok"
+            if cursor + 1 >= len(actions):
+                settings["style"] = None
+            save_data()
+            await ctx.send(
+                f"✅ **1개 항목 복구 완료** · {cursor + 1}/{len(actions)}\n"
+                f"처리: `{action.get('label', kind)}`\n"
+                + ("모든 복구가 끝났습니다." if cursor + 1 >= len(actions) else f"다음 실행 가능: <t:{plan['next_allowed_at']}:R>")
+            )
+        except Exception as exc:
+            name = exc.__class__.__name__
+            status = getattr(exc, "status", None)
+            if name == "RateLimited" or status == 429:
+                wait = _rate_limit_wait(exc)
+                plan["next_allowed_at"] = int(time.time()) + wait
+                plan["status"] = "cooldown"
+                plan["last_error"] = f"429 / {wait}초 대기"
+                settings["last_operation_status"] = "recovery_rate_limited"
+                save_data()
+                await ctx.send(
+                    "⏸️ **Discord 429를 감지해 즉시 중단했습니다.**\n"
+                    f"복구 항목은 진행하지 않았습니다. <t:{plan['next_allowed_at']}:R> 다시 `!서버리뉴얼 복구다음`을 실행하세요."
+                )
+            elif isinstance(exc, discord.Forbidden):
+                plan["last_error"] = "권한 부족"
+                plan["status"] = "blocked"
+                save_data()
+                await ctx.send("❌ 채널 관리 권한이 부족해 복구하지 못했습니다.")
+            else:
+                plan["last_error"] = f"{name}: {str(exc)[:180]}"
+                plan["status"] = "error"
+                save_data()
+                await ctx.send(f"❌ 복구 항목 처리 실패: `{name}: {str(exc)[:180]}`")
+        finally:
+            _restore_recovery_rate_limit_cap(cap_state)
+            if RENEWAL_TASKS.get(guild.id) is current_task:
+                RENEWAL_TASKS.pop(guild.id, None)
+
+    @server_renewal.command(name="복구상태", aliases=["recoverstatus"])
+    async def server_renewal_recover_status(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        plan = _layout_settings(world_data, guild.id)["layout"].get("recovery_plan")
+        if not isinstance(plan, dict):
+            await ctx.send("ℹ️ 저장된 단계별 복구 계획이 없습니다.")
+            return
+        actions = plan.get("actions", [])
+        cursor = int(plan.get("cursor", 0) or 0)
+        next_label = "완료" if cursor >= len(actions) else str(actions[cursor].get("label", "다음 항목"))
+        next_allowed = int(plan.get("next_allowed_at", 0) or 0)
+        cooldown = f"<t:{next_allowed}:R>" if next_allowed > int(time.time()) else "지금 가능"
+        await ctx.send(
+            "🛟 **단계별 복구 상태**\n"
+            f"진행: **{cursor}/{len(actions)}**\n"
+            f"상태: `{plan.get('status', 'unknown')}`\n"
+            f"다음: `{next_label}`\n"
+            f"실행 가능: {cooldown}\n"
+            f"최근 오류: `{plan.get('last_error') or '없음'}`"
+        )
+
+    @server_renewal.command(name="복구취소", aliases=["recovercancel"])
+    async def server_renewal_recover_cancel(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        if settings.pop("recovery_plan", None) is None:
+            await ctx.send("ℹ️ 취소할 복구 계획이 없습니다.")
+            return
+        settings["last_operation_status"] = "recovery_plan_cancelled"
+        save_data()
+        await ctx.send("✅ 단계별 복구 계획을 취소했습니다. 채널에는 추가 변경을 하지 않았습니다.")
+
+    @server_renewal.command(name="중지", aliases=["stop", "취소"])
+    async def server_renewal_stop(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        task = RENEWAL_TASKS.get(guild.id)
+        if task is None or task.done():
+            await ctx.send("ℹ️ 현재 진행 중인 서버 리뉴얼 작업이 없습니다.")
+            return
+        task.cancel()
+        await ctx.send("⛔ 서버 리뉴얼 작업에 중지 신호를 보냈습니다. 몇 초 안에 멈춥니다.")
+
+    @server_renewal.command(name="작업상태", aliases=["progress", "진행상태"])
+    async def server_renewal_progress(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        running = _renewal_running(guild.id)
+        await ctx.send(
+            f"🔧 진행 중: **{'예' if running else '아니오'}**\n"
+            f"마지막 상태: `{settings.get('last_operation_status', '기록 없음')}`\n"
+            f"중지 명령: `!서버리뉴얼 중지`"
+        )
+
+    @server_renewal.command(name="긴급정리", aliases=["cleanup", "잔여정리"])
+    async def server_renewal_emergency_cleanup(ctx: commands.Context, confirm: str = ""):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        if _renewal_running(guild.id):
+            await ctx.send("⚠️ 진행 중인 작업을 먼저 `!서버리뉴얼 중지`로 멈춰주세요.")
+            return
+        known_names = {_normalise_name(name) for name in _all_theme_category_names()}
+        empty = [category for category in guild.categories if not category.channels and _normalise_name(category.name) in known_names]
+        empty.sort(key=lambda category: (category.position, category.id))
+        if not empty:
+            await ctx.send("✅ 삭제 가능한 빈 리뉴얼 테마 카테고리가 없습니다.")
+            return
+        if confirm != "확인":
+            lines = [f"• `{category.name}` · ID `{category.id}`" for category in empty[:25]]
+            await ctx.send(
+                "⚠️ **빈 리뉴얼 카테고리 긴급 정리 미리보기**\n" + "\n".join(lines)
+                + "\n\n429 방지를 위해 실행할 때마다 **맨 위 1개만** 삭제합니다.\n"
+                "삭제: `!서버리뉴얼 긴급정리 확인`"
+            )
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        next_allowed = int(settings.get("cleanup_next_allowed_at", 0) or 0)
+        if int(time.time()) < next_allowed:
+            await ctx.send(f"⏳ 삭제 제한을 식히는 중입니다. <t:{next_allowed}:R> 다시 시도하세요.")
+            return
+        target = empty[0]
+        cap_state = _recovery_rate_limit_cap()
+        try:
+            await bot.http.delete_channel(target.id, reason=f"ABADDON v{VERSION} 빈 카테고리 1개 안전 삭제 / {ctx.author}")
+            settings["cleanup_next_allowed_at"] = int(time.time()) + RENEWAL_STEP_COOLDOWN
+            save_data()
+            await ctx.send(f"✅ 빈 카테고리 `{target.name}` 1개를 삭제했습니다. 다음 삭제 가능: <t:{settings['cleanup_next_allowed_at']}:R>")
+        except Exception as exc:
+            name = exc.__class__.__name__
+            status = getattr(exc, "status", None)
+            if name == "RateLimited" or status == 429:
+                wait = _rate_limit_wait(exc)
+                settings["cleanup_next_allowed_at"] = int(time.time()) + wait
+                save_data()
+                await ctx.send(f"⏸️ 429를 감지해 삭제하지 않았습니다. <t:{settings['cleanup_next_allowed_at']}:R> 다시 시도하세요.")
+            else:
+                await ctx.send(f"❌ 삭제 실패: `{name}: {str(exc)[:180]}`")
+        finally:
+            _restore_recovery_rate_limit_cap(cap_state)
 
     @server_renewal.command(name="상태", aliases=["status"])
     async def server_renewal_status(ctx: commands.Context):
@@ -2026,23 +2327,24 @@ def register_v433_voice_sanctuary(
             if not self.selected_ids:
                 await interaction.response.send_message("⚠️ 먼저 카테고리를 선택하세요.", ephemeral=True)
                 return
+            category_id = next(iter(self.selected_ids))
+            category = interaction.guild.get_channel(category_id)
             deleted = 0
             skipped = 0
-            for category_id in list(self.selected_ids):
-                category = interaction.guild.get_channel(category_id)
-                if not isinstance(category, discord.CategoryChannel) or category.channels:
-                    skipped += 1
-                    continue
+            if not isinstance(category, discord.CategoryChannel) or category.channels:
+                skipped = 1
+            else:
                 try:
-                    await category.delete(reason=f"ABADDON v{VERSION} 선택형 빈 카테고리 삭제 / {interaction.user}")
-                    await _renewal_pause()
-                    deleted += 1
+                    await interaction.client.http.delete_channel(
+                        category.id, reason=f"ABADDON v{VERSION} 선택형 빈 카테고리 1개 안전 삭제 / {interaction.user}"
+                    )
+                    deleted = 1
                 except (discord.Forbidden, discord.HTTPException):
-                    skipped += 1
+                    skipped = 1
             for child in self.children:
                 child.disabled = True
             await interaction.response.edit_message(
-                content=f"✅ 선택한 빈 카테고리 **{deleted}개**를 삭제했습니다. 건너뜀: **{skipped}개**",
+                content=f"✅ 429 방지를 위해 선택 항목 중 **1개만** 처리했습니다. 삭제: **{deleted}개** · 건너뜀: **{skipped}개**",
                 view=self,
             )
             self.stop()
@@ -2087,20 +2389,33 @@ def register_v433_voice_sanctuary(
         if not settings.get("backup"):
             _store_backup(settings, _snapshot_guild(guild, operation="empty_category_delete"))
             save_data()
-        deleted = 0
-        skipped = 0
-        reason = f"ABADDON v{VERSION} 선택형 빈 카테고리 정리 / {ctx.author}"
-        for category in targets:
-            if category.channels:
-                skipped += 1
-                continue
-            try:
-                await category.delete(reason=reason)
-                await _renewal_pause()
-                deleted += 1
-            except (discord.Forbidden, discord.HTTPException):
-                skipped += 1
-        await ctx.send(f"✅ 선택한 빈 카테고리 **{deleted}개**를 삭제했습니다. 건너뜀: **{skipped}개**")
+        target = targets[0]
+        if target.channels:
+            await ctx.send("⚠️ 선택한 첫 카테고리에 채널이 있어 삭제하지 않았습니다.")
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        next_allowed = int(settings.get("cleanup_next_allowed_at", 0) or 0)
+        if int(time.time()) < next_allowed:
+            await ctx.send(f"⏳ 삭제 제한을 식히는 중입니다. <t:{next_allowed}:R> 다시 시도하세요.")
+            return
+        cap_state = _recovery_rate_limit_cap()
+        try:
+            await bot.http.delete_channel(target.id, reason=f"ABADDON v{VERSION} 선택형 빈 카테고리 1개 안전 삭제 / {ctx.author}")
+            settings["cleanup_next_allowed_at"] = int(time.time()) + RENEWAL_STEP_COOLDOWN
+            save_data()
+            await ctx.send(f"✅ 429 방지를 위해 `{target.name}` **1개만** 삭제했습니다. 다음 삭제 가능: <t:{settings['cleanup_next_allowed_at']}:R>")
+        except Exception as exc:
+            name = exc.__class__.__name__
+            status = getattr(exc, "status", None)
+            if name == "RateLimited" or status == 429:
+                wait = _rate_limit_wait(exc)
+                settings["cleanup_next_allowed_at"] = int(time.time()) + wait
+                save_data()
+                await ctx.send(f"⏸️ 429를 감지해 삭제하지 않았습니다. <t:{settings['cleanup_next_allowed_at']}:R> 다시 시도하세요.")
+            else:
+                await ctx.send(f"❌ 삭제 실패: `{name}: {str(exc)[:180]}`")
+        finally:
+            _restore_recovery_rate_limit_cap(cap_state)
 
     @bot.group(name="서버메뉴", aliases=["채널메뉴", "안내패널"], invoke_without_command=True, case_insensitive=True)
     async def server_menu(ctx: commands.Context):

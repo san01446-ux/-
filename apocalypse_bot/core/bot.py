@@ -4231,7 +4231,7 @@ register_v432_forge_live(
     find_item, get_item_slot, progress_quest, check_achievements,
 )
 
-# V4.3.3.4: 사용자별 TTS + 서버 리뉴얼 복구·선택 삭제·7테마
+# V4.3.3.5: 서버 리뉴얼 429 안전 중단·중복 방지·긴급 복구
 # /tts 최상위 그룹 1개만 추가하며 등록 후 전체 최상위 100개 제한을 다시 검사합니다.
 from apocalypse_bot.commands.v433_voice_sanctuary import register_v433_voice_sanctuary
 register_v433_voice_sanctuary(bot, world_data, save_data)
