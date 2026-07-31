@@ -4183,6 +4183,11 @@ register_v411_server_guard_plus(bot, world_data, save_data)
 from apocalypse_bot.commands.v420_ops_center import register_v420_ops_center
 register_v420_ops_center(bot, world_data, save_data)
 
+# V4.2.1: 셀프 역할 패널/가입자 점검/일반 편의 기능
+# prefix 전용이라 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
+from apocalypse_bot.commands.v421_utility_pack import register_v421_utility_pack
+register_v421_utility_pack(bot, world_data, save_data)
+
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands

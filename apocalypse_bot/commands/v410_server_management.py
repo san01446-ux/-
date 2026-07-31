@@ -792,7 +792,7 @@ def register_v410_server_management(
             await ctx.send("❌ 서버 안에서만 사용할 수 있습니다.")
             return
         me = ctx.guild.me
-        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지", "운영대시보드")
+        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지", "운영대시보드", "셀프역할패널")
         registered = [name for name in command_names if bot.get_command(name) is not None]
         missing = [name for name in command_names if bot.get_command(name) is None]
         perms = me.guild_permissions if me is not None else None
