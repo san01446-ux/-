@@ -1040,6 +1040,38 @@ CRAFT_RECIPES = {
     "차원절단기": {"에너지코어": 20, "고대파편": 15},
 }
 
+CRAFT_FAILURE_COST_MIN = 120
+CRAFT_FAILURE_COST_MAX = 1_500
+
+
+def craft_failure_chance(recipe):
+    """간단 장비 약 9%, 최상위 장비 약 19% 범위의 제작 실패 확률입니다."""
+    total_materials = sum(max(0, int(amount)) for amount in recipe.values())
+    complexity = total_materials + len(recipe) * 2
+    return min(0.20, 0.07 + complexity * 0.003)
+
+
+def craft_failure_cost(balance, recipe):
+    balance = max(0, int(balance))
+    if balance <= 0:
+        return 0
+    total_materials = sum(max(0, int(amount)) for amount in recipe.values())
+    high = min(CRAFT_FAILURE_COST_MAX, 250 + total_materials * 35)
+    low = min(CRAFT_FAILURE_COST_MIN, high)
+    return min(balance, random.randint(low, high))
+
+
+def ensure_crafting_v624(u):
+    state = u.setdefault("crafting_v624", {})
+    if not isinstance(state, dict):
+        state = {}
+        u["crafting_v624"] = state
+    state.setdefault("failures", 0)
+    state.setdefault("total_failure_cost", 0)
+    state.setdefault("last_failure_item", "")
+    return state
+
+
 ACHIEVEMENTS = {
     "첫 승리": ("dungeon_wins", 1, "전투의 시작"),
     "숙련 사냥꾼": ("dungeon_wins", 25, "감염자 사냥꾼"),
@@ -2064,6 +2096,64 @@ async def 제작(ctx, *, 아이템이름: str):
         await ctx.send("⚠️ 부족한 재료: " + ", ".join(missing))
         return
 
+    suspense = await ctx.send(
+        f"🛠️ **{아이템이름} 제작 시작...**\n"
+        "▰▰▱▱▱ 재료를 분해하고 작업대를 예열합니다."
+    )
+    await asyncio.sleep(0.6)
+    try:
+        await suspense.edit(
+            content=(
+                f"⚙️ **{아이템이름} 조립 중...**\n"
+                "▰▰▰▰▱ 결합부와 에너지 흐름을 점검합니다."
+            )
+        )
+    except (discord.Forbidden, discord.HTTPException, AttributeError):
+        pass
+    await asyncio.sleep(0.6)
+
+    fail_chance = craft_failure_chance(recipe)
+    if random.random() < fail_chance:
+        before_balance = int(u.get("balance", 0))
+        loss = craft_failure_cost(before_balance, recipe)
+        u["balance"] = max(0, before_balance - loss)
+        crafting = ensure_crafting_v624(u)
+        crafting["failures"] = int(crafting.get("failures", 0)) + 1
+        crafting["total_failure_cost"] = int(crafting.get("total_failure_cost", 0)) + loss
+        crafting["last_failure_item"] = 아이템이름
+        save_data()
+
+        embed = discord.Embed(
+            title="💥 제작 실패",
+            description=random.choice([
+                "접합부가 틀어지며 작업대의 전원 계통이 타버렸습니다.",
+                "설계 수치가 어긋나 부품을 다시 분해해야 합니다.",
+                "에너지 흐름이 역류해 긴급 정지 장치가 작동했습니다.",
+                "마지막 고정핀에서 균열이 발견되어 제작을 중단했습니다.",
+            ]),
+            color=discord.Color.red(),
+        )
+        embed.add_field(name="🛠️ 제작 대상", value=f"**{아이템이름}**", inline=True)
+        embed.add_field(
+            name="💸 작업대 수리비",
+            value=f"**-{loss:,} 식량**" if loss else "**0 식량 · 잔액 보호**",
+            inline=True,
+        )
+        embed.add_field(name="💳 현재 잔액", value=f"**{int(u.get('balance', 0)):,} 식량**", inline=True)
+        embed.add_field(name="🎲 실패 확률", value=f"**{fail_chance * 100:.1f}%**", inline=True)
+        embed.add_field(name="📦 제작 재료", value="**보존됨**", inline=True)
+        embed.add_field(
+            name="📉 누적 수리비",
+            value=f"**{int(crafting.get('total_failure_cost', 0)):,} 식량**",
+            inline=True,
+        )
+        embed.set_footer(text="실패 시 재료는 사라지지 않고 작업대 수리비만 무작위로 차감됩니다")
+        try:
+            await suspense.edit(content=None, embed=embed)
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            pass
+        return
+
     for material, amount in recipe.items():
         u["materials"][material] -= amount
 
@@ -2074,10 +2164,26 @@ async def 제작(ctx, *, 아이템이름: str):
     unlocked = check_achievements(u)
     save_data()
 
-    msg = f"🛠️ **[제작 성공]** {아이템이름} 완성!"
+    embed = discord.Embed(
+        title="✅ 제작 성공",
+        description=f"작업대에서 **{아이템이름}** 제작을 완료했습니다.",
+        color=discord.Color.green(),
+    )
+    embed.add_field(name="🛠️ 완성 장비", value=f"**{아이템이름}**", inline=True)
+    embed.add_field(
+        name="📦 사용 재료",
+        value=" · ".join(f"{name} {amount}개" for name, amount in recipe.items()),
+        inline=False,
+    )
+    embed.add_field(name="💳 현재 잔액", value=f"**{int(u.get('balance', 0)):,} 식량**", inline=True)
+    embed.add_field(name="📊 제작 성공 누계", value=f"**{int(u['stats'].get('craft_count', 0))}회**", inline=True)
     if unlocked:
-        msg += "\n🏆 업적 달성: " + ", ".join(x[0] for x in unlocked)
-    await ctx.send(msg)
+        embed.add_field(name="🏆 업적 달성", value=", ".join(x[0] for x in unlocked), inline=False)
+    embed.set_footer(text="ABADDON 제작 기록 · 결과를 항목별 임베드로 표시")
+    try:
+        await suspense.edit(content=None, embed=embed)
+    except (discord.Forbidden, discord.HTTPException, AttributeError):
+        pass
 
 
 # =========================================================

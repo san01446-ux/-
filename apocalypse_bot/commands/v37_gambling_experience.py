@@ -42,6 +42,8 @@ WORK_COOLDOWN_SECONDS = 8
 
 COIN_DAILY_LIMIT = 30
 COIN_COOLDOWN_SECONDS = 3 * 60
+COIN_FAILURE_COST_MIN = 60
+COIN_FAILURE_COST_MAX = 350
 # 전체 확률 기준: 실패 35.0% / 일반 48.0% / 희귀 12.0% / 영웅 3.8% / 전설 1.1% / 신화 0.1%
 COIN_DRAW_WEIGHTS: Sequence[Tuple[str, int]] = (
     ("실패", 350),
@@ -232,6 +234,7 @@ def _ensure_coin_profile(account: Dict[str, Any]) -> Dict[str, Any]:
         "total_claims": 0,
         "total_attempts": 0,
         "failures": 0,
+        "total_failure_cost": 0,
     }
     for key, value in defaults.items():
         coin.setdefault(key, value)
@@ -247,6 +250,16 @@ def _coin_cooldown_remaining(coin: Dict[str, Any]) -> int:
         return 0
     remaining = int((last + timedelta(seconds=COIN_COOLDOWN_SECONDS) - _utc_now()).total_seconds())
     return max(0, remaining)
+
+
+def _coin_failure_cost(balance: int) -> int:
+    """잔액을 음수로 만들지 않는 코인 스캐너 수리비를 계산합니다."""
+    balance = max(0, int(balance))
+    if balance <= 0:
+        return 0
+    high = min(COIN_FAILURE_COST_MAX, max(120, balance // 25 + 100))
+    low = min(COIN_FAILURE_COST_MIN, high)
+    return min(balance, random.randint(low, high))
 
 
 def _format_seconds(seconds: int) -> str:
@@ -723,9 +736,16 @@ def register_v37_commands(
             await ctx.send(f"⏳ 다음 코인 탐색까지 **{_format_seconds(remaining_seconds)}** 남았습니다.")
             return
 
-        suspense = await ctx.send("🪙 **폐허 코인 스캐너 가동...**\n무너진 금고의 신호를 추적하고 있습니다.")
+        suspense = await ctx.send(
+            "🪙 **폐허 코인 스캐너 가동...**\n"
+            "◐ → ◓ → ◑ · 무너진 금고의 신호를 추적합니다."
+        )
         await asyncio.sleep(0.8)
-        await _edit_message(suspense, "🔐 **암호 해독 중...**\n높은 등급일수록 발견 확률이 매우 낮습니다.")
+        await _edit_message(
+            suspense,
+            "🔐 **암호 해독 중...**\n"
+            "◓ → ◑ → ◒ · 자산 서명과 위조 신호를 분리합니다.",
+        )
         await asyncio.sleep(0.8)
 
         keys = [item[0] for item in COIN_DRAW_WEIGHTS]
@@ -739,24 +759,44 @@ def register_v37_commands(
 
         if draw_result == "실패":
             coin["failures"] = int(coin.get("failures", 0)) + 1
+            before_balance = int(user.get("balance", 0))
+            failure_cost = _coin_failure_cost(before_balance)
+            user["balance"] = max(0, before_balance - failure_cost)
+            coin["total_failure_cost"] = int(coin.get("total_failure_cost", 0)) + failure_cost
             save_data()
-            failure_text = random.choice(
-                [
-                    "금고 신호가 끊겼습니다. 먼지와 빈 탄피만 발견했습니다.",
-                    "감염체가 먼저 금고를 헤집고 갔습니다. 남은 코인이 없습니다.",
-                    "위조 신호였습니다. 스캐너가 허공만 추적했습니다.",
-                    "잠금장치가 붕괴하면서 내부 자산이 잔해 아래로 사라졌습니다.",
-                    "폐허 상인이 한발 먼저 챙겨 갔습니다. 이번 탐색은 실패입니다.",
-                ]
+            failure_text = random.choice([
+                "금고 신호가 끊겼습니다. 먼지와 빈 탄피만 발견했습니다.",
+                "감염체가 먼저 금고를 헤집고 갔습니다. 남은 코인이 없습니다.",
+                "위조 신호였습니다. 스캐너가 허공만 추적했습니다.",
+                "잠금장치가 붕괴하면서 내부 자산이 잔해 아래로 사라졌습니다.",
+                "폐허 상인이 한발 먼저 챙겨 갔습니다. 이번 탐색은 실패입니다.",
+            ])
+            embed = discord.Embed(
+                title="🕳️ 코인 탐색 실패",
+                description=failure_text,
+                color=discord.Color.dark_red(),
+                timestamp=_utc_now(),
             )
-            await _edit_message(
-                suspense,
-                f"🕳️ **[코인 탐색 실패]**\n{failure_text}\n"
-                f"실패 확률 **35.0%** · 오늘 남은 탐색 **{remaining}회**\n"
-                f"다음 탐색은 **3분 후** 가능합니다."
-                + ("\n🧰 오늘 코인을 모두 썼습니다. 다음 수입은 `!알바`, 그다음은 `!땅파기`입니다." if remaining == 0 else "")
+            repair_value = f"**-{failure_cost:,} 식량**" if failure_cost else "**0 식량 · 잔액 보호**"
+            embed.add_field(name="💸 스캐너 수리비", value=repair_value, inline=True)
+            embed.add_field(name="💳 현재 잔액", value=f"**{int(user['balance']):,} 식량**", inline=True)
+            embed.add_field(name="📅 오늘 남은 탐색", value=f"**{remaining}회**", inline=True)
+            embed.add_field(name="🎲 실패 확률", value="**35.0%**", inline=True)
+            embed.add_field(name="⏳ 다음 탐색", value="**3분 후**", inline=True)
+            embed.add_field(
+                name="📉 누적 실패 비용",
+                value=f"**{int(coin.get('total_failure_cost', 0)):,} 식량**",
+                inline=True,
             )
-            await _safe_reactions(suspense, ("❌", "🕳️", "😭", "🪨", "💨"))
+            if remaining == 0:
+                embed.add_field(
+                    name="🧰 다음 수입 루트",
+                    value="오늘 코인을 모두 사용했습니다. `!알바` 다음에는 `!땅파기`를 이용하세요.",
+                    inline=False,
+                )
+            embed.set_footer(text="실패 비용은 잔액을 넘지 않으며 60~350 식량 범위에서 계산됩니다")
+            await _edit_embed(suspense, embed)
+            await _safe_reactions(suspense, ("❌", "🕳️", "😭", "💸", "🪨"))
             return
 
         asset_key = draw_result
@@ -767,7 +807,6 @@ def register_v37_commands(
         old_quantity = int(position.get("quantity", 0))
         old_avg = int(position.get("avg_price", 0))
         new_quantity = old_quantity + 1
-        # 무료 획득분은 매입 원가 0으로 반영되어 평균 단가가 내려갑니다.
         position["quantity"] = new_quantity
         position["avg_price"] = int(round((old_quantity * old_avg) / max(new_quantity, 1)))
         coin["total_claims"] = int(coin.get("total_claims", 0)) + 1
@@ -776,15 +815,27 @@ def register_v37_commands(
 
         probability_map = {"보급권": "48.0%", "군수권": "12.0%", "혈청": "3.8%", "유물": "1.1%", "코어": "0.1%"}
         grade_map = {"보급권": "일반", "군수권": "희귀", "혈청": "영웅", "유물": "전설", "코어": "신화"}
-        await _edit_message(
-            suspense,
-            f"🪙 **[{grade_map[asset_key]} 코인 발견]**\n"
-            f"{info['emoji']} **{info['name']} 1개** 획득!\n"
-            f"전체 등장 확률 **{probability_map[asset_key]}** · 현재 시세 **{current_price:,} 식량**\n"
-            f"보유 수량 **{new_quantity:,}개** · 오늘 남은 탐색 **{remaining}회**\n"
-            f"다음 탐색은 **3분 후** 가능합니다."
-            + ("\n🧰 오늘 코인을 모두 썼습니다. 다음 수입은 `!알바`, 그다음은 `!땅파기`입니다." if remaining == 0 else "")
+        color_map = {"보급권": 0x95A5A6, "군수권": 0x3498DB, "혈청": 0xE67E22, "유물": 0x9B59B6, "코어": 0xF1C40F}
+        embed = discord.Embed(
+            title=f"{info['emoji']} {grade_map[asset_key]} 코인 발견",
+            description="금고 신호가 실물 자산 서명과 일치했습니다.",
+            color=color_map[asset_key],
+            timestamp=_utc_now(),
         )
+        embed.add_field(name="🪙 이번 발견", value=f"**{info['name']} +1개**", inline=True)
+        embed.add_field(name="🎲 등장 확률", value=f"**{probability_map[asset_key]}**", inline=True)
+        embed.add_field(name="📈 현재 시세", value=f"**{current_price:,} 식량**", inline=True)
+        embed.add_field(name="📦 보유 수량", value=f"**{new_quantity:,}개**", inline=True)
+        embed.add_field(name="📅 오늘 남은 탐색", value=f"**{remaining}회**", inline=True)
+        embed.add_field(name="⏳ 다음 탐색", value="**3분 후**", inline=True)
+        if remaining == 0:
+            embed.add_field(
+                name="🧰 다음 수입 루트",
+                value="오늘 코인을 모두 사용했습니다. `!알바` 다음에는 `!땅파기`를 이용하세요.",
+                inline=False,
+            )
+        embed.set_footer(text="ABADDON 암시장 코인 스캐너 · 결과를 항목별 임베드로 표시")
+        await _edit_embed(suspense, embed)
         reaction_map = {
             "보급권": ("🪙", "✅", "📦"),
             "군수권": ("🔵", "✨", "🎯", "🪙"),

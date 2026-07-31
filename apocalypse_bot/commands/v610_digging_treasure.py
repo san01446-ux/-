@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.2.1"
+VERSION = "6.2.4"
 KST = ZoneInfo("Asia/Seoul")
 DIG_DAILY_LIMIT = 50
 DIG_COOLDOWN_SECONDS = 60
@@ -116,6 +116,18 @@ async def _safe_reactions(message: Optional[discord.Message], emojis: Iterable[s
             return
 
 
+async def _safe_edit(
+    message: discord.Message,
+    *,
+    content: Optional[str] = None,
+    embed: Optional[discord.Embed] = None,
+) -> None:
+    try:
+        await message.edit(content=content, embed=embed)
+    except (discord.Forbidden, discord.HTTPException, AttributeError):
+        pass
+
+
 def _ensure_profile(user: Dict[str, Any]) -> Dict[str, Any]:
     profile = user.setdefault("digging_v610", {})
     if not isinstance(profile, dict):
@@ -209,7 +221,8 @@ def _grade_reactions(grade: str) -> Tuple[str, ...]:
     }.get(grade, ("✅",))
 
 
-def _ordinary_find(user: Dict[str, Any]) -> Tuple[str, Tuple[str, ...]]:
+def _ordinary_find(user: Dict[str, Any]) -> Dict[str, Any]:
+    """물자를 지급하고 결과 임베드용 구조화 정보를 반환합니다."""
     roll = random.random()
     resources = user.setdefault("resources", {})
     if not isinstance(resources, dict):
@@ -221,28 +234,129 @@ def _ordinary_find(user: Dict[str, Any]) -> Tuple[str, Tuple[str, ...]]:
         user["materials"] = materials
 
     if roll < 0.28:
-        return random.choice((
-            "🕳️ 삽 끝에 걸린 건 깨진 콘크리트뿐입니다. 먼지만 한가득 날렸습니다.",
-            "🪨 단단한 기반암입니다. 오늘은 땅이 입을 꾹 다물었습니다.",
-            "🧟 오래된 감염체 발자국만 발견했습니다. 쓸 만한 물건은 없습니다.",
-        )), ("🕳️", "🪨", "😵", "🧹")
+        return {
+            "kind": "empty",
+            "emoji": "🕳️",
+            "label": "빈 굴착층",
+            "amount": 0,
+            "unit": "",
+            "total": None,
+            "description": random.choice((
+                "삽 끝에 걸린 건 깨진 콘크리트뿐입니다. 먼지만 한가득 날렸습니다.",
+                "단단한 기반암입니다. 오늘은 땅이 입을 꾹 다물었습니다.",
+                "오래된 감염체 발자국만 발견했습니다. 쓸 만한 물건은 없습니다.",
+            )),
+            "empty": True,
+            "reactions": ("🕳️", "🪨", "😵", "🧹"),
+        }
     if roll < 0.55:
         amount = random.randint(1, 5)
         resources["고철"] = int(resources.get("고철", 0)) + amount
-        return f"🔩 녹슨 배관 아래에서 **고철 {amount}개**를 캐냈습니다.", ("🔩", "⛏️", "📦", "✅")
+        return {
+            "kind": "scrap", "emoji": "🔩", "label": "고철", "amount": amount,
+            "unit": "개", "total": int(resources["고철"]), "empty": False,
+            "description": "녹슨 배관 아래에서 재사용 가능한 금속 조각을 캐냈습니다.",
+            "reactions": ("🔩", "⛏️", "📦", "✅"),
+        }
     if roll < 0.72:
         amount = random.randint(1, 4)
         resources["광석"] = int(resources.get("광석", 0)) + amount
-        return f"⛏️ 콘크리트 틈에서 **광석 {amount}개**가 반짝였습니다.", ("⛏️", "🪨", "✨", "✅")
+        return {
+            "kind": "ore", "emoji": "🪨", "label": "광석", "amount": amount,
+            "unit": "개", "total": int(resources["광석"]), "empty": False,
+            "description": "콘크리트 틈 사이에서 희미하게 반짝이는 광맥을 찾아냈습니다.",
+            "reactions": ("⛏️", "🪨", "✨", "✅"),
+        }
     if roll < 0.88:
         amount = random.randint(35, 140)
         user["balance"] = int(user.get("balance", 0)) + amount
-        user.setdefault("stats", {}).setdefault("earned", 0)
-        user["stats"]["earned"] = int(user["stats"].get("earned", 0)) + amount
-        return f"🥫 묻혀 있던 비상 식량 상자를 발견해 **식량 {amount}개**를 회수했습니다.", ("🥫", "💰", "📦", "👏")
+        stats = user.setdefault("stats", {})
+        if not isinstance(stats, dict):
+            stats = {}
+            user["stats"] = stats
+        stats["earned"] = int(stats.get("earned", 0)) + amount
+        return {
+            "kind": "food", "emoji": "🥫", "label": "비상 식량", "amount": amount,
+            "unit": "식량", "total": int(user["balance"]), "empty": False,
+            "description": "묻혀 있던 비상 식량 상자의 밀봉 상태가 아직 멀쩡합니다.",
+            "reactions": ("🥫", "💰", "📦", "👏"),
+        }
     amount = random.randint(1, 3)
     materials["고대파편"] = int(materials.get("고대파편", 0)) + amount
-    return f"🧩 정체불명의 금속 조각 **고대파편 {amount}개**를 찾았습니다.", ("🧩", "✨", "🔬", "✅")
+    return {
+        "kind": "ancient_fragment", "emoji": "🧩", "label": "고대파편", "amount": amount,
+        "unit": "개", "total": int(materials["고대파편"]), "empty": False,
+        "description": "정체불명의 합금 조각에서 오래된 에너지 반응이 감지됩니다.",
+        "reactions": ("🧩", "✨", "🔬", "✅"),
+    }
+
+
+def _dig_result_embed(
+    user: Dict[str, Any],
+    profile: Dict[str, Any],
+    cash_reward: int,
+    remaining: int,
+    *,
+    result: Optional[Mapping[str, Any]] = None,
+    treasure: Optional[Mapping[str, Any]] = None,
+) -> discord.Embed:
+    if treasure is not None:
+        embed = discord.Embed(
+            title="💎 희귀 굴착 결과",
+            description="⚠️ 지하에서 이상 신호가 감지됐습니다. 봉인된 보물 상자가 잔해 사이로 모습을 드러냈습니다.",
+            color=discord.Color.gold(),
+            timestamp=_utc_now(),
+        )
+        embed.add_field(
+            name="❓ 이번 발견",
+            value=f"**미감정 보물 +1개**\nID `{treasure.get('id', 'UNKNOWN')}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="📦 미감정 보물함",
+            value=f"**{len(profile.get('pending', []))}/{PENDING_LIMIT}개**",
+            inline=True,
+        )
+    else:
+        current = dict(result or {})
+        is_empty = bool(current.get("empty"))
+        embed = discord.Embed(
+            title=f"{current.get('emoji', '⛏️')} 폐허 굴착 결과",
+            description=str(current.get("description") or "굴착 결과를 정리했습니다."),
+            color=discord.Color.dark_grey() if is_empty else discord.Color.dark_teal(),
+            timestamp=_utc_now(),
+        )
+        if is_empty:
+            found_value = "**쓸 만한 물자 없음**"
+        else:
+            found_value = (
+                f"{current.get('emoji', '📦')} **{current.get('label', '물자')} "
+                f"+{int(current.get('amount', 0)):,}{current.get('unit', '')}**"
+            )
+        embed.add_field(name="🎒 이번 발견", value=found_value, inline=True)
+        total = current.get("total")
+        if total is None:
+            total_value = "변동 없음"
+        elif current.get("kind") == "food":
+            total_value = f"**{int(total):,} 식량**"
+        else:
+            total_value = f"**{int(total):,}{current.get('unit', '')}**"
+        embed.add_field(name="📦 현재 보유", value=total_value, inline=True)
+
+    embed.add_field(name="💰 굴착 잔돈", value=f"**+{cash_reward:,} 식량**", inline=True)
+    embed.add_field(name="💳 현재 잔액", value=f"**{int(user.get('balance', 0)):,} 식량**", inline=True)
+    embed.add_field(name="📅 오늘 남은 땅파기", value=f"**{remaining}회**", inline=True)
+    embed.add_field(name="⏳ 다음 굴착", value="**1분 후**", inline=True)
+    if len(profile.get("pending", [])) >= PENDING_LIMIT:
+        embed.add_field(
+            name="⚠️ 보물함 포화",
+            value="미감정 보물함이 가득 차 보물 발견 판정이 잠시 중단됩니다.",
+            inline=False,
+        )
+    elif treasure is not None:
+        embed.add_field(name="🔎 다음 행동", value="`!보물감정`에서 감정사를 선택하세요.", inline=False)
+    embed.set_footer(text=f"ABADDON 굴착 기록 v{VERSION} · 결과를 이모지와 항목별로 표시")
+    return embed
 
 
 def register_v610_digging_treasure(
@@ -274,6 +388,20 @@ def register_v610_digging_treasure(
             )
             await _safe_reactions(message, ("⚠️", "🥫", "🧓"))
             return
+
+        suspense = await ctx.send(
+            f"{info['emoji']} **{info['label']} 감정 준비...**\n"
+            "▰▰▱▱▱ 표면 오염을 제거하고 있습니다."
+        )
+        await asyncio.sleep(0.6)
+        await _safe_edit(
+            suspense,
+            content=(
+                f"{info['emoji']} **유물 문양 분석 중...**\n"
+                "▰▰▰▰▱ 가치 반응과 등급 신호를 대조합니다."
+            ),
+        )
+        await asyncio.sleep(0.6)
 
         treasure = pending.pop(0)
         original_grade = str(treasure.get("grade", "E"))
@@ -316,8 +444,8 @@ def register_v610_digging_treasure(
         embed.add_field(name="💰 현재 잔액", value=f"**{int(user['balance']):,} 식량**", inline=True)
         embed.add_field(name="📦 남은 미감정", value=f"**{len(pending)}개**", inline=True)
         embed.set_footer(text=f"ABADDON 보물 감정소 v{VERSION} · 감정과 동시에 식량으로 매입됩니다")
-        message = await ctx.send(embed=embed)
-        await _safe_reactions(message, _grade_reactions(final_grade))
+        await _safe_edit(suspense, content=None, embed=embed)
+        await _safe_reactions(suspense, _grade_reactions(final_grade))
 
     class AppraiserSelect(discord.ui.Select):
         def __init__(self, owner_id: int) -> None:
@@ -374,17 +502,25 @@ def register_v610_digging_treasure(
             return
         remaining_seconds = _cooldown_remaining(profile)
         if remaining_seconds > 0:
-            message = await ctx.send(f"⏳ 땅이 아직 가라앉는 중입니다. 다음 굴착까지 **{_format_seconds(remaining_seconds)}** 남았습니다.")
+            message = await ctx.send(
+                f"⏳ 땅이 아직 가라앉는 중입니다. 다음 굴착까지 **{_format_seconds(remaining_seconds)}** 남았습니다."
+            )
             await _safe_reactions(message, ("⏳", "⛏️", "🪨"))
             return
 
-        suspense = await ctx.send("⛏️ **폐허 굴착 시작!**\n삽날이 콘크리트 아래의 오래된 층을 긁어냅니다...")
+        suspense = await ctx.send(
+            "⛏️ **폐허 지반을 파내는 중...**\n"
+            "▰▰▱▱▱ 40% · 콘크리트층을 분리합니다."
+        )
         await _safe_reactions(suspense, ("⛏️", "🪨"))
         await asyncio.sleep(0.7)
-        try:
-            await suspense.edit(content="🧤 **잔해를 걷어내는 중...**\n금속성 소리와 함께 무언가가 모습을 드러냅니다.")
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            pass
+        await _safe_edit(
+            suspense,
+            content=(
+                "🧤 **잔해 신호를 분류하는 중...**\n"
+                "▰▰▰▰▱ 80% · 금속성과 생체 신호를 확인합니다."
+            ),
+        )
         await asyncio.sleep(0.7)
 
         profile["attempts"] = attempts + 1
@@ -399,39 +535,25 @@ def register_v610_digging_treasure(
             profile["pending"].append(treasure)
             profile["treasure_count"] = int(profile.get("treasure_count", 0)) + 1
             save_data()
-            try:
-                await suspense.edit(
-                    content=(
-                        "💥 **삽 끝에서 봉인된 상자가 튀어나왔습니다!**\n"
-                        f"❓ **미감정 보물 1개** 획득 · 보물 ID `{treasure['id']}`\n"
-                        f"📦 미감정 보물함 **{len(profile['pending'])}/{PENDING_LIMIT}**\n"
-                        f"💰 잔해 속 생존 자금 **+{cash_reward:,} 식량**\n"
-                        f"📅 오늘 남은 땅파기 **{remaining}회**\n\n"
-                        "감정사를 선택하려면 `!보물감정`을 입력하세요."
-                    )
-                )
-            except (discord.Forbidden, discord.HTTPException, AttributeError):
-                pass
+            await _safe_edit(
+                suspense,
+                content=None,
+                embed=_dig_result_embed(user, profile, cash_reward, remaining, treasure=treasure),
+            )
             await _safe_reactions(suspense, ("💥", "📦", "💎", "💰", "❓", "✨", "⛏️"))
             return
 
-        text, reactions = _ordinary_find(user)
+        result = _ordinary_find(user)
         profile["ordinary_count"] = int(profile.get("ordinary_count", 0)) + 1
-        if text.startswith(("🕳️", "🪨", "🧟")):
+        if bool(result.get("empty")):
             profile["empty_count"] = int(profile.get("empty_count", 0)) + 1
         save_data()
-        full_note = "\n⚠️ 미감정 보물함이 가득 차 보물 발견 판정은 잠시 중단됩니다." if len(profile["pending"]) >= PENDING_LIMIT else ""
-        try:
-            await suspense.edit(
-                content=(
-                    f"{text}\n"
-                    f"💰 잔해 속 생존 자금 **+{cash_reward:,} 식량**\n"
-                    f"📅 오늘 남은 땅파기 **{remaining}회** · 다음 굴착 **1분 후**"
-                    f"{full_note}"
-                )
-            )
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            pass
+        await _safe_edit(
+            suspense,
+            content=None,
+            embed=_dig_result_embed(user, profile, cash_reward, remaining, result=result),
+        )
+        reactions = tuple(result.get("reactions", ("⛏️", "✅")))
         await _safe_reactions(suspense, tuple(dict.fromkeys((*reactions, "💰"))))
 
     @bot.command(name="보물감정", aliases=["보물감정소", "감정소"])
