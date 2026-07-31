@@ -4231,8 +4231,8 @@ register_v432_forge_live(
     find_item, get_item_slot, progress_quest, check_achievements,
 )
 
-# V4.3.3.2: 자동 입장 TTS + 신규 생존자 인삿말 + 서버 리뉴얼 속도 제한 보강
-# prefix 전용 명령으로 추가하여 Discord 글로벌 slash 100개 제한을 사용하지 않습니다.
+# V4.3.3.4: 사용자별 TTS + 서버 리뉴얼 복구·선택 삭제·7테마
+# /tts 최상위 그룹 1개만 추가하며 등록 후 전체 최상위 100개 제한을 다시 검사합니다.
 from apocalypse_bot.commands.v433_voice_sanctuary import register_v433_voice_sanctuary
 register_v433_voice_sanctuary(bot, world_data, save_data)
 

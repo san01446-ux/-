@@ -16,82 +16,182 @@ from urllib.parse import urlencode
 
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "4.3.3.2"
+VERSION = "4.3.3.4"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
 DEFAULT_IDLE_SECONDS = 600
-RENEWAL_EDIT_DELAY = 0.8
+RENEWAL_EDIT_DELAY = 1.0
 
 VOICE_PRESETS: Dict[str, Dict[str, str]] = {
-    "서현": {"edge": "ko-KR-SunHiNeural", "label": "차분한 여성 음성"},
-    "인준": {"edge": "ko-KR-InJoonNeural", "label": "차분한 남성 음성"},
-    "봉진": {"edge": "ko-KR-BongJinNeural", "label": "낮고 안정적인 남성 음성"},
-    "국민": {"edge": "ko-KR-GookMinNeural", "label": "또렷한 남성 음성"},
+    "선히": {"edge": "ko-KR-SunHiNeural", "label": "밝고 자연스러운 여성 음성", "gender": "여성"},
+    "서현": {"edge": "ko-KR-SeoHyeonNeural", "label": "차분하고 선명한 여성 음성", "gender": "여성"},
+    "지민": {"edge": "ko-KR-JiMinNeural", "label": "부드럽고 친근한 여성 음성", "gender": "여성"},
+    "순복": {"edge": "ko-KR-SoonBokNeural", "label": "편안하고 안정적인 여성 음성", "gender": "여성"},
+    "유진": {"edge": "ko-KR-YuJinNeural", "label": "또렷하고 생기 있는 여성 음성", "gender": "여성"},
+    "인준": {"edge": "ko-KR-InJoonNeural", "label": "차분하고 부드러운 남성 음성", "gender": "남성"},
+    "봉진": {"edge": "ko-KR-BongJinNeural", "label": "낮고 안정적인 남성 음성", "gender": "남성"},
+    "국민": {"edge": "ko-KR-GookMinNeural", "label": "또렷하고 힘 있는 남성 음성", "gender": "남성"},
+    "현수": {"edge": "ko-KR-HyunsuNeural", "label": "담백하고 자연스러운 남성 음성", "gender": "남성"},
+    "현수다국어": {"edge": "ko-KR-HyunsuMultilingualNeural", "label": "외국어 발음도 지원하는 남성 음성", "gender": "남성"},
+}
+
+VOICE_CHOICE_LABELS: Dict[str, str] = {
+    name: f"{name} · {data['gender']} · {data['label']}"
+    for name, data in VOICE_PRESETS.items()
+}
+
+VOICE_APP_CHOICES: List[app_commands.Choice[str]] = [
+    app_commands.Choice(name=label[:100], value=name)
+    for name, label in VOICE_CHOICE_LABELS.items()
+]
+
+
+def _voice_name_or_default(value: Any, default: str = "선히") -> str:
+    name = str(value or default)
+    return name if name in VOICE_PRESETS else default
+
+
+def _personal_voice(settings: Dict[str, Any], user_id: int) -> str:
+    user_voices = settings.setdefault("user_voices", {})
+    return _voice_name_or_default(user_voices.get(str(user_id)), _voice_name_or_default(settings.get("voice")))
+
+
+THEME_META: Dict[str, Dict[str, Any]] = {
+    "깔끔": {"label": "정돈된 기본형", "color": 0x5865F2},
+    "고딕": {"label": "검은 성역", "color": 0x6D2335},
+    "커뮤니티": {"label": "친근한 커뮤니티", "color": 0x57F287},
+    "미니멀": {"label": "짧고 단순한 메뉴", "color": 0x99AAB5},
+    "사이버": {"label": "네온·터미널", "color": 0x00D9FF},
+    "아포칼립스": {"label": "폐허 생존기지", "color": 0xF47B20},
+    "판타지": {"label": "길드·왕국", "color": 0x9B59B6},
 }
 
 
+def _theme_color(style: str) -> int:
+    return int(THEME_META.get(style, THEME_META["깔끔"])["color"])
+
+
 def _text_channel_specs(style: str) -> List[Dict[str, Any]]:
-    if style == "고딕":
-        return [
-            {"key": "notice", "category": "╭─〔 ☩ 성역의 문 〕─╮", "name": "📜・성역-공지", "keywords": ("공지", "announcement", "notice")},
-            {"key": "rules", "category": "╭─〔 ☩ 성역의 문 〕─╮", "name": "📕・성역-규율", "keywords": ("규칙", "룰", "이용규칙", "rule")},
-            {"key": "roles", "category": "╭─〔 ☩ 성역의 문 〕─╮", "name": "🎭・서약-선택", "keywords": ("역할", "role", "인증")},
-            {"key": "help", "category": "╭─〔 ☩ 성역의 문 〕─╮", "name": "🕯・길잡이", "keywords": ("도움", "가이드", "guide", "help")},
-            {"key": "general", "category": "╭─〔 🕯 순례자 광장 〕─╮", "name": "💬・순례자-광장", "keywords": ("일반", "자유", "잡담", "광장", "general", "chat")},
-            {"key": "game", "category": "╭─〔 🕯 순례자 광장 〕─╮", "name": "🎮・게임-회랑", "keywords": ("게임", "game")},
-            {"key": "bot", "category": "╭─〔 ⚙ 검은 장치실 〕─╮", "name": "🤖・봇-명령실", "keywords": ("봇", "명령어", "command")},
-            {"key": "media", "category": "╭─〔 🖼 기억의 전당 〕─╮", "name": "🖼・사진과-기록", "keywords": ("사진", "미디어", "이미지", "스크린샷", "media")},
-            {"key": "clips", "category": "╭─〔 🖼 기억의 전당 〕─╮", "name": "🎞・영상과-클립", "keywords": ("영상", "클립", "동영상", "clip", "video")},
-            {"key": "ticket", "category": "╭─〔 🎫 고해의 방 〕─╮", "name": "🎫・문의-접수", "keywords": ("문의", "신고", "건의", "ticket")},
-            {"key": "admin", "category": "╭─〔 🛡 검은 의회 〕─╮", "name": "🔒・의회-회의실", "keywords": ("관리자", "운영진", "스태프", "admin")},
-            {"key": "logs", "category": "╭─〔 🛡 검은 의회 〕─╮", "name": "📋・감시-기록", "keywords": ("로그", "기록", "log")},
-        ]
-    if style == "커뮤니티":
-        return [
-            {"key": "notice", "category": "━━━ 시작하기 ━━━", "name": "📢・공지사항", "keywords": ("공지", "announcement", "notice")},
-            {"key": "rules", "category": "━━━ 시작하기 ━━━", "name": "📕・이용규칙", "keywords": ("규칙", "룰", "이용규칙", "rule")},
-            {"key": "roles", "category": "━━━ 시작하기 ━━━", "name": "🎭・역할선택", "keywords": ("역할", "role", "인증")},
-            {"key": "help", "category": "━━━ 시작하기 ━━━", "name": "❓・도움말", "keywords": ("도움", "가이드", "guide", "help")},
-            {"key": "general", "category": "━━━ 커뮤니티 ━━━", "name": "💬・자유채팅", "keywords": ("일반", "자유", "잡담", "광장", "general", "chat")},
-            {"key": "game", "category": "━━━ 커뮤니티 ━━━", "name": "🎮・게임이야기", "keywords": ("게임", "game")},
-            {"key": "bot", "category": "━━━ 커뮤니티 ━━━", "name": "🤖・봇명령어", "keywords": ("봇", "명령어", "command")},
-            {"key": "media", "category": "━━━ 미디어 ━━━", "name": "🖼・사진공유", "keywords": ("사진", "미디어", "이미지", "스크린샷", "media")},
-            {"key": "clips", "category": "━━━ 미디어 ━━━", "name": "🎞・영상클립", "keywords": ("영상", "클립", "동영상", "clip", "video")},
-            {"key": "ticket", "category": "━━━ 문의지원 ━━━", "name": "🎫・문의접수", "keywords": ("문의", "신고", "건의", "ticket")},
-            {"key": "admin", "category": "━━━ 운영지원 ━━━", "name": "🔒・운영진채팅", "keywords": ("관리자", "운영진", "스태프", "admin")},
-            {"key": "logs", "category": "━━━ 운영지원 ━━━", "name": "📋・운영로그", "keywords": ("로그", "기록", "log")},
-        ]
-    return [
-        {"key": "notice", "category": "〔 시작 〕", "name": "📢・공지", "keywords": ("공지", "announcement", "notice")},
-        {"key": "rules", "category": "〔 시작 〕", "name": "📕・규칙", "keywords": ("규칙", "룰", "이용규칙", "rule")},
-        {"key": "roles", "category": "〔 시작 〕", "name": "🎭・역할", "keywords": ("역할", "role", "인증")},
-        {"key": "help", "category": "〔 시작 〕", "name": "❓・도움", "keywords": ("도움", "가이드", "guide", "help")},
-        {"key": "general", "category": "〔 대화 〕", "name": "💬・일반", "keywords": ("일반", "자유", "잡담", "광장", "general", "chat")},
-        {"key": "game", "category": "〔 대화 〕", "name": "🎮・게임", "keywords": ("게임", "game")},
-        {"key": "bot", "category": "〔 대화 〕", "name": "🤖・봇", "keywords": ("봇", "명령어", "command")},
-        {"key": "media", "category": "〔 미디어 〕", "name": "🖼・사진", "keywords": ("사진", "미디어", "이미지", "스크린샷", "media")},
-        {"key": "clips", "category": "〔 미디어 〕", "name": "🎞・영상", "keywords": ("영상", "클립", "동영상", "clip", "video")},
-        {"key": "ticket", "category": "〔 문의 〕", "name": "🎫・문의", "keywords": ("문의", "신고", "건의", "ticket")},
-        {"key": "admin", "category": "〔 운영 〕", "name": "🔒・관리", "keywords": ("관리자", "운영진", "스태프", "admin")},
-        {"key": "logs", "category": "〔 운영 〕", "name": "📋・로그", "keywords": ("로그", "기록", "log")},
-    ]
+    themes: Dict[str, List[Tuple[str, str, str, Tuple[str, ...]]]] = {
+        "깔끔": [
+            ("notice", "〔 시작 〕", "📢・공지", ("공지", "announcement", "notice")),
+            ("rules", "〔 시작 〕", "📕・규칙", ("규칙", "룰", "이용규칙", "rule")),
+            ("roles", "〔 시작 〕", "🎭・역할", ("역할", "role", "인증")),
+            ("help", "〔 시작 〕", "❓・도움", ("도움", "가이드", "guide", "help")),
+            ("general", "〔 대화 〕", "💬・일반", ("일반", "자유", "잡담", "광장", "general", "chat")),
+            ("game", "〔 대화 〕", "🎮・게임", ("게임", "game")),
+            ("bot", "〔 대화 〕", "🤖・봇", ("봇", "명령어", "command")),
+            ("media", "〔 미디어 〕", "🖼・사진", ("사진", "미디어", "이미지", "스크린샷", "media")),
+            ("clips", "〔 미디어 〕", "🎞・영상", ("영상", "클립", "동영상", "clip", "video")),
+            ("ticket", "〔 문의 〕", "🎫・문의", ("문의", "신고", "건의", "ticket")),
+            ("admin", "〔 운영 〕", "🔒・관리", ("관리자", "운영진", "스태프", "admin")),
+            ("logs", "〔 운영 〕", "📋・로그", ("로그", "기록", "log")),
+        ],
+        "고딕": [
+            ("notice", "╭─〔 ☩ 성역의 문 〕─╮", "📜・성역-공지", ("공지", "announcement", "notice")),
+            ("rules", "╭─〔 ☩ 성역의 문 〕─╮", "📕・성역-규율", ("규칙", "룰", "이용규칙", "rule")),
+            ("roles", "╭─〔 ☩ 성역의 문 〕─╮", "🎭・서약-선택", ("역할", "role", "인증")),
+            ("help", "╭─〔 ☩ 성역의 문 〕─╮", "🕯・길잡이", ("도움", "가이드", "guide", "help")),
+            ("general", "╭─〔 🕯 순례자 광장 〕─╮", "💬・순례자-광장", ("일반", "자유", "잡담", "광장", "general", "chat")),
+            ("game", "╭─〔 🕯 순례자 광장 〕─╮", "🎮・게임-회랑", ("게임", "game")),
+            ("bot", "╭─〔 ⚙ 검은 장치실 〕─╮", "🤖・봇-명령실", ("봇", "명령어", "command")),
+            ("media", "╭─〔 🖼 기억의 전당 〕─╮", "🖼・사진과-기록", ("사진", "미디어", "이미지", "스크린샷", "media")),
+            ("clips", "╭─〔 🖼 기억의 전당 〕─╮", "🎞・영상과-클립", ("영상", "클립", "동영상", "clip", "video")),
+            ("ticket", "╭─〔 🎫 고해의 방 〕─╮", "🎫・문의-접수", ("문의", "신고", "건의", "ticket")),
+            ("admin", "╭─〔 🛡 검은 의회 〕─╮", "🔒・의회-회의실", ("관리자", "운영진", "스태프", "admin")),
+            ("logs", "╭─〔 🛡 검은 의회 〕─╮", "📋・감시-기록", ("로그", "기록", "log")),
+        ],
+        "커뮤니티": [
+            ("notice", "━━━ 시작하기 ━━━", "📢・공지사항", ("공지", "announcement", "notice")),
+            ("rules", "━━━ 시작하기 ━━━", "📕・이용규칙", ("규칙", "룰", "이용규칙", "rule")),
+            ("roles", "━━━ 시작하기 ━━━", "🎭・역할선택", ("역할", "role", "인증")),
+            ("help", "━━━ 시작하기 ━━━", "❓・도움말", ("도움", "가이드", "guide", "help")),
+            ("general", "━━━ 커뮤니티 ━━━", "💬・자유채팅", ("일반", "자유", "잡담", "광장", "general", "chat")),
+            ("game", "━━━ 커뮤니티 ━━━", "🎮・게임이야기", ("게임", "game")),
+            ("bot", "━━━ 커뮤니티 ━━━", "🤖・봇명령어", ("봇", "명령어", "command")),
+            ("media", "━━━ 미디어 ━━━", "🖼・사진공유", ("사진", "미디어", "이미지", "스크린샷", "media")),
+            ("clips", "━━━ 미디어 ━━━", "🎞・영상클립", ("영상", "클립", "동영상", "clip", "video")),
+            ("ticket", "━━━ 문의지원 ━━━", "🎫・문의접수", ("문의", "신고", "건의", "ticket")),
+            ("admin", "━━━ 운영지원 ━━━", "🔒・운영진채팅", ("관리자", "운영진", "스태프", "admin")),
+            ("logs", "━━━ 운영지원 ━━━", "📋・운영로그", ("로그", "기록", "log")),
+        ],
+        "미니멀": [
+            ("notice", "START", "notice", ("공지", "announcement", "notice")),
+            ("rules", "START", "rules", ("규칙", "룰", "이용규칙", "rule")),
+            ("roles", "START", "roles", ("역할", "role", "인증")),
+            ("help", "START", "guide", ("도움", "가이드", "guide", "help")),
+            ("general", "CHAT", "general", ("일반", "자유", "잡담", "광장", "general", "chat")),
+            ("game", "CHAT", "games", ("게임", "game")),
+            ("bot", "CHAT", "bot", ("봇", "명령어", "command")),
+            ("media", "MEDIA", "photos", ("사진", "미디어", "이미지", "스크린샷", "media")),
+            ("clips", "MEDIA", "clips", ("영상", "클립", "동영상", "clip", "video")),
+            ("ticket", "SUPPORT", "support", ("문의", "신고", "건의", "ticket")),
+            ("admin", "STAFF", "staff", ("관리자", "운영진", "스태프", "admin")),
+            ("logs", "STAFF", "logs", ("로그", "기록", "log")),
+        ],
+        "사이버": [
+            ("notice", "【 00 · BOOT 】", "📡・system-news", ("공지", "announcement", "notice")),
+            ("rules", "【 00 · BOOT 】", "📑・protocol", ("규칙", "룰", "이용규칙", "rule")),
+            ("roles", "【 00 · BOOT 】", "🪪・access-role", ("역할", "role", "인증")),
+            ("help", "【 00 · BOOT 】", "💾・manual", ("도움", "가이드", "guide", "help")),
+            ("general", "【 01 · NETWORK 】", "💬・main-link", ("일반", "자유", "잡담", "광장", "general", "chat")),
+            ("game", "【 01 · NETWORK 】", "🎮・game-node", ("게임", "game")),
+            ("bot", "【 02 · TERMINAL 】", "⌨️・bot-terminal", ("봇", "명령어", "command")),
+            ("media", "【 03 · ARCHIVE 】", "🖼・image-cache", ("사진", "미디어", "이미지", "스크린샷", "media")),
+            ("clips", "【 03 · ARCHIVE 】", "🎞・video-cache", ("영상", "클립", "동영상", "clip", "video")),
+            ("ticket", "【 04 · SUPPORT 】", "🎫・support-ticket", ("문의", "신고", "건의", "ticket")),
+            ("admin", "【 99 · ADMIN 】", "🔒・admin-core", ("관리자", "운영진", "스태프", "admin")),
+            ("logs", "【 99 · ADMIN 】", "📋・system-log", ("로그", "기록", "log")),
+        ],
+        "아포칼립스": [
+            ("notice", "╔〔 생존자 전초기지 〕╗", "📻・비상-방송", ("공지", "announcement", "notice")),
+            ("rules", "╔〔 생존자 전초기지 〕╗", "📕・생존-수칙", ("규칙", "룰", "이용규칙", "rule")),
+            ("roles", "╔〔 생존자 전초기지 〕╗", "🪪・생존자-등록", ("역할", "role", "인증")),
+            ("help", "╔〔 생존자 전초기지 〕╗", "🧭・작전-안내", ("도움", "가이드", "guide", "help")),
+            ("general", "╠〔 공동 대피소 〕╣", "💬・대피소-광장", ("일반", "자유", "잡담", "광장", "general", "chat")),
+            ("game", "╠〔 공동 대피소 〕╣", "🎮・휴식-구역", ("게임", "game")),
+            ("bot", "╠〔 통제 장치실 〕╣", "🤖・작전-단말기", ("봇", "명령어", "command")),
+            ("media", "╠〔 기록 보관소 〕╣", "📸・현장-사진", ("사진", "미디어", "이미지", "스크린샷", "media")),
+            ("clips", "╠〔 기록 보관소 〕╣", "🎞・생존-기록", ("영상", "클립", "동영상", "clip", "video")),
+            ("ticket", "╠〔 구조 요청소 〕╣", "🆘・구조-요청", ("문의", "신고", "건의", "ticket")),
+            ("admin", "╚〔 지휘 통제실 〕╝", "🔒・지휘관-회의", ("관리자", "운영진", "스태프", "admin")),
+            ("logs", "╚〔 지휘 통제실 〕╝", "📋・감시-일지", ("로그", "기록", "log")),
+        ],
+        "판타지": [
+            ("notice", "✦ 왕국의 관문 ✦", "📜・왕국-칙령", ("공지", "announcement", "notice")),
+            ("rules", "✦ 왕국의 관문 ✦", "📖・모험가-규율", ("규칙", "룰", "이용규칙", "rule")),
+            ("roles", "✦ 왕국의 관문 ✦", "🎭・직업-선택", ("역할", "role", "인증")),
+            ("help", "✦ 왕국의 관문 ✦", "🗺・모험-안내", ("도움", "가이드", "guide", "help")),
+            ("general", "✦ 모험가 길드 ✦", "💬・길드-홀", ("일반", "자유", "잡담", "광장", "general", "chat")),
+            ("game", "✦ 모험가 길드 ✦", "🎮・놀이-광장", ("게임", "game")),
+            ("bot", "✦ 마도 공방 ✦", "🔮・마법-명령실", ("봇", "명령어", "command")),
+            ("media", "✦ 기억의 수정관 ✦", "🖼・모험-사진", ("사진", "미디어", "이미지", "스크린샷", "media")),
+            ("clips", "✦ 기억의 수정관 ✦", "🎞・영웅-연대기", ("영상", "클립", "동영상", "clip", "video")),
+            ("ticket", "✦ 의뢰 게시소 ✦", "📨・길드-의뢰", ("문의", "신고", "건의", "ticket")),
+            ("admin", "✦ 왕실 회의실 ✦", "🔒・원탁-회의", ("관리자", "운영진", "스태프", "admin")),
+            ("logs", "✦ 왕실 회의실 ✦", "📚・왕국-기록", ("로그", "기록", "log")),
+        ],
+    }
+    rows = themes.get(style, themes["깔끔"])
+    return [{"key": key, "category": category, "name": name, "keywords": keywords} for key, category, name, keywords in rows]
 
 
 def _voice_channel_specs(style: str) -> List[Dict[str, Any]]:
-    category = {
-        "고딕": "╭─〔 🔊 메아리의 회랑 〕─╮",
-        "커뮤니티": "━━━ 음성채널 ━━━",
-        "깔끔": "〔 음성 〕",
-    }[style]
-    names = {
-        "고딕": ("🔊・메아리-대기실", "🎮・전장의-방", "🌙・침묵의-방"),
-        "커뮤니티": ("🔊・음성로비", "🎮・게임방", "🌙・잠수방"),
-        "깔끔": ("🔊・로비", "🎮・게임", "🌙・잠수"),
-    }[style]
+    mapping: Dict[str, Tuple[str, Tuple[str, str, str]]] = {
+        "깔끔": ("〔 음성 〕", ("🔊・로비", "🎮・게임", "🌙・잠수")),
+        "고딕": ("╭─〔 🔊 메아리의 회랑 〕─╮", ("🔊・메아리-대기실", "🎮・전장의-방", "🌙・침묵의-방")),
+        "커뮤니티": ("━━━ 음성채널 ━━━", ("🔊・음성로비", "🎮・게임방", "🌙・잠수방")),
+        "미니멀": ("VOICE", ("lobby", "game", "afk")),
+        "사이버": ("【 05 · VOICE LINK 】", ("🔊・voice-lobby", "🎮・squad-link", "🌙・idle-mode")),
+        "아포칼립스": ("╠〔 무전 통신망 〕╣", ("📻・공용-무전", "🎮・분대-통신", "🌙・무전-대기")),
+        "판타지": ("✦ 음유시인의 회랑 ✦", ("🔊・모험가-휴게실", "🎮・파티-원정", "🌙・고요한-숲")),
+    }
+    category, names = mapping.get(style, mapping["깔끔"])
     return [
         {"key": "voice_lobby", "category": category, "name": names[0], "keywords": ("로비", "대기", "일반", "lobby")},
         {"key": "voice_game", "category": category, "name": names[1], "keywords": ("게임", "game")},
@@ -100,91 +200,43 @@ def _voice_channel_specs(style: str) -> List[Dict[str, Any]]:
 
 
 def _game_zone_specs(style: str) -> List[Dict[str, Any]]:
-    categories = {
-        "깔끔": {
-            "growth": "〔 RPG · 성장 〕",
-            "game": "〔 게임 · 도박 〕",
-            "media": "〔 음악 · 미디어 〕",
-            "test": "〔 테스트 〕",
-            "voice": "〔 음성 라운지 〕",
-        },
-        "고딕": {
-            "growth": "╭─〔 ⚔ 종말 전장 〕─╮",
-            "game": "╭─〔 🎲 운명의 방 〕─╮",
-            "media": "╭─〔 🎵 망자의 선율 〕─╮",
-            "test": "╭─〔 🧪 봉인 실험실 〕─╮",
-            "voice": "╭─〔 🔊 메아리의 방 〕─╮",
-        },
-        "커뮤니티": {
-            "growth": "━━━ RPG · 성장 ━━━",
-            "game": "━━━ 게임 · 도박 ━━━",
-            "media": "━━━ 음악 · 미디어 ━━━",
-            "test": "━━━ 테스트 ━━━",
-            "voice": "━━━ 음성 라운지 ━━━",
-        },
-    }[style]
+    category_sets: Dict[str, Dict[str, str]] = {
+        "깔끔": {"growth": "〔 RPG · 성장 〕", "game": "〔 게임 · 도박 〕", "media": "〔 음악 · 미디어 〕", "test": "〔 테스트 〕", "voice": "〔 음성 라운지 〕"},
+        "고딕": {"growth": "╭─〔 ⚔ 종말 전장 〕─╮", "game": "╭─〔 🎲 운명의 방 〕─╮", "media": "╭─〔 🎵 망자의 선율 〕─╮", "test": "╭─〔 🧪 봉인 실험실 〕─╮", "voice": "╭─〔 🔊 메아리의 방 〕─╮"},
+        "커뮤니티": {"growth": "━━━ RPG · 성장 ━━━", "game": "━━━ 게임 · 도박 ━━━", "media": "━━━ 음악 · 미디어 ━━━", "test": "━━━ 테스트 ━━━", "voice": "━━━ 음성 라운지 ━━━"},
+        "미니멀": {"growth": "RPG", "game": "GAMES", "media": "MEDIA", "test": "TEST", "voice": "VOICE ROOMS"},
+        "사이버": {"growth": "【 10 · RPG CORE 】", "game": "【 11 · GAME GRID 】", "media": "【 12 · MEDIA CACHE 】", "test": "【 98 · TEST LAB 】", "voice": "【 13 · VOICE LINK 】"},
+        "아포칼립스": {"growth": "╠〔 원정 지휘소 〕╣", "game": "╠〔 휴식·도박 구역 〕╣", "media": "╠〔 방송·기록소 〕╣", "test": "╠〔 장비 시험소 〕╣", "voice": "╠〔 무전 통신망 〕╣"},
+        "판타지": {"growth": "✦ 모험가 성장관 ✦", "game": "✦ 주사위 선술집 ✦", "media": "✦ 음유시인 무대 ✦", "test": "✦ 마법 실험실 ✦", "voice": "✦ 파티 음성관 ✦"},
+    }
+    categories = category_sets.get(style, category_sets["깔끔"])
+    names: Dict[str, Dict[str, str]] = {
+        "깔끔": {"rpg": "⚔️・아포칼립스-rpg", "level": "🎉・레벨-알림", "quiz": "🧭・오늘의-퀴즈방", "gambling": "🎲・도박장", "ksi": "🤖・크시", "tiktok": "📱・틱톡", "karaoke": "🎵・노래방", "test": "🧪・봇-테스트"},
+        "고딕": {"rpg": "⚔️・종말-rpg", "level": "🩸・성장-기록", "quiz": "🧭・운명의-문답", "gambling": "🎲・운명의-도박장", "ksi": "🤖・검은-인형", "tiktok": "📱・짧은-기억", "karaoke": "🎵・망자의-노래", "test": "🧪・봉인-실험"},
+        "커뮤니티": {"rpg": "⚔️・아포칼립스-rpg", "level": "🎉・레벨업-알림", "quiz": "🧭・오늘의-퀴즈", "gambling": "🎲・도박장", "ksi": "🤖・크시", "tiktok": "📱・틱톡", "karaoke": "🎵・노래방", "test": "🧪・봇-테스트"},
+        "미니멀": {"rpg": "rpg", "level": "level-up", "quiz": "daily-quiz", "gambling": "casino", "ksi": "ksi", "tiktok": "shorts", "karaoke": "music", "test": "bot-test"},
+        "사이버": {"rpg": "⚔️・rpg-core", "level": "📈・level-signal", "quiz": "🧠・daily-query", "gambling": "🎲・casino-node", "ksi": "🤖・ksi-bot", "tiktok": "📱・short-cache", "karaoke": "🎵・audio-stream", "test": "🧪・sandbox"},
+        "아포칼립스": {"rpg": "⚔️・생존-rpg", "level": "📈・생존자-성장", "quiz": "🧭・일일-작전", "gambling": "🎲・암시장-도박", "ksi": "🤖・보조-단말", "tiktok": "📱・현장-숏폼", "karaoke": "🎵・대피소-방송", "test": "🧪・장비-시험"},
+        "판타지": {"rpg": "⚔️・모험가-rpg", "level": "✨・성장-축복", "quiz": "🗺・오늘의-의뢰", "gambling": "🎲・선술집-주사위", "ksi": "🤖・마도-골렘", "tiktok": "📱・짧은-연대기", "karaoke": "🎵・음유시인-무대", "test": "🧪・마법-실험"},
+    }
+    n = names.get(style, names["깔끔"])
     return [
-        {
-            "key": "rpg",
-            "category": categories["growth"],
-            "name": "⚔️・아포칼립스-rpg",
-            "keywords": ("아포칼립스rpg", "아포칼립스", "rpg"),
-        },
-        {
-            "key": "level_notice",
-            "category": categories["growth"],
-            "name": "🎉・레벨-알림",
-            "keywords": ("레벨알림", "레벨", "levelnotify", "levelup"),
-        },
-        {
-            "key": "daily_quiz",
-            "category": categories["growth"],
-            "name": "🧭・오늘의-퀴즈방",
-            "keywords": ("오늘의퀴즈방", "오늘의퀴즈", "퀴즈방", "퀴즈", "quiz"),
-        },
-        {
-            "key": "gambling",
-            "category": categories["game"],
-            "name": "🎲・도박장",
-            "keywords": ("도박장", "도박", "카지노", "casino", "gambling"),
-        },
-        {
-            "key": "ksi",
-            "category": categories["game"],
-            "name": "🤖・크시",
-            "keywords": ("크시", "kshi", "ksi"),
-        },
-        {
-            "key": "tiktok",
-            "category": categories["media"],
-            "name": "📱・틱톡",
-            "keywords": ("틱톡", "tiktok", "shorts"),
-        },
-        {
-            "key": "karaoke",
-            "category": categories["media"],
-            "name": "🎵・노래방",
-            "keywords": ("노래방", "음악", "뮤직", "music", "song"),
-        },
-        {
-            "key": "bot_test",
-            "category": categories["test"],
-            "name": "🧪・봇-테스트",
-            "keywords": ("봇테스트", "테스트", "test"),
-        },
+        {"key": "rpg", "category": categories["growth"], "name": n["rpg"], "keywords": ("아포칼립스rpg", "아포칼립스", "rpg")},
+        {"key": "level_notice", "category": categories["growth"], "name": n["level"], "keywords": ("레벨알림", "레벨", "levelnotify", "levelup")},
+        {"key": "daily_quiz", "category": categories["growth"], "name": n["quiz"], "keywords": ("오늘의퀴즈방", "오늘의퀴즈", "퀴즈방", "퀴즈", "quiz")},
+        {"key": "gambling", "category": categories["game"], "name": n["gambling"], "keywords": ("도박장", "도박", "카지노", "casino", "gambling")},
+        {"key": "ksi", "category": categories["game"], "name": n["ksi"], "keywords": ("크시", "kshi", "ksi")},
+        {"key": "tiktok", "category": categories["media"], "name": n["tiktok"], "keywords": ("틱톡", "tiktok", "shorts")},
+        {"key": "karaoke", "category": categories["media"], "name": n["karaoke"], "keywords": ("노래방", "음악", "뮤직", "music", "song")},
+        {"key": "bot_test", "category": categories["test"], "name": n["test"], "keywords": ("봇테스트", "테스트", "test")},
     ]
 
 
 def _game_zone_category_names(style: str) -> Dict[str, str]:
     specs = _game_zone_specs(style)
     result = {"growth": specs[0]["category"], "game": specs[3]["category"], "media": specs[5]["category"], "test": specs[7]["category"]}
-    result["voice"] = {
-        "깔끔": "〔 음성 라운지 〕",
-        "고딕": "╭─〔 🔊 메아리의 방 〕─╮",
-        "커뮤니티": "━━━ 음성 라운지 ━━━",
-    }[style]
+    result["voice"] = _voice_channel_specs(style)[0]["category"]
     return result
-
 
 def _roman_label(index: int) -> str:
     romans = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X")
@@ -270,7 +322,7 @@ def _game_zone_preview_embed(guild: discord.Guild, style: str) -> discord.Embed:
             "사용 중인 채널을 삭제하지 않고 **RPG·성장 / 게임·도박 / 음악·미디어 / 테스트 / 음성 라운지**로 나눕니다.\n"
             "기존 `BOT GAME`, `말해라`, `테스트` 카테고리는 가능한 경우 새 이름으로 재사용합니다."
         ),
-        color=0x6D2335 if style == "고딕" else 0x5865F2,
+        color=_theme_color(style),
     )
     detected = [channel for _, channel in text_matches if channel is not None]
     embed.add_field(name="찾은 텍스트 채널", value=f"**{len(detected)}개 / {len(text_matches)}개**", inline=True)
@@ -293,7 +345,7 @@ def _game_zone_preview_embed(guild: discord.Guild, style: str) -> discord.Embed:
     return embed
 
 
-STYLE_NAMES = {"깔끔", "고딕", "커뮤니티"}
+STYLE_NAMES = set(THEME_META)
 ESSENTIAL_KEYS = {"notice", "rules", "roles", "general", "bot", "voice_lobby", "voice_afk"}
 ADMIN_KEYS = {"admin", "logs"}
 READ_ONLY_KEYS = {"notice", "rules", "roles", "help"}
@@ -334,7 +386,17 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
     tts.setdefault("enabled", False)
     tts.setdefault("text_channel_id", None)
     tts.setdefault("voice_channel_id", None)
-    tts.setdefault("voice", "서현")
+    # v4.3.3.3부터 실제 Microsoft 음성 이름과 표시 이름을 일치시킵니다.
+    # 구버전의 "서현"은 실제로 SunHi 음성을 사용했으므로 선히로 자동 이관합니다.
+    if int(tts.get("voice_schema_version", 0) or 0) < 2:
+        if tts.get("voice") == "서현":
+            tts["voice"] = "선히"
+        tts["voice_schema_version"] = 2
+    tts.setdefault("voice", "선히")
+    tts["voice"] = _voice_name_or_default(tts.get("voice"))
+    tts.setdefault("user_voices", {})
+    if not isinstance(tts.get("user_voices"), dict):
+        tts["user_voices"] = {}
     tts.setdefault("speed", 1.0)
     tts.setdefault("volume", 1.0)
     tts.setdefault("idle_seconds", DEFAULT_IDLE_SECONDS)
@@ -344,14 +406,28 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
     settings.setdefault("layout", {})
     settings["layout"].setdefault("style", None)
     settings["layout"].setdefault("backup", None)
+    settings["layout"].setdefault("backup_history", [])
+    if not isinstance(settings["layout"].get("backup_history"), list):
+        settings["layout"]["backup_history"] = []
     settings["layout"].setdefault("menu_channel_id", None)
     settings["layout"].setdefault("menu_message_id", None)
     return settings
 
 
-def _snapshot_guild(guild: discord.Guild) -> Dict[str, Any]:
+def _snapshot_guild(
+    guild: discord.Guild,
+    *,
+    operation: str = "renewal",
+    style: Optional[str] = None,
+) -> Dict[str, Any]:
     return {
+        "snapshot_version": 2,
         "created_at": int(time.time()),
+        "operation": operation,
+        "style": style,
+        "created_category_ids": [],
+        "created_channel_ids": [],
+        "reused_category_ids": [],
         "categories": [
             {"id": category.id, "name": category.name, "position": category.position}
             for category in guild.categories
@@ -368,6 +444,69 @@ def _snapshot_guild(guild: discord.Guild) -> Dict[str, Any]:
         ],
     }
 
+
+def _store_backup(layout: Dict[str, Any], snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    previous = layout.get("backup")
+    history = layout.setdefault("backup_history", [])
+    if isinstance(previous, dict):
+        previous_time = int(previous.get("created_at", 0) or 0)
+        if not history or int(history[-1].get("created_at", 0) or 0) != previous_time:
+            history.append(previous)
+    history[:] = history[-4:]
+    layout["backup"] = snapshot
+    return snapshot
+
+
+def _record_created(backup: Dict[str, Any], kind: str, object_id: int) -> None:
+    key = "created_category_ids" if kind == "category" else "created_channel_ids"
+    values = backup.setdefault(key, [])
+    if object_id not in values:
+        values.append(object_id)
+
+
+def _all_theme_category_names() -> set[str]:
+    names: set[str] = set()
+    for style in STYLE_NAMES:
+        for spec in [*_text_channel_specs(style), *_voice_channel_specs(style), *_game_zone_specs(style)]:
+            names.add(str(spec["category"]))
+        names.update(_game_zone_category_names(style).values())
+    return names
+
+
+def _all_theme_channel_names() -> set[str]:
+    names: set[str] = set()
+    for style in STYLE_NAMES:
+        for spec in [*_text_channel_specs(style), *_voice_channel_specs(style), *_game_zone_specs(style)]:
+            names.add(str(spec["name"]))
+        for index in range(10):
+            names.add(f"🔊・음성-{_roman_label(index)}")
+    return names
+
+
+def _empty_categories(guild: discord.Guild) -> List[discord.CategoryChannel]:
+    return sorted(
+        [category for category in guild.categories if not category.channels],
+        key=lambda category: (category.position, category.id),
+    )
+
+
+def _parse_category_selection(raw: str, empty: Sequence[discord.CategoryChannel]) -> List[discord.CategoryChannel]:
+    value = (raw or "").strip().lower()
+    if value in {"전체", "all"}:
+        return list(empty)
+    indices: set[int] = set()
+    for token in re.split(r"[,\s]+", value):
+        if not token:
+            continue
+        if "-" in token:
+            left, _, right = token.partition("-")
+            if left.isdigit() and right.isdigit():
+                start_i, end_i = int(left), int(right)
+                for number in range(min(start_i, end_i), max(start_i, end_i) + 1):
+                    indices.add(number)
+        elif token.isdigit():
+            indices.add(int(token))
+    return [category for index, category in enumerate(empty, start=1) if index in indices]
 
 def _admin_category_overwrites(
     guild: discord.Guild,
@@ -468,7 +607,7 @@ def _layout_preview_embed(guild: discord.Guild, style: str) -> discord.Embed:
             "기존 채널을 키워드로 찾아 이름과 위치를 정돈합니다.\n"
             "**채널·역할·메시지는 삭제하지 않으며**, 인식하지 못한 채널은 그대로 둡니다."
         ),
-        color=0x6D2335 if style == "고딕" else 0x5865F2,
+        color=_theme_color(style),
     )
     embed.add_field(name="찾은 기존 채널", value=f"**{move_count}개**", inline=True)
     embed.add_field(name="새 필수 채널", value=f"**{create_count}개**", inline=True)
@@ -608,10 +747,14 @@ async def _synth_edge(text: str, voice: str, speed: float, output_path: str) -> 
         import edge_tts  # type: ignore
     except ImportError:
         return False
-    rate = int(round((speed - 1.0) * 100))
-    communicator = edge_tts.Communicate(text=text, voice=voice, rate=f"{rate:+d}%")
-    await communicator.save(output_path)
-    return True
+    try:
+        rate = int(round((speed - 1.0) * 100))
+        communicator = edge_tts.Communicate(text=text, voice=voice, rate=f"{rate:+d}%")
+        await communicator.save(output_path)
+        return Path(output_path).exists() and Path(output_path).stat().st_size > 0
+    except Exception as exc:
+        print(f"[TTS Edge 합성 실패] voice={voice} {type(exc).__name__}: {exc}", flush=True)
+        return False
 
 
 async def _synth_google(text: str, speed: float, output_path: str) -> None:
@@ -624,7 +767,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/4.3.3.2"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/4.3.3.4"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
             if response.status != 200:
@@ -636,7 +779,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
 
 
 async def _synthesise(text: str, voice_key: str, speed: float, output_path: str) -> str:
-    preset = VOICE_PRESETS.get(voice_key, VOICE_PRESETS["서현"])
+    preset = VOICE_PRESETS.get(voice_key, VOICE_PRESETS["선히"])
     if await _synth_edge(text, preset["edge"], speed, output_path):
         return "edge-tts"
     await _synth_google(text, speed, output_path)
@@ -724,6 +867,7 @@ def register_v433_voice_sanctuary(
         text: str,
         *,
         announce_name: bool,
+        voice_key: Optional[str] = None,
     ) -> Tuple[bool, str]:
         settings = _layout_settings(world_data, guild.id)["tts"]
         clean = _clean_spoken_text(text)
@@ -733,7 +877,13 @@ def register_v433_voice_sanctuary(
         if queue.full():
             return False, f"대기열이 가득 찼습니다. 최대 {TTS_QUEUE_LIMIT}개까지 보관합니다."
         spoken = f"{author.display_name}. {clean}" if announce_name else clean
-        await queue.put({"text": spoken, "author_id": author.id, "queued_at": time.time()})
+        resolved_voice = _voice_name_or_default(voice_key, _personal_voice(settings, author.id))
+        await queue.put({
+            "text": spoken,
+            "author_id": author.id,
+            "voice": resolved_voice,
+            "queued_at": time.time(),
+        })
         task = VOICE_RUNTIME.workers.get(guild.id)
         if task is None or task.done():
             VOICE_RUNTIME.workers[guild.id] = asyncio.create_task(tts_worker(guild.id))
@@ -766,7 +916,7 @@ def register_v433_voice_sanctuary(
                 os.close(fd)
                 provider = await _synthesise(
                     str(item["text"]),
-                    str(settings.get("voice", "서현")),
+                    _voice_name_or_default(item.get("voice"), _voice_name_or_default(settings.get("voice"))),
                     float(settings.get("speed", 1.0)),
                     temp_path,
                 )
@@ -794,13 +944,13 @@ def register_v433_voice_sanctuary(
                 "텍스트를 음성 채널에서 읽고, 지정한 채팅 채널의 메시지를 자동 낭독합니다.\n\n"
                 "`!음성입장` · `!말해 내용` · `!음성퇴장`\n"
                 "`!TTS 채널설정 #텍스트채널 음성채널` · `!TTS 켜기` · `!TTS 끄기`\n"
-                "`!TTS 목소리` · `!TTS 속도 1.0` · `!TTS 볼륨 100` · `!TTS 진단`"
+                "`/tts 목소리` · `/tts 내설정` · `!TTS 기본목소리 선히` · `!TTS 진단`"
             ),
             color=0x6D2335,
         )
         embed.add_field(name="자동 낭독", value="켜짐" if settings.get("enabled") else "꺼짐", inline=True)
         embed.add_field(name="대기열", value=f"{queue.qsize()}/{TTS_QUEUE_LIMIT}", inline=True)
-        embed.add_field(name="목소리", value=str(settings.get("voice", "서현")), inline=True)
+        embed.add_field(name="서버 기본 목소리", value=str(settings.get("voice", "선히")), inline=True)
         await ctx.send(embed=embed)
 
     @bot.command(name="음성입장", aliases=["보이스입장"])
@@ -972,22 +1122,50 @@ def register_v433_voice_sanctuary(
     @tts_group.command(name="목소리", aliases=["음성"])
     async def tts_voice(ctx: commands.Context, voice_name: Optional[str] = None):
         guild = await require_guild(ctx)
-        if guild is None:
-            return
-        if voice_name is None:
-            lines = [f"• **{name}** — {data['label']}" for name, data in VOICE_PRESETS.items()]
-            await ctx.send("🔊 **사용 가능한 한국어 목소리**\n" + "\n".join(lines) + "\n설정: `!TTS 목소리 서현`")
-            return
-        if not isinstance(ctx.author, discord.Member) or not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ 목소리 설정은 서버 관리자만 변경할 수 있습니다.")
-            return
-        if voice_name not in VOICE_PRESETS:
-            await ctx.send("❌ 목소리는 `서현`, `인준`, `봉진`, `국민` 중에서 선택하세요.")
+        if guild is None or not isinstance(ctx.author, discord.Member):
             return
         settings = _layout_settings(world_data, guild.id)["tts"]
+        if voice_name is None:
+            lines = [f"• **{name}** — {data['label']}" for name, data in VOICE_PRESETS.items()]
+            current = _personal_voice(settings, ctx.author.id)
+            await ctx.send(
+                "🔊 **사용 가능한 한국어 목소리 10종**\n"
+                + "\n".join(lines)
+                + f"\n\n내 목소리: **{current}**\n설정: `!TTS 목소리 선히` 또는 `/tts 목소리`"
+            )
+            return
+        voice_name = voice_name.strip()
+        if voice_name.casefold() in {"기본", "초기화", "default", "reset"}:
+            settings.setdefault("user_voices", {}).pop(str(ctx.author.id), None)
+            save_data()
+            await ctx.send(f"✅ 개인 목소리 설정을 지웠습니다. 이제 서버 기본 **{settings.get('voice', '선히')}**을 사용합니다.")
+            return
+        if voice_name not in VOICE_PRESETS:
+            await ctx.send("❌ 지원하지 않는 목소리입니다. `!TTS 목소리`로 목록을 확인하세요.")
+            return
+        settings.setdefault("user_voices", {})[str(ctx.author.id)] = voice_name
+        save_data()
+        await ctx.send(f"✅ 앞으로 {ctx.author.mention}님의 메시지는 **{voice_name}** 목소리로 읽습니다.")
+
+    @tts_group.command(name="기본목소리", aliases=["서버목소리", "defaultvoice"])
+    async def tts_default_voice(ctx: commands.Context, voice_name: Optional[str] = None):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        if voice_name is None:
+            await ctx.send(
+                f"🔊 서버 기본 목소리: **{settings.get('voice', '선히')}**\n"
+                "변경: `!TTS 기본목소리 선히`"
+            )
+            return
+        voice_name = voice_name.strip()
+        if voice_name not in VOICE_PRESETS:
+            await ctx.send("❌ 지원하지 않는 목소리입니다. `!TTS 목소리`로 목록을 확인하세요.")
+            return
         settings["voice"] = voice_name
         save_data()
-        await ctx.send(f"✅ TTS 목소리를 **{voice_name}**으로 변경했습니다.")
+        await ctx.send(f"✅ 개인 설정이 없는 사용자의 기본 목소리를 **{voice_name}**으로 변경했습니다.")
 
     @tts_group.command(name="속도")
     async def tts_speed(ctx: commands.Context, speed: float):
@@ -1073,13 +1251,172 @@ def register_v433_voice_sanctuary(
         embed.add_field(name="텍스트 채널", value=getattr(text_channel, "mention", "미설정"), inline=True)
         embed.add_field(name="음성 채널", value=getattr(voice_channel, "mention", "미설정"), inline=True)
         embed.add_field(name="자동 입장", value="켜짐" if settings.get("auto_join", True) else "꺼짐", inline=True)
-        embed.add_field(name="목소리", value=f"{settings.get('voice', '서현')} · {settings.get('speed', 1.0)}배 · {int(float(settings.get('volume', 1.0))*100)}%", inline=True)
+        embed.add_field(name="목소리", value=f"{settings.get('voice', '선히')} · {settings.get('speed', 1.0)}배 · {int(float(settings.get('volume', 1.0))*100)}%", inline=True)
         embed.add_field(
             name="음성 의존성",
             value=f"PyNaCl: {'✅' if has_nacl else '❌'}\nedge-tts: {'✅' if has_edge else '대체 음성 사용'}",
             inline=False,
         )
         await ctx.send(embed=embed)
+
+    # Discord 슬래시 명령어: 일반 사용자는 개인 목소리/미리듣기, 관리자는 서버 설정을 변경합니다.
+    tts_slash = app_commands.Group(name="tts", description="TTS 목소리와 자동 낭독 설정을 관리합니다.")
+
+    async def slash_guild_member(interaction: discord.Interaction) -> Tuple[Optional[discord.Guild], Optional[discord.Member]]:
+        guild = interaction.guild
+        member = interaction.user if isinstance(interaction.user, discord.Member) else None
+        if guild is None or member is None:
+            if interaction.response.is_done():
+                await interaction.followup.send("❌ 서버 안에서만 사용할 수 있습니다.", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ 서버 안에서만 사용할 수 있습니다.", ephemeral=True)
+            return None, None
+        return guild, member
+
+    async def slash_require_admin(interaction: discord.Interaction) -> Tuple[Optional[discord.Guild], Optional[discord.Member]]:
+        guild, member = await slash_guild_member(interaction)
+        if guild is None or member is None:
+            return None, None
+        if not (member.guild_permissions.administrator or member.guild_permissions.manage_guild):
+            if interaction.response.is_done():
+                await interaction.followup.send("❌ 서버 관리자만 사용할 수 있습니다.", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ 서버 관리자만 사용할 수 있습니다.", ephemeral=True)
+            return None, None
+        return guild, member
+
+    @tts_slash.command(name="목소리", description="내 TTS 목소리를 드롭다운에서 선택합니다.")
+    @app_commands.describe(voice="내 메시지를 읽을 목소리")
+    @app_commands.choices(voice=VOICE_APP_CHOICES)
+    async def slash_tts_voice(interaction: discord.Interaction, voice: app_commands.Choice[str]):
+        guild, member = await slash_guild_member(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings.setdefault("user_voices", {})[str(member.id)] = voice.value
+        save_data()
+        await interaction.response.send_message(
+            f"✅ 내 TTS 목소리를 **{voice.value}**으로 저장했습니다.\n{VOICE_PRESETS[voice.value]['label']}",
+            ephemeral=True,
+        )
+
+    @tts_slash.command(name="내설정", description="내 TTS 목소리와 서버 기본 설정을 확인합니다.")
+    async def slash_tts_my_settings(interaction: discord.Interaction):
+        guild, member = await slash_guild_member(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        personal = _personal_voice(settings, member.id)
+        inherited = str(member.id) not in settings.get("user_voices", {})
+        await interaction.response.send_message(
+            "🔊 **내 TTS 설정**\n"
+            f"• 목소리: **{personal}**{' (서버 기본값)' if inherited else ''}\n"
+            f"• 설명: {VOICE_PRESETS[personal]['label']}\n"
+            f"• 서버 속도: {settings.get('speed', 1.0)}배",
+            ephemeral=True,
+        )
+
+    @tts_slash.command(name="초기화", description="내 개인 목소리 설정을 지우고 서버 기본값을 사용합니다.")
+    async def slash_tts_reset(interaction: discord.Interaction):
+        guild, member = await slash_guild_member(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings.setdefault("user_voices", {}).pop(str(member.id), None)
+        save_data()
+        await interaction.response.send_message(
+            f"✅ 개인 목소리 설정을 초기화했습니다. 서버 기본 **{settings.get('voice', '선히')}**을 사용합니다.",
+            ephemeral=True,
+        )
+
+    @tts_slash.command(name="미리듣기", description="선택한 목소리를 지정 음성 채널에서 시험 재생합니다.")
+    @app_commands.describe(voice="미리 들을 목소리")
+    @app_commands.choices(voice=VOICE_APP_CHOICES)
+    async def slash_tts_preview(interaction: discord.Interaction, voice: app_commands.Choice[str]):
+        guild, member = await slash_guild_member(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        if not settings.get("voice_channel_id"):
+            await interaction.response.send_message("❌ 관리자가 TTS 음성 채널을 먼저 설정해야 합니다.", ephemeral=True)
+            return
+        now = time.monotonic()
+        key = (guild.id, member.id)
+        remaining = TTS_USER_COOLDOWN - (now - VOICE_RUNTIME.user_cooldowns.get(key, 0.0))
+        if remaining > 0:
+            await interaction.response.send_message(f"⏳ {remaining:.1f}초 뒤에 다시 시도하세요.", ephemeral=True)
+            return
+        VOICE_RUNTIME.user_cooldowns[key] = now
+        ok, message = await enqueue_tts(
+            guild,
+            member,
+            f"{voice.value} 목소리 미리 듣기입니다. 검은 성역에 오신 것을 환영합니다.",
+            announce_name=False,
+            voice_key=voice.value,
+        )
+        await interaction.response.send_message(("✅ " if ok else "❌ ") + message, ephemeral=True)
+
+    @tts_slash.command(name="기본목소리", description="개인 설정이 없는 사용자의 서버 기본 목소리를 정합니다.")
+    @app_commands.describe(voice="서버 기본 목소리")
+    @app_commands.choices(voice=VOICE_APP_CHOICES)
+    async def slash_tts_default_voice(interaction: discord.Interaction, voice: app_commands.Choice[str]):
+        guild, member = await slash_require_admin(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings["voice"] = voice.value
+        save_data()
+        await interaction.response.send_message(f"✅ 서버 기본 TTS 목소리를 **{voice.value}**으로 변경했습니다.", ephemeral=True)
+
+    @tts_slash.command(name="채널설정", description="자동 낭독 텍스트 채널과 음성 채널을 지정합니다.")
+    @app_commands.describe(text_channel="메시지를 읽을 텍스트 채널", voice_channel="봇이 입장할 음성 채널")
+    async def slash_tts_channels(
+        interaction: discord.Interaction,
+        text_channel: discord.TextChannel,
+        voice_channel: discord.VoiceChannel,
+    ):
+        guild, member = await slash_require_admin(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings["text_channel_id"] = text_channel.id
+        settings["voice_channel_id"] = voice_channel.id
+        settings["enabled"] = True
+        settings["auto_join"] = True
+        settings["require_author_in_voice"] = False
+        save_data()
+        await interaction.response.send_message(
+            f"✅ 자동 TTS를 설정했습니다.\n텍스트: {text_channel.mention}\n음성: {voice_channel.mention}",
+            ephemeral=True,
+        )
+
+    @tts_slash.command(name="켜기", description="저장된 채널에서 자동 TTS를 켭니다.")
+    async def slash_tts_enable(interaction: discord.Interaction):
+        guild, member = await slash_require_admin(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        if not settings.get("text_channel_id") or not settings.get("voice_channel_id"):
+            await interaction.response.send_message("❌ `/tts 채널설정`을 먼저 실행하세요.", ephemeral=True)
+            return
+        settings["enabled"] = True
+        save_data()
+        await interaction.response.send_message("✅ 자동 TTS를 켰습니다.", ephemeral=True)
+
+    @tts_slash.command(name="끄기", description="자동 TTS를 끄고 대기열을 비웁니다.")
+    async def slash_tts_disable(interaction: discord.Interaction):
+        guild, member = await slash_require_admin(interaction)
+        if guild is None or member is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings["enabled"] = False
+        removed = VOICE_RUNTIME.clear(guild.id)
+        save_data()
+        await interaction.response.send_message(f"✅ 자동 TTS를 끄고 대기 메시지 {removed}개를 비웠습니다.", ephemeral=True)
+
+    if bot.tree.get_command("tts") is not None:
+        raise RuntimeError("슬래시 명령어 충돌: /tts가 이미 등록되어 있습니다.")
+    bot.tree.add_command(tts_slash)
 
     @bot.group(name="서버리뉴얼", aliases=["서버정리", "서버디자인"], invoke_without_command=True, case_insensitive=True)
     async def server_renewal(ctx: commands.Context):
@@ -1090,7 +1427,7 @@ def register_v433_voice_sanctuary(
             title="🕯 ABADDON 서버 리뉴얼",
             description=(
                 "현재 채널을 삭제하지 않고 카테고리·채널명·순서를 정돈합니다.\n"
-                "사진처럼 길어진 메뉴를 `깔끔`, `고딕`, `커뮤니티` 테마로 정리할 수 있습니다."
+                "사진처럼 길어진 메뉴를 7종 테마로 정리하고, 선택형 빈 카테고리 삭제와 복구 기록을 관리합니다."
             ),
             color=0x6D2335,
         )
@@ -1104,7 +1441,22 @@ def register_v433_voice_sanctuary(
             ),
             inline=False,
         )
-        embed.add_field(name="안전 원칙", value="채널·역할·메시지 삭제 없음 · 미인식 채널 유지 · 적용 전 자동 백업", inline=False)
+        embed.add_field(name="안전 원칙", value="미인식 채널 유지 · 적용 전 자동 백업 · 생성 항목 추적 · 선택 삭제 지원", inline=False)
+        await ctx.send(embed=embed)
+
+    @server_renewal.command(name="테마목록", aliases=["themes", "테마"])
+    async def server_renewal_themes(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        lines = [f"• **{name}** · {THEME_META[name]['label']}" for name in THEME_META]
+        embed = discord.Embed(
+            title="🎨 서버 리뉴얼 테마 7종",
+            description="\n".join(lines),
+            color=0x6D2335,
+        )
+        embed.add_field(name="미리보기", value="`!서버리뉴얼 미리보기 테마명`", inline=False)
+        embed.add_field(name="게임·음성 구역", value="`!서버리뉴얼 게임미리보기 테마명`", inline=False)
         await ctx.send(embed=embed)
 
     @server_renewal.command(name="미리보기", aliases=["preview"])
@@ -1113,7 +1465,7 @@ def register_v433_voice_sanctuary(
         if guild is None:
             return
         if style not in STYLE_NAMES:
-            await ctx.send("❌ 테마는 `깔끔`, `고딕`, `커뮤니티` 중에서 선택하세요.")
+            await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
             return
         await ctx.send(embed=_layout_preview_embed(guild, style))
 
@@ -1123,7 +1475,7 @@ def register_v433_voice_sanctuary(
         if guild is None or not isinstance(ctx.author, discord.Member):
             return
         if style not in STYLE_NAMES:
-            await ctx.send("❌ 테마는 `깔끔`, `고딕`, `커뮤니티` 중에서 선택하세요.")
+            await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
             return
         bot_member = guild.me
         if bot_member is None or not bot_member.guild_permissions.manage_channels:
@@ -1131,7 +1483,7 @@ def register_v433_voice_sanctuary(
             return
 
         settings = _layout_settings(world_data, guild.id)["layout"]
-        settings["backup"] = _snapshot_guild(guild)
+        backup = _store_backup(settings, _snapshot_guild(guild, operation="layout", style=style))
         save_data()
         progress = await ctx.send(f"🕯 **{style} 테마로 서버 메뉴를 정돈하는 중입니다...**")
         text_matches, voice_matches = _detect_layout(guild, style)
@@ -1157,6 +1509,8 @@ def register_v433_voice_sanctuary(
                     if admin_only:
                         kwargs["overwrites"] = _admin_category_overwrites(guild, ctx.author, bot_member)
                     category = await guild.create_category(category_name, **kwargs)
+                    _record_created(backup, "category", category.id)
+                    save_data()
                     await _renewal_pause()
                     created_categories += 1
                 categories[category_name] = category
@@ -1177,7 +1531,9 @@ def register_v433_voice_sanctuary(
                             bot_member,
                             allow_reactions=spec["key"] == "roles",
                         )
-                    await guild.create_text_channel(spec["name"], **kwargs)
+                    created_channel = await guild.create_text_channel(spec["name"], **kwargs)
+                    _record_created(backup, "channel", created_channel.id)
+                    save_data()
                     await _renewal_pause()
                     created_channels += 1
                 elif channel is not None:
@@ -1188,7 +1544,9 @@ def register_v433_voice_sanctuary(
             for spec, channel in voice_matches:
                 category = categories[spec["category"]]
                 if channel is None and spec["key"] in ESSENTIAL_KEYS:
-                    await guild.create_voice_channel(spec["name"], category=category, reason=reason)
+                    created_channel = await guild.create_voice_channel(spec["name"], category=category, reason=reason)
+                    _record_created(backup, "channel", created_channel.id)
+                    save_data()
                     await _renewal_pause()
                     created_channels += 1
                 elif channel is not None:
@@ -1219,7 +1577,7 @@ def register_v433_voice_sanctuary(
         if guild is None:
             return
         if style not in STYLE_NAMES:
-            await ctx.send("❌ 테마는 `깔끔`, `고딕`, `커뮤니티` 중에서 선택하세요.")
+            await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
             return
         await ctx.send(embed=_game_zone_preview_embed(guild, style))
 
@@ -1229,7 +1587,7 @@ def register_v433_voice_sanctuary(
         if guild is None or not isinstance(ctx.author, discord.Member):
             return
         if style not in STYLE_NAMES:
-            await ctx.send("❌ 테마는 `깔끔`, `고딕`, `커뮤니티` 중에서 선택하세요.")
+            await ctx.send("❌ 지원 테마: `깔끔`, `고딕`, `커뮤니티`, `미니멀`, `사이버`, `아포칼립스`, `판타지`")
             return
         bot_member = guild.me
         if bot_member is None or not bot_member.guild_permissions.manage_channels:
@@ -1242,7 +1600,7 @@ def register_v433_voice_sanctuary(
             return
 
         settings = _layout_settings(world_data, guild.id)["layout"]
-        settings["backup"] = _snapshot_guild(guild)
+        backup = _store_backup(settings, _snapshot_guild(guild, operation="game_zone", style=style))
         save_data()
         progress = await ctx.send(f"🎮 **{style} 테마로 봇 게임·음성 구역을 나누는 중입니다...**")
         category_names = _game_zone_category_names(style)
@@ -1274,8 +1632,14 @@ def register_v433_voice_sanctuary(
                 await _renewal_pause()
                 categories[key] = preferred
                 reused_categories += 1
+                reused_ids = backup.setdefault("reused_category_ids", [])
+                if preferred.id not in reused_ids:
+                    reused_ids.append(preferred.id)
+                    save_data()
                 return preferred
             created = await guild.create_category(target_name, reason=reason)
+            _record_created(backup, "category", created.id)
+            save_data()
             await _renewal_pause()
             categories[key] = created
             created_categories += 1
@@ -1352,21 +1716,84 @@ def register_v433_voice_sanctuary(
         except discord.HTTPException as exc:
             await progress.edit(content=f"❌ Discord API 오류로 중단됐습니다: `{type(exc).__name__}: {str(exc)[:250]}`")
 
-    @server_renewal.command(name="되돌리기", aliases=["undo", "복원"])
-    async def server_renewal_undo(ctx: commands.Context):
+    @server_renewal.command(name="백업목록", aliases=["backups", "복구목록"])
+    async def server_renewal_backup_list(ctx: commands.Context):
         guild = await require_admin(ctx)
         if guild is None:
             return
         settings = _layout_settings(world_data, guild.id)["layout"]
-        backup = settings.get("backup")
-        if not isinstance(backup, dict):
+        backups: List[Dict[str, Any]] = []
+        current = settings.get("backup")
+        if isinstance(current, dict):
+            backups.append(current)
+        history = settings.get("backup_history", [])
+        if isinstance(history, list):
+            backups.extend(reversed([item for item in history if isinstance(item, dict)]))
+        unique: List[Dict[str, Any]] = []
+        seen: set[int] = set()
+        for item in backups:
+            stamp = int(item.get("created_at", 0) or 0)
+            if stamp in seen:
+                continue
+            seen.add(stamp)
+            unique.append(item)
+        if not unique:
+            await ctx.send("⚠️ 저장된 서버 리뉴얼 백업이 없습니다.")
+            return
+        lines = []
+        for index, item in enumerate(unique[:5], start=1):
+            stamp = int(item.get("created_at", 0) or 0)
+            dt = f"<t:{stamp}:F>" if stamp else "시간 미상"
+            lines.append(
+                f"**{index}.** {dt} · `{item.get('operation', 'legacy')}` · "
+                f"테마 `{item.get('style') or '없음'}` · 채널 {len(item.get('channels', []))}개"
+            )
+        await ctx.send(
+            "🗃️ **서버 리뉴얼 복구 지점**\n"
+            + "\n".join(lines)
+            + "\n\n복구: `!서버리뉴얼 되돌리기 번호` (기본 1번)"
+        )
+
+    @server_renewal.command(name="되돌리기", aliases=["undo", "복원"])
+    async def server_renewal_undo(ctx: commands.Context, backup_number: int = 1):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        backups: List[Dict[str, Any]] = []
+        current = settings.get("backup")
+        if isinstance(current, dict):
+            backups.append(current)
+        history = settings.get("backup_history", [])
+        if isinstance(history, list):
+            backups.extend(reversed([item for item in history if isinstance(item, dict)]))
+        unique: List[Dict[str, Any]] = []
+        seen: set[int] = set()
+        for item in backups:
+            stamp = int(item.get("created_at", 0) or 0)
+            if stamp in seen:
+                continue
+            seen.add(stamp)
+            unique.append(item)
+        if not unique:
             await ctx.send("⚠️ 되돌릴 서버 리뉴얼 백업이 없습니다.")
             return
-        progress = await ctx.send("↩️ **리뉴얼 전 채널 이름과 위치를 복구하는 중입니다...**")
+        if backup_number < 1 or backup_number > len(unique):
+            await ctx.send(f"❌ 백업 번호는 1부터 {len(unique)} 사이여야 합니다. `!서버리뉴얼 백업목록`을 확인하세요.")
+            return
+        backup = unique[backup_number - 1]
+        progress = await ctx.send(f"↩️ **{backup_number}번 복구 지점으로 서버를 복구하는 중입니다...**")
         restored = 0
+        deleted_created_channels = 0
+        kept_created_channels = 0
+        deleted_created_categories = 0
+        legacy_cleaned = 0
+        legacy_channels_cleaned = 0
         category_map = {category.id: category for category in guild.categories}
         channel_map = {channel.id: channel for channel in [*guild.text_channels, *guild.voice_channels]}
         reason = f"ABADDON v{VERSION} 서버 리뉴얼 되돌리기 / {ctx.author}"
+
+        # 원래 존재하던 카테고리 이름과 위치를 먼저 복원합니다.
         for row in backup.get("categories", []):
             category = category_map.get(int(row.get("id", 0)))
             if category is None:
@@ -1381,6 +1808,8 @@ def register_v433_voice_sanctuary(
                 await category.edit(name=str(row.get("name", category.name)), position=int(row.get("position", category.position)), reason=reason)
                 await _renewal_pause()
                 restored += 1
+
+        # 원래 채널의 이름·카테고리·위치를 복원합니다.
         category_map = {category.id: category for category in guild.categories}
         for row in backup.get("channels", []):
             channel = channel_map.get(int(row.get("id", 0)))
@@ -1397,10 +1826,113 @@ def register_v433_voice_sanctuary(
                 )
                 await _renewal_pause()
                 restored += 1
+
+        # v4.3.3.4 이후 생성된 채널은 ID로 추적합니다. 사용 흔적이 있으면 보존합니다.
+        for channel_id in list(backup.get("created_channel_ids", [])):
+            channel = guild.get_channel(int(channel_id))
+            if channel is None:
+                continue
+            safe_to_delete = False
+            if isinstance(channel, discord.VoiceChannel):
+                safe_to_delete = not channel.members
+            elif isinstance(channel, discord.TextChannel):
+                try:
+                    latest = [message async for message in channel.history(limit=1)]
+                    safe_to_delete = not latest
+                except (discord.Forbidden, discord.HTTPException):
+                    safe_to_delete = False
+            if safe_to_delete:
+                try:
+                    await channel.delete(reason=reason)
+                    await _renewal_pause()
+                    deleted_created_channels += 1
+                except (discord.Forbidden, discord.HTTPException):
+                    kept_created_channels += 1
+            else:
+                kept_created_channels += 1
+
+        # 추적된 신규 카테고리는 비어 있을 때만 삭제합니다.
+        for category_id in list(backup.get("created_category_ids", [])):
+            category = guild.get_channel(int(category_id))
+            if isinstance(category, discord.CategoryChannel) and not category.channels:
+                try:
+                    await category.delete(reason=reason)
+                    await _renewal_pause()
+                    deleted_created_categories += 1
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+
+        # 구버전 백업에는 생성 ID가 없었습니다. 원본에 없던 알려진 테마 채널·카테고리만 보수적으로 정리합니다.
+        if int(backup.get("snapshot_version", 1) or 1) < 2 or not backup.get("created_category_ids"):
+            original_channel_ids = {int(row.get("id", 0)) for row in backup.get("channels", [])}
+            original_category_ids = {int(row.get("id", 0)) for row in backup.get("categories", [])}
+            known_channel_names = {_normalise_name(name) for name in _all_theme_channel_names()}
+            known_category_names = {_normalise_name(name) for name in _all_theme_category_names()}
+            tts_settings = _layout_settings(world_data, guild.id)["tts"]
+            protected_ids = {
+                int(value) for value in (
+                    tts_settings.get("text_channel_id"),
+                    tts_settings.get("voice_channel_id"),
+                    settings.get("menu_channel_id"),
+                ) if value
+            }
+            for channel in list([*guild.text_channels, *guild.voice_channels]):
+                if channel.id in original_channel_ids or channel.id in protected_ids:
+                    continue
+                if _normalise_name(channel.name) not in known_channel_names:
+                    continue
+                safe_to_delete = False
+                if isinstance(channel, discord.VoiceChannel):
+                    safe_to_delete = not channel.members
+                elif isinstance(channel, discord.TextChannel):
+                    try:
+                        latest = [message async for message in channel.history(limit=1)]
+                        safe_to_delete = not latest
+                    except (discord.Forbidden, discord.HTTPException):
+                        safe_to_delete = False
+                if not safe_to_delete:
+                    continue
+                try:
+                    await channel.delete(reason=f"{reason} / 구버전 잔여 채널")
+                    await _renewal_pause()
+                    legacy_channels_cleaned += 1
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+            for category in list(guild.categories):
+                if category.id in original_category_ids or category.channels:
+                    continue
+                if _normalise_name(category.name) not in known_category_names:
+                    continue
+                try:
+                    await category.delete(reason=f"{reason} / 구버전 잔여 카테고리")
+                    await _renewal_pause()
+                    legacy_cleaned += 1
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+
         settings["style"] = None
         settings["restored_at"] = int(time.time())
+        settings["last_restore_report"] = {
+            "restored": restored,
+            "deleted_created_channels": deleted_created_channels,
+            "kept_created_channels": kept_created_channels,
+            "deleted_created_categories": deleted_created_categories,
+            "legacy_cleaned": legacy_cleaned,
+            "legacy_channels_cleaned": legacy_channels_cleaned,
+        }
         save_data()
-        await progress.edit(content=f"✅ 리뉴얼 전 상태로 **{restored}개 항목**을 복구했습니다. 새로 만든 채널은 안전을 위해 삭제하지 않았습니다.")
+        await progress.edit(
+            content=(
+                f"✅ **서버 리뉴얼 복구 완료**\n"
+                f"원래 이름·위치 복원: **{restored}개**\n"
+                f"빈 신규 채널 삭제: **{deleted_created_channels}개**\n"
+                f"사용 흔적으로 보존: **{kept_created_channels}개**\n"
+                f"빈 신규 카테고리 삭제: **{deleted_created_categories}개**\n"
+                f"구버전 잔여 채널 정리: **{legacy_channels_cleaned}개**\n"
+                f"구버전 잔여 카테고리 정리: **{legacy_cleaned}개**\n\n"
+                "보존된 항목은 `!서버리뉴얼 빈카테고리선택`에서 직접 고를 수 있습니다."
+            )
+        )
 
     @server_renewal.command(name="상태", aliases=["status"])
     async def server_renewal_status(ctx: commands.Context):
@@ -1422,42 +1954,153 @@ def register_v433_voice_sanctuary(
         guild = await require_admin(ctx)
         if guild is None:
             return
-        empty = [category for category in guild.categories if not category.channels]
+        empty = _empty_categories(guild)
         if not empty:
             await ctx.send("✅ 비어 있는 카테고리가 없습니다.")
             return
-        lines = [f"• `{category.name}`" for category in empty[:30]]
+        lines = [f"**{index}.** `{category.name}` · ID `{category.id}`" for index, category in enumerate(empty[:40], start=1)]
+        suffix = "" if len(empty) <= 40 else f"\n…외 {len(empty) - 40}개"
         await ctx.send(
-            "🧹 **비어 있는 카테고리**\n"
+            "🧹 **비어 있는 카테고리 목록**\n"
             + "\n".join(lines)
-            + "\n\n삭제하려면 `!서버리뉴얼 빈카테고리삭제 확인`을 입력하세요. 채널은 삭제하지 않습니다."
+            + suffix
+            + "\n\n드롭다운: `!서버리뉴얼 빈카테고리선택`"
+            + "\n번호 삭제: `!서버리뉴얼 빈카테고리삭제 1,3,5 확인`"
+            + "\n전체 삭제: `!서버리뉴얼 빈카테고리삭제 전체 확인`"
         )
 
+    class EmptyCategorySelect(discord.ui.Select):
+        def __init__(self, categories: Sequence[discord.CategoryChannel]):
+            options = [
+                discord.SelectOption(
+                    label=category.name[:100],
+                    value=str(category.id),
+                    description=f"빈 카테고리 · 위치 {category.position}"[:100],
+                    emoji="🗑️",
+                )
+                for category in categories[:25]
+            ]
+            super().__init__(
+                placeholder="삭제할 빈 카테고리를 선택하세요",
+                min_values=1,
+                max_values=max(1, len(options)),
+                options=options,
+            )
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            view = self.view
+            if not isinstance(view, EmptyCategoryDeleteView):
+                await interaction.response.send_message("❌ 선택 메뉴 상태를 확인하지 못했습니다.", ephemeral=True)
+                return
+            view.selected_ids = {int(value) for value in self.values}
+            names = []
+            if interaction.guild is not None:
+                for category_id in view.selected_ids:
+                    category = interaction.guild.get_channel(category_id)
+                    if isinstance(category, discord.CategoryChannel):
+                        names.append(category.name)
+            await interaction.response.send_message(
+                "선택됨: " + ", ".join(f"`{name}`" for name in names[:15]) + "\n아래 **선택 삭제** 버튼을 누르세요.",
+                ephemeral=True,
+            )
+
+    class EmptyCategoryDeleteView(discord.ui.View):
+        def __init__(self, owner_id: int, categories: Sequence[discord.CategoryChannel]):
+            super().__init__(timeout=180)
+            self.owner_id = owner_id
+            self.category_ids = {category.id for category in categories}
+            self.selected_ids: set[int] = set()
+            self.add_item(EmptyCategorySelect(categories))
+
+        async def interaction_check(self, interaction: discord.Interaction) -> bool:
+            if interaction.user.id != self.owner_id:
+                await interaction.response.send_message("❌ 이 선택 메뉴를 연 관리자만 사용할 수 있습니다.", ephemeral=True)
+                return False
+            return True
+
+        @discord.ui.button(label="선택 삭제", style=discord.ButtonStyle.danger, emoji="🗑️")
+        async def delete_selected(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            if interaction.guild is None:
+                await interaction.response.send_message("❌ 서버에서만 사용할 수 있습니다.", ephemeral=True)
+                return
+            if not self.selected_ids:
+                await interaction.response.send_message("⚠️ 먼저 카테고리를 선택하세요.", ephemeral=True)
+                return
+            deleted = 0
+            skipped = 0
+            for category_id in list(self.selected_ids):
+                category = interaction.guild.get_channel(category_id)
+                if not isinstance(category, discord.CategoryChannel) or category.channels:
+                    skipped += 1
+                    continue
+                try:
+                    await category.delete(reason=f"ABADDON v{VERSION} 선택형 빈 카테고리 삭제 / {interaction.user}")
+                    await _renewal_pause()
+                    deleted += 1
+                except (discord.Forbidden, discord.HTTPException):
+                    skipped += 1
+            for child in self.children:
+                child.disabled = True
+            await interaction.response.edit_message(
+                content=f"✅ 선택한 빈 카테고리 **{deleted}개**를 삭제했습니다. 건너뜀: **{skipped}개**",
+                view=self,
+            )
+            self.stop()
+
+        @discord.ui.button(label="취소", style=discord.ButtonStyle.secondary, emoji="✖️")
+        async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            for child in self.children:
+                child.disabled = True
+            await interaction.response.edit_message(content="취소했습니다.", view=self)
+            self.stop()
+
+    @server_renewal.command(name="빈카테고리선택", aliases=["emptyselect", "선택삭제"])
+    async def server_renewal_empty_select(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        empty = _empty_categories(guild)
+        if not empty:
+            await ctx.send("✅ 선택할 빈 카테고리가 없습니다.")
+            return
+        view = EmptyCategoryDeleteView(ctx.author.id, empty[:25])
+        note = "" if len(empty) <= 25 else f"\n⚠️ Discord 드롭다운 제한으로 앞쪽 25개만 표시합니다. 나머지는 번호 삭제를 사용하세요."
+        await ctx.send("🗑️ **삭제할 빈 카테고리를 선택하세요.**" + note, view=view)
+
     @server_renewal.command(name="빈카테고리삭제", aliases=["cleanempty"])
-    async def server_renewal_delete_empty(ctx: commands.Context, confirm: str = ""):
+    async def server_renewal_delete_empty(ctx: commands.Context, selection: str = "", confirm: str = ""):
         guild = await require_admin(ctx)
         if guild is None:
             return
         if confirm != "확인":
-            await ctx.send("⚠️ 빈 카테고리만 삭제하려면 `!서버리뉴얼 빈카테고리삭제 확인`을 입력하세요.")
+            await ctx.send(
+                "⚠️ 사용법: `!서버리뉴얼 빈카테고리삭제 1,3 확인` 또는 "
+                "`!서버리뉴얼 빈카테고리삭제 전체 확인`"
+            )
             return
-        empty = [category for category in guild.categories if not category.channels]
-        if not empty:
-            await ctx.send("✅ 삭제할 빈 카테고리가 없습니다.")
+        empty = _empty_categories(guild)
+        targets = _parse_category_selection(selection, empty)
+        if not targets:
+            await ctx.send("❌ 선택한 번호에 해당하는 빈 카테고리가 없습니다. `!서버리뉴얼 빈카테고리`로 번호를 확인하세요.")
             return
         settings = _layout_settings(world_data, guild.id)["layout"]
         if not settings.get("backup"):
-            settings["backup"] = _snapshot_guild(guild)
+            _store_backup(settings, _snapshot_guild(guild, operation="empty_category_delete"))
             save_data()
         deleted = 0
-        reason = f"ABADDON v{VERSION} 빈 카테고리 정리 / {ctx.author}"
-        for category in empty:
+        skipped = 0
+        reason = f"ABADDON v{VERSION} 선택형 빈 카테고리 정리 / {ctx.author}"
+        for category in targets:
+            if category.channels:
+                skipped += 1
+                continue
             try:
                 await category.delete(reason=reason)
+                await _renewal_pause()
                 deleted += 1
             except (discord.Forbidden, discord.HTTPException):
-                continue
-        await ctx.send(f"✅ 채널은 건드리지 않고 빈 카테고리 **{deleted}개**를 정리했습니다.")
+                skipped += 1
+        await ctx.send(f"✅ 선택한 빈 카테고리 **{deleted}개**를 삭제했습니다. 건너뜀: **{skipped}개**")
 
     @bot.group(name="서버메뉴", aliases=["채널메뉴", "안내패널"], invoke_without_command=True, case_insensitive=True)
     async def server_menu(ctx: commands.Context):
