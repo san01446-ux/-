@@ -4265,6 +4265,11 @@ register_v600_game_center(
     bot, get_user, check_registered, save_data, add_title, add_season_points,
 )
 
+# V6.0.2: 채널별 규칙 자동 작성·미리보기·고정·중복 갱신 제어실
+# prefix 전용 명령으로 추가해 Discord 글로벌 slash 최상위 개수는 증가하지 않습니다.
+from apocalypse_bot.commands.v602_channel_rules import register_v602_channel_rules
+register_v602_channel_rules(bot, world_data, save_data)
+
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
@@ -4280,3 +4285,5 @@ register_grouped_slash_commands(bot)
 # V5.2.1: 통합 진단 센터·서버 설정 드롭다운·슬래시 동기화 상태 기록
 
 # V6.0.0: 게임 제어실 9개 카테고리·100+ 기능·스토리 시즌 3 종말의 왕좌
+
+# V6.0.2: 채널 규칙 17종 자동 추천·미리보기·작성·고정·중복 갱신
