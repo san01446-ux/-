@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from dataclasses import dataclass
@@ -10,8 +11,9 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.0.2"
+VERSION = "6.1.0"
 MENU_TIMEOUT = 300
+BATCH_INTERVAL_SECONDS = 20
 RULE_DATA_KEY = "channel_rules_v602"
 
 
@@ -340,7 +342,119 @@ RULE_TEMPLATES: Mapping[str, RuleTemplate] = {
             "통합 진단은 `!아바돈진단`, 설정은 `!설정`에서 확인합니다.",
         ),
         ("민감한 운영 정보가 포함되므로 채널 접근 권한을 정기적으로 확인해 주세요.",),
-        ("운영", "보안", "관리", "로그", "mod"),
+        ("운영", "보안", "관리", "로그", "mod", "지휘관", "감시일지", "봇로그"),
+    ),
+    "rescue": _template(
+        "rescue", "구조·현장 기록", "🆘",
+        "현장 사진과 구조 요청을 빠르고 정확하게 공유하는 재난 대응 채널입니다.",
+        (
+            "긴급 구조 요청에는 위치, 상황, 인원, 위험 요소를 가능한 범위에서 명확히 적어 주세요.",
+            "장난 신고, 허위 위치, 반복 호출과 구조 대상자 개인정보 공개를 금지합니다.",
+            "현장 사진에는 불필요한 개인정보·차량번호·얼굴이 노출되지 않도록 주의합니다.",
+            "구조 완료 또는 상황 종료 시 원문에 결과를 남겨 중복 출동을 막아 주세요.",
+        ),
+        (
+            "구조 요청 형식: 위치 / 위험 / 인원 / 필요한 지원 / 연락 가능 여부",
+            "사진은 설명과 함께 올리고, 긴급 상황은 운영진을 한 번만 호출합니다.",
+        ),
+        ("실제 긴급 상황은 Discord보다 지역 긴급기관 연락이 우선입니다.",),
+        ("구조", "구조요청", "현장", "현장사진", "사진", "구호"),
+    ),
+    "finance": _template(
+        "finance", "은행·사채 금융", "🏦",
+        "게임 안의 식량, 예금, 대출과 사채 기록을 확인하는 금융 채널입니다.",
+        (
+            "현금·현물·계정 거래와 외부 결제 유도는 절대 금지됩니다.",
+            "입금·출금·대출·상환 금액을 실행 전에 다시 확인해 주세요.",
+            "오류나 지연 중 같은 금융 명령을 반복해 중복 처리를 유도하지 않습니다.",
+            "사채 기능은 게임 내 가상 재화이며 실제 채무나 금전 가치가 없습니다.",
+        ),
+        (
+            "잔액과 거래 기록을 확인한 뒤 감당 가능한 범위에서 이용합니다.",
+            "금융 오류는 거래 시각과 메시지 링크를 함께 버그제보 채널에 남깁니다.",
+        ),
+        ("복구가 필요한 경우 운영진은 서버 기록을 기준으로 판단합니다.",),
+        ("은행", "사채", "금융", "대출", "예금", "코인시세"),
+    ),
+    "pet": _template(
+        "pet", "펫·보호소", "🐾",
+        "펫 획득, 성장, 보호와 도감 기록을 관리하는 채널입니다.",
+        (
+            "펫 획득·성장 오류를 악용해 중복 보상을 받지 않습니다.",
+            "타인의 펫 선택과 성장 방식을 비난하거나 강요하지 않습니다.",
+            "실제 동물 학대 이미지나 불쾌한 콘텐츠를 게시하지 않습니다.",
+            "펫 관련 거래는 봇이 지원하는 공식 기능과 서버 규칙 안에서만 진행합니다.",
+        ),
+        (
+            "펫 상태와 도감은 `!게임`의 펫·도감 구역에서 확인합니다.",
+            "오류가 보이면 반복 실행하지 말고 버그제보 채널에 남깁니다.",
+        ),
+        ("게임 밸런스에 따라 펫 능력과 보상이 조정될 수 있습니다.",),
+        ("펫", "보호소", "동물", "도감"),
+    ),
+    "ranking": _template(
+        "ranking", "랭킹·기록", "🏆",
+        "생존자들의 성장과 활동 기록을 확인하는 경쟁 채널입니다.",
+        (
+            "랭킹 결과로 다른 이용자를 조롱하거나 과도한 경쟁을 강요하지 않습니다.",
+            "매크로, 다중 계정, 버그 악용으로 기록을 올리는 행위는 금지됩니다.",
+            "표시 지연 중 명령을 반복하거나 기록 메시지를 도배하지 않습니다.",
+            "비정상 기록을 발견하면 공개 비난 대신 운영진에게 제보합니다.",
+        ),
+        (
+            "랭킹은 봇이 저장한 최신 데이터를 기준으로 확인합니다.",
+            "시즌·이벤트 랭킹은 해당 공지의 종료 시각과 보상 기준이 우선합니다.",
+        ),
+        ("동점 처리와 기록 복구는 서버 운영 정책을 따릅니다.",),
+        ("랭킹", "순위", "기록", "전적"),
+    ),
+    "codex": _template(
+        "codex", "아이템·정보 도감", "📚",
+        "아이템, 펫, 몬스터와 게임 정보를 찾아보는 읽기 중심 채널입니다.",
+        (
+            "도감 정보를 고의로 왜곡하거나 허위 획득 방법을 안내하지 않습니다.",
+            "같은 조회 명령을 반복해 채널을 도배하지 않습니다.",
+            "미공개 운영 정보, 토큰, 내부 파일과 악성 링크를 게시하지 않습니다.",
+            "오류가 있는 설명은 화면과 정확한 항목명을 함께 제보합니다.",
+        ),
+        (
+            "명령어 목록은 `!명령어`, 게임 기능은 `!게임`에서 확인합니다.",
+            "검색하려는 아이템·펫·몬스터 이름을 정확하게 입력합니다.",
+        ),
+        ("업데이트 후 수치가 변경될 수 있으므로 최신 봇 결과를 기준으로 합니다.",),
+        ("도감", "아이템", "명령어목록", "정보", "목록"),
+    ),
+    "market": _template(
+        "market", "암시장·코인 시세", "📈",
+        "게임 자산과 코인 시세, 암시장 변동을 확인하는 채널입니다.",
+        (
+            "허위 시세 정보, 담합, 반복 홍보와 가격 조작 시도를 금지합니다.",
+            "실제 투자·현금 수익을 보장하는 것처럼 안내하지 않습니다.",
+            "시장 지연 중 주문을 반복해 중복 체결이나 복제를 시도하지 않습니다.",
+            "게임 자산은 서버 내부 가상 재화이며 실제 금전 가치가 없습니다.",
+        ),
+        (
+            "시세와 보유량을 확인한 뒤 감당 가능한 게임 재화만 사용합니다.",
+            "코인 탐색을 모두 사용하면 `!알바`, 알바도 모두 사용하면 `!땅파기`를 이용합니다.",
+        ),
+        ("가격은 게임 시스템에 따라 변동하며 운영진이 수익을 보장하지 않습니다.",),
+        ("암시장", "코인", "시세", "시장", "거래소"),
+    ),
+    "crafting": _template(
+        "crafting", "장비·제작 시험", "🧪",
+        "장비, 강화, 제작과 신규 기능을 안전하게 시험하는 채널입니다.",
+        (
+            "복제·강화 오류·재료 중복 지급을 발견해도 추가 악용하지 않습니다.",
+            "테스트 결과를 실제 거래 가치처럼 과장하거나 다른 이용자를 속이지 않습니다.",
+            "대량 반복 명령과 자동화 도구 사용을 금지합니다.",
+            "실험 중 429, 권한 오류, 데이터 이상이 보이면 즉시 추가 실행을 멈춥니다.",
+        ),
+        (
+            "시험 전 현재 장비와 재료 상태를 확인하고 결과 화면을 보관합니다.",
+            "오류 제보에는 명령어, 시각, 결과 메시지와 기대 동작을 적습니다.",
+        ),
+        ("운영진이 지정한 테스트 범위를 벗어난 실제 데이터 변경은 복구가 제한될 수 있습니다.",),
+        ("장비시험", "강화시험", "제작", "장비", "실험"),
     ),
 }
 
@@ -353,6 +467,33 @@ def detect_template(channel: discord.abc.GuildChannel) -> RuleTemplate:
     haystack = _normalise_channel_name(getattr(channel, "name", ""))
     topic = _normalise_channel_name(getattr(channel, "topic", "") or "")
     combined = f"{haystack}{topic}"
+
+    # 공식 서버의 비슷한 채널명을 먼저 정확히 분류합니다.
+    # 긴 키워드를 우선해 `암시장-도박`이 일반 암시장 규칙으로 잘못 분류되는 것을 막습니다.
+    exact_overrides: Sequence[Tuple[Tuple[str, ...], str]] = (
+        (("암시장도박",), "casino"),
+        (("현장사진", "구조요청"), "rescue"),
+        (("지휘관회의", "감시일지", "봇로그"), "operations"),
+        (("서버안내", "업데이트내역"), "announcement"),
+        (("일상공유",), "chat"),
+        (("생존자등록",), "registration"),
+        (("전투구역", "던전"), "rpg"),
+        (("사채시장", "은행"), "finance"),
+        (("펫보호소",), "pet"),
+        (("거래소",), "trade"),
+        (("랭킹",), "ranking"),
+        (("명령어목록",), "bot_commands"),
+        (("아이템도감",), "codex"),
+        (("코인시세",), "market"),
+        (("버그제보", "신고접수"), "support"),
+        (("장비시험",), "crafting"),
+        (("공용무전",), "tts"),
+        (("암시장",), "market"),
+    )
+    for names, key in exact_overrides:
+        if any(name in haystack for name in names):
+            return RULE_TEMPLATES[key]
+
     best: Optional[RuleTemplate] = None
     best_score = 0
     for template in RULE_TEMPLATES.values():
@@ -574,6 +715,272 @@ def register_v602_channel_rules(
                 return False
             return True
 
+    batch_tasks: Dict[int, asyncio.Task[Any]] = {}
+
+    def _batch_plan(guild_id: int) -> Dict[str, Any]:
+        root = _rule_root(world_data, guild_id)
+        plan = root.setdefault("batch_plan", {})
+        if not isinstance(plan, dict):
+            plan = {}
+            root["batch_plan"] = plan
+        plan.setdefault("status", "none")
+        plan.setdefault("items", [])
+        plan.setdefault("cursor", 0)
+        plan.setdefault("installed", 0)
+        plan.setdefault("failed", 0)
+        plan.setdefault("created_at", 0)
+        plan.setdefault("updated_at", 0)
+        plan.setdefault("control_channel_id", 0)
+        plan.setdefault("actor_id", 0)
+        return plan
+
+    def _batch_embed(guild: discord.Guild, plan: Dict[str, Any]) -> discord.Embed:
+        items = plan.get("items", []) if isinstance(plan.get("items"), list) else []
+        cursor = max(0, int(plan.get("cursor", 0) or 0))
+        status_map = {
+            "none": "계획 없음",
+            "ready": "시작 대기",
+            "running": "안전 일괄설치 진행 중",
+            "paused": "일시정지",
+            "complete": "완료",
+            "cancelled": "취소됨",
+        }
+        embed = discord.Embed(
+            title="📌 채널 규칙 안전 일괄설치",
+            description=(
+                f"상태: **{status_map.get(str(plan.get('status')), str(plan.get('status')))}**\n"
+                f"진행: **{min(cursor, len(items))}/{len(items)}** · 성공 **{int(plan.get('installed', 0))}** · 실패 **{int(plan.get('failed', 0))}**\n"
+                f"채널 사이 대기: **{BATCH_INTERVAL_SECONDS}초**"
+            ),
+            color=discord.Color.dark_teal(),
+        )
+        lines = []
+        for index, item in enumerate(items[:25], 1):
+            channel = guild.get_channel(int(item.get("channel_id", 0) or 0))
+            channel_text = channel.mention if channel is not None else f"삭제된 채널 `{item.get('channel_id')}`"
+            template = RULE_TEMPLATES.get(str(item.get("template")), RULE_TEMPLATES["chat"])
+            result = str(item.get("result") or "대기")
+            marker = "✅" if result == "success" else "❌" if result == "failed" else "⏳" if index - 1 == cursor else "▫️"
+            lines.append(f"{marker} {channel_text} → {template.emoji} **{template.label}**")
+        if lines:
+            embed.add_field(name="설치 목록", value="\n".join(lines)[:1024], inline=False)
+        embed.set_footer(text="429 연쇄 요청 방지를 위해 채널마다 천천히 작성·고정합니다")
+        return embed
+
+    async def _run_batch(guild_id: int) -> None:
+        guild = bot.get_guild(guild_id)
+        if guild is None:
+            return
+        plan = _batch_plan(guild_id)
+        items = plan.get("items", [])
+        if not isinstance(items, list) or not items:
+            plan["status"] = "none"
+            save_data()
+            return
+        plan["status"] = "running"
+        plan["updated_at"] = int(time.time())
+        save_data()
+        control_channel = guild.get_channel(int(plan.get("control_channel_id", 0) or 0))
+        if isinstance(control_channel, discord.TextChannel):
+            try:
+                await control_channel.send(
+                    f"📌 채널 규칙 안전 일괄설치를 시작합니다. **{len(items)}개 채널** · 채널당 {BATCH_INTERVAL_SECONDS}초 간격"
+                )
+            except discord.HTTPException:
+                pass
+        try:
+            while int(plan.get("cursor", 0)) < len(items):
+                if str(plan.get("status")) != "running":
+                    break
+                cursor = int(plan.get("cursor", 0))
+                item = items[cursor]
+                channel = guild.get_channel(int(item.get("channel_id", 0) or 0))
+                if not isinstance(channel, discord.TextChannel):
+                    item["result"] = "failed"
+                    item["detail"] = "텍스트 채널을 찾을 수 없음"
+                    plan["failed"] = int(plan.get("failed", 0)) + 1
+                    plan["cursor"] = cursor + 1
+                    save_data()
+                    continue
+                template = RULE_TEMPLATES.get(str(item.get("template")), detect_template(channel))
+                actor = guild.get_member(int(plan.get("actor_id", 0) or 0)) or guild.owner
+                if actor is None:
+                    plan["status"] = "paused"
+                    item["detail"] = "실행 관리자 정보를 찾을 수 없음"
+                    save_data()
+                    break
+                try:
+                    message, detail = await asyncio.wait_for(
+                        publish_rule(bot, world_data, save_data, channel, template, actor),
+                        timeout=60,
+                    )
+                except asyncio.TimeoutError:
+                    message, detail = None, "Discord 응답이 60초를 초과해 안전 중단"
+                if message is None:
+                    item["result"] = "failed"
+                    item["detail"] = detail
+                    plan["failed"] = int(plan.get("failed", 0)) + 1
+                    plan["cursor"] = cursor + 1
+                    plan["updated_at"] = int(time.time())
+                    if "Discord API" in detail or "60초" in detail:
+                        plan["status"] = "paused"
+                        save_data()
+                        break
+                else:
+                    item["result"] = "success"
+                    item["detail"] = detail
+                    item["message_id"] = message.id
+                    plan["installed"] = int(plan.get("installed", 0)) + 1
+                    plan["cursor"] = cursor + 1
+                    plan["updated_at"] = int(time.time())
+                save_data()
+                if int(plan.get("cursor", 0)) < len(items) and str(plan.get("status")) == "running":
+                    await asyncio.sleep(BATCH_INTERVAL_SECONDS)
+            if int(plan.get("cursor", 0)) >= len(items):
+                plan["status"] = "complete"
+                plan["updated_at"] = int(time.time())
+                save_data()
+        except asyncio.CancelledError:
+            if str(plan.get("status")) == "running":
+                plan["status"] = "paused"
+                plan["updated_at"] = int(time.time())
+                save_data()
+            raise
+        finally:
+            batch_tasks.pop(guild_id, None)
+            if isinstance(control_channel, discord.TextChannel):
+                try:
+                    await control_channel.send(embed=_batch_embed(guild, plan))
+                except discord.HTTPException:
+                    pass
+
+    def _start_batch(guild_id: int) -> bool:
+        task = batch_tasks.get(guild_id)
+        if task is not None and not task.done():
+            return False
+        plan = _batch_plan(guild_id)
+        if not isinstance(plan.get("items"), list) or not plan["items"]:
+            return False
+        plan["status"] = "running"
+        plan["updated_at"] = int(time.time())
+        save_data()
+        batch_tasks[guild_id] = asyncio.create_task(_run_batch(guild_id))
+        return True
+
+    class BatchChannelSelect(discord.ui.ChannelSelect):
+        def __init__(self) -> None:
+            super().__init__(
+                placeholder="규칙을 설치할 텍스트 채널을 최대 25개 선택하세요",
+                min_values=1,
+                max_values=25,
+                channel_types=[discord.ChannelType.text],
+            )
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            guild = interaction.guild
+            if guild is None:
+                await interaction.response.send_message("서버에서만 사용할 수 있습니다.", ephemeral=True)
+                return
+            selected = []
+            for selected_channel in self.values:
+                channel = guild.get_channel(int(selected_channel.id))
+                if isinstance(channel, discord.TextChannel):
+                    selected.append(channel)
+            if not selected:
+                await interaction.response.send_message("선택한 텍스트 채널을 확인할 수 없습니다.", ephemeral=True)
+                return
+            await interaction.response.edit_message(
+                embed=build_batch_preview_embed(guild, selected),
+                view=BatchConfirmView(tuple(channel.id for channel in selected)),
+            )
+
+    class BatchSelectView(ManagerView):
+        def __init__(self) -> None:
+            super().__init__()
+            self.add_item(BatchChannelSelect())
+
+    class BatchConfirmView(ManagerView):
+        def __init__(self, channel_ids: Tuple[int, ...]) -> None:
+            super().__init__()
+            self.channel_ids = channel_ids
+
+        @discord.ui.button(label="안전 일괄설치 시작", emoji="📌", style=discord.ButtonStyle.success)
+        async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            guild = interaction.guild
+            if guild is None:
+                await interaction.response.send_message("서버에서만 사용할 수 있습니다.", ephemeral=True)
+                return
+            current_task = batch_tasks.get(guild.id)
+            if current_task is not None and not current_task.done():
+                await interaction.response.send_message("이미 일괄설치가 진행 중입니다.", ephemeral=True)
+                return
+            items = []
+            for channel_id in self.channel_ids:
+                channel = guild.get_channel(channel_id)
+                if isinstance(channel, discord.TextChannel):
+                    items.append({
+                        "channel_id": channel.id,
+                        "template": detect_template(channel).key,
+                        "result": "pending",
+                        "detail": "",
+                    })
+            plan = _batch_plan(guild.id)
+            plan.clear()
+            plan.update({
+                "status": "ready",
+                "items": items,
+                "cursor": 0,
+                "installed": 0,
+                "failed": 0,
+                "created_at": int(time.time()),
+                "updated_at": int(time.time()),
+                "control_channel_id": interaction.channel_id,
+                "actor_id": interaction.user.id,
+            })
+            save_data()
+            started = _start_batch(guild.id)
+            await interaction.response.edit_message(
+                embed=_batch_embed(guild, plan),
+                view=None,
+            )
+            if started:
+                await interaction.followup.send(
+                    f"안전 일괄설치를 시작했습니다. 채널마다 {BATCH_INTERVAL_SECONDS}초씩 기다리며 처리합니다.",
+                    ephemeral=True,
+                )
+
+        @discord.ui.button(label="채널 다시 선택", emoji="↩️", style=discord.ButtonStyle.secondary)
+        async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            await interaction.response.edit_message(
+                embed=discord.Embed(
+                    title="📌 채널 규칙 일괄설치",
+                    description="규칙을 설치할 텍스트 채널을 최대 25개 선택하세요.",
+                    color=discord.Color.dark_red(),
+                ),
+                view=BatchSelectView(),
+            )
+
+    def build_batch_preview_embed(guild: discord.Guild, channels: Sequence[discord.TextChannel]) -> discord.Embed:
+        lines = []
+        for channel in channels:
+            template = detect_template(channel)
+            lines.append(f"• {channel.mention} → {template.emoji} **{template.label}**")
+        embed = discord.Embed(
+            title="🧾 채널 규칙 일괄설치 미리보기",
+            description=(
+                f"선택한 **{len(channels)}개 채널**에 아래 규칙을 자동 추천했습니다.\n"
+                "비슷한 채널명은 공식 서버 전용 우선순위로 구분합니다. 확인 후 시작 버튼을 누르세요."
+            ),
+            color=discord.Color.dark_teal(),
+        )
+        embed.add_field(name="자동 추천 결과", value="\n".join(lines)[:1024], inline=False)
+        embed.add_field(
+            name="안전 처리",
+            value=f"한 채널씩 작성·고정하고 **{BATCH_INTERVAL_SECONDS}초** 대기합니다. API 오류가 발생하면 자동 일시정지합니다.",
+            inline=False,
+        )
+        return embed
+
     class TemplateSelect(discord.ui.Select):
         def __init__(self, target_channel: discord.abc.GuildChannel) -> None:
             self.target_channel = target_channel
@@ -628,6 +1035,20 @@ def register_v602_channel_rules(
             else:
                 text = "이 채널에 아바돈이 관리하는 규칙이 아직 없습니다."
             await interaction.response.send_message(text, ephemeral=True)
+
+        @discord.ui.button(label="서버 일괄설치", emoji="📌", style=discord.ButtonStyle.success)
+        async def batch_install(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+            await interaction.response.edit_message(
+                embed=discord.Embed(
+                    title="📌 채널 규칙 일괄설치",
+                    description=(
+                        "규칙을 설치할 텍스트 채널을 최대 25개 선택하세요.\n"
+                        "아바돈이 채널 이름에 맞는 규칙을 자동 추천하고, 확인 후 한 채널씩 안전하게 작성·고정합니다."
+                    ),
+                    color=discord.Color.dark_red(),
+                ),
+                view=BatchSelectView(),
+            )
 
         @discord.ui.button(label="닫기", emoji="✖️", style=discord.ButtonStyle.secondary)
         async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -703,6 +1124,7 @@ def register_v602_channel_rules(
             name="빠른 명령",
             value=(
                 "`!채널규칙 자동` — 채널 이름을 보고 즉시 작성·고정\n"
+                "`!채널규칙 일괄설치` — 여러 채널 선택 후 안전 자동 설치\n"
                 "`!채널규칙 상태` — 현재 관리 규칙 확인\n"
                 "`!채널규칙 갱신` — 기존 템플릿 최신화\n"
                 "`!채널규칙 제거 확인` — 자동 규칙 메시지 삭제"
@@ -722,6 +1144,70 @@ def register_v602_channel_rules(
             await ctx.send(f"❌ {result}")
             return
         await ctx.send(f"✅ **{template.label}** 규칙을 적용했습니다. {result}\n{message.jump_url}")
+
+    @channel_rules.command(name="일괄설치", aliases=["일괄", "대량설치"])
+    async def channel_rules_batch(ctx: commands.Context) -> None:
+        """여러 텍스트 채널을 선택해 자동 추천 규칙을 안전하게 순차 설치합니다."""
+        if not await require_manager(ctx):
+            return
+        embed = discord.Embed(
+            title="📌 채널 규칙 일괄설치",
+            description=(
+                "규칙을 설치할 텍스트 채널을 최대 25개 선택하세요.\n"
+                "공식 서버의 비슷한 채널명도 우선순위로 구분하며, 시작 전에 채널별 추천 규칙을 보여 줍니다."
+            ),
+            color=discord.Color.dark_red(),
+        )
+        embed.add_field(
+            name="안전 원칙",
+            value=f"한 채널씩 작성·고정 · 채널 사이 {BATCH_INTERVAL_SECONDS}초 대기 · API 오류 시 자동 일시정지",
+            inline=False,
+        )
+        await ctx.send(embed=embed, view=BatchSelectView())
+
+    @channel_rules.command(name="일괄상태")
+    async def channel_rules_batch_status(ctx: commands.Context) -> None:
+        if not await require_manager(ctx):
+            return
+        plan = _batch_plan(ctx.guild.id)
+        task = batch_tasks.get(ctx.guild.id)
+        if str(plan.get("status")) == "running" and (task is None or task.done()):
+            plan["status"] = "paused"
+            plan["updated_at"] = int(time.time())
+            save_data()
+        await ctx.send(embed=_batch_embed(ctx.guild, plan))
+
+    @channel_rules.command(name="일괄시작", aliases=["일괄재개"])
+    async def channel_rules_batch_start(ctx: commands.Context) -> None:
+        if not await require_manager(ctx):
+            return
+        plan = _batch_plan(ctx.guild.id)
+        if not plan.get("items"):
+            await ctx.send("먼저 `!채널규칙 일괄설치`에서 채널을 선택해 계획을 만들어 주세요.")
+            return
+        if int(plan.get("cursor", 0)) >= len(plan.get("items", [])):
+            await ctx.send("이미 모든 일괄설치 항목을 처리했습니다. 새 계획을 만들어 주세요.")
+            return
+        plan["control_channel_id"] = ctx.channel.id
+        plan["actor_id"] = ctx.author.id
+        started = _start_batch(ctx.guild.id)
+        if not started:
+            await ctx.send("이미 일괄설치가 진행 중이거나 시작할 계획이 없습니다.")
+            return
+        await ctx.send(f"▶️ 채널 규칙 일괄설치를 재개했습니다. 채널마다 {BATCH_INTERVAL_SECONDS}초씩 대기합니다.")
+
+    @channel_rules.command(name="일괄중지")
+    async def channel_rules_batch_stop(ctx: commands.Context) -> None:
+        if not await require_manager(ctx):
+            return
+        plan = _batch_plan(ctx.guild.id)
+        plan["status"] = "paused"
+        plan["updated_at"] = int(time.time())
+        save_data()
+        task = batch_tasks.get(ctx.guild.id)
+        if task is not None and not task.done():
+            task.cancel()
+        await ctx.send("⏸️ 채널 규칙 일괄설치를 중지했습니다. `!채널규칙 일괄시작`으로 이어갈 수 있습니다.")
 
     @channel_rules.command(name="목록")
     async def channel_rules_list(ctx: commands.Context) -> None:

@@ -558,7 +558,11 @@ def register_v37_commands(
         attempts = int(work.get("attempts", 0))
         if attempts >= WORK_DAILY_LIMIT:
             ctx.command.reset_cooldown(ctx)
-            await ctx.send("🛑 오늘 가능한 알바 **40회**를 모두 사용했습니다. 자정(KST)에 초기화됩니다.")
+            message = await ctx.send(
+                "🛑 오늘 가능한 알바 **40회**를 모두 사용했습니다. 자정(KST)에 초기화됩니다.\n"
+                "⛏️ 다음 수입 루트: **`!땅파기`** · 하루 50회 · 1분 간격 · 보물 발견 가능"
+            )
+            await _safe_reactions(message, ("🛑", "🧰", "⛏️", "💎"))
             return
 
         level = max(1, int(work.get("level", 1)))
@@ -685,6 +689,12 @@ def register_v37_commands(
         image_url = WORK_RESULT_IMAGE_URLS.get(work_outcome, "")
         if image_url:
             result_embed.set_image(url=image_url)
+        if remaining == 0:
+            result_embed.add_field(
+                name="⛏️ 다음 수입 루트",
+                value="오늘 알바를 모두 사용했습니다. 이제 `!땅파기`로 물자와 보물을 찾을 수 있습니다.",
+                inline=False,
+            )
         result_embed.set_footer(text="ABADDON 폐허 아르바이트 · 결과 이미지는 설정 시 자동 표시")
         await _edit_embed(suspense, result_embed)
         if work_outcome == "failure":
@@ -702,7 +712,11 @@ def register_v37_commands(
         account = ensure_user_market(user)
         coin = _ensure_coin_profile(account)
         if int(coin.get("attempts", 0)) >= COIN_DAILY_LIMIT:
-            await ctx.send(f"🛑 오늘의 코인 탐색 **{COIN_DAILY_LIMIT}회**를 모두 사용했습니다. 자정(KST)에 초기화됩니다.")
+            message = await ctx.send(
+                f"🛑 오늘의 코인 탐색 **{COIN_DAILY_LIMIT}회**를 모두 사용했습니다. 자정(KST)에 초기화됩니다.\n"
+                "🧰 다음 수입 루트: **`!알바`** · 알바까지 소진하면 **`!땅파기`**"
+            )
+            await _safe_reactions(message, ("🛑", "🪙", "🧰", "⛏️"))
             return
         remaining_seconds = _coin_cooldown_remaining(coin)
         if remaining_seconds > 0:
@@ -740,6 +754,7 @@ def register_v37_commands(
                 f"🕳️ **[코인 탐색 실패]**\n{failure_text}\n"
                 f"실패 확률 **35.0%** · 오늘 남은 탐색 **{remaining}회**\n"
                 f"다음 탐색은 **3분 후** 가능합니다."
+                + ("\n🧰 오늘 코인을 모두 썼습니다. 다음 수입은 `!알바`, 그다음은 `!땅파기`입니다." if remaining == 0 else "")
             )
             await _safe_reactions(suspense, ("❌", "🕳️", "😭", "🪨", "💨"))
             return
@@ -768,6 +783,7 @@ def register_v37_commands(
             f"전체 등장 확률 **{probability_map[asset_key]}** · 현재 시세 **{current_price:,} 식량**\n"
             f"보유 수량 **{new_quantity:,}개** · 오늘 남은 탐색 **{remaining}회**\n"
             f"다음 탐색은 **3분 후** 가능합니다."
+            + ("\n🧰 오늘 코인을 모두 썼습니다. 다음 수입은 `!알바`, 그다음은 `!땅파기`입니다." if remaining == 0 else "")
         )
         reaction_map = {
             "보급권": ("🪙", "✅", "📦"),

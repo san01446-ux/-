@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "6.0.2"
+VERSION = "6.1.0"
 MENU_TIMEOUT = 300
 STORY3_START_NODE = "eclipse_signal"
 
@@ -692,7 +692,7 @@ def _main_embed(user: Optional[Dict[str, Any]] = None) -> discord.Embed:
     total_actions = sum(len(item[2]) for item in GAME_CATEGORIES.values())
     state = _ensure_game_center_state(user) if user is not None else {"favorites": [], "recent": []}
     embed = discord.Embed(
-        title="🎮 ABADDON v6.0.2 게임 제어실",
+        title="🎮 ABADDON v6.1.0 게임 제어실",
         description=(
             "카테고리에서 기능을 고르면 **실행 전 미리보기**가 열립니다.\n"
             "즐겨찾기·최근 실행·검색으로 191개 기능을 빠르게 찾을 수 있으며 기존 `!명령어`도 유지됩니다."

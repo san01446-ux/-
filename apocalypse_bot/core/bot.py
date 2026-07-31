@@ -1340,6 +1340,7 @@ async def bot_presence():
     guilds = len(world_data.get("guilds", {}))
     activities = [
         discord.Game("!명령어 | 종말에서 생존하기"),
+        discord.Game("!대화 | 기억 공방과 오늘의 질문"),
         discord.Game("!던전 약함 | 감염자 사냥"),
         discord.Game("!심층던전 | 100층에 도전"),
         discord.Game("!상점 | 암시장 거래"),
@@ -1374,9 +1375,17 @@ async def on_message(message):
         return
 
     if bot.user and bot.user.mentioned_in(message):
-        await message.channel.send(
-            f"{message.author.mention} 🗣️ {random.choice(GREETINGS)}"
-        )
+        handled = False
+        dialogue_handler = getattr(bot, "_abaddon_dialogue_mention_handler", None)
+        if dialogue_handler is not None:
+            try:
+                handled = bool(await dialogue_handler(message))
+            except Exception as exc:
+                print(f"[대화 멘션 처리 실패] {type(exc).__name__}: {exc}", flush=True)
+        if not handled:
+            await message.channel.send(
+                f"{message.author.mention} 🗣️ {random.choice(GREETINGS)}"
+            )
 
     await bot.process_commands(message)
 
@@ -1456,6 +1465,12 @@ async def 명령어(ctx):
 ℹ️ 슬래시 명령어는 Discord의 최상위 100개 제한 때문에 카테고리로 정리되었습니다.
 예: `/장비 강화`, `/전투 던전`, `/도박 룰렛`, `/거래 판매`, `/시즌 일일퀘스트`
 🎮 **v6 통합 게임 드롭다운:** `!게임` — 주요 RPG·카지노·원정·스토리 기능을 카테고리별로 실행
+🕯️ **v6.2 대화·기억 제어실:** `!대화` — 아바돈 대화, 서버 지식 등록·검색, 오늘의 질문과 교감 기록
+
+🔹 **대화 / 서버 기억**
+`!대화` `!아바돈 내용` `!가르치기` `!지식` `!지식 검색 단어`
+`!오늘의질문` `!밸런스게임` `!교감` `!한마디` `!응원 [@유저]`
+관리자: `!지식 검수` `!지식 삭제 기억ID` `!지식 자동반응 켜기/끄기`
 
 🔹 **가입 / 정보**
 `!가입 생존자` `!정보` `!출석` `!출석보상`
@@ -4265,10 +4280,20 @@ register_v600_game_center(
     bot, get_user, check_registered, save_data, add_title, add_season_points,
 )
 
-# V6.0.2: 채널별 규칙 자동 작성·미리보기·고정·중복 갱신 제어실
+# V6.1.0: 채널별 규칙 25종·안전 일괄설치·중복 갱신 제어실
 # prefix 전용 명령으로 추가해 Discord 글로벌 slash 최상위 개수는 증가하지 않습니다.
 from apocalypse_bot.commands.v602_channel_rules import register_v602_channel_rules
 register_v602_channel_rules(bot, world_data, save_data)
+
+# V6.1.0: 채널 규칙 안전 일괄설치 + 땅파기·보물 감정 경제 루트
+# prefix 전용 명령으로 추가해 Discord 글로벌 slash 최상위 개수는 증가하지 않습니다.
+from apocalypse_bot.commands.v610_digging_treasure import register_v610_digging_treasure
+register_v610_digging_treasure(bot, get_user, check_registered, save_data)
+
+# V6.2.0: 독립 대화 코어·서버 기억 공방·운영진 검수·교감·오늘의 질문
+# prefix 전용 명령으로 추가해 Discord 글로벌 slash 최상위 개수는 증가하지 않습니다.
+from apocalypse_bot.commands.v620_dialogue_memory import register_v620_dialogue_memory
+register_v620_dialogue_memory(bot, world_data, save_data)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
@@ -4286,4 +4311,6 @@ register_grouped_slash_commands(bot)
 
 # V6.0.0: 게임 제어실 9개 카테고리·100+ 기능·스토리 시즌 3 종말의 왕좌
 
-# V6.0.2: 채널 규칙 17종 자동 추천·미리보기·작성·고정·중복 갱신
+# V6.1.0: 채널 규칙 25종·안전 일괄설치 + 땅파기 50회·보물 감정사 4명
+
+# V6.2.0: 서버 기억 공방·승인 검수·아바돈 대화·교감·오늘의 질문·생존 밸런스
