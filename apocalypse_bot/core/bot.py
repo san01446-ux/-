@@ -4231,7 +4231,7 @@ register_v432_forge_live(
     find_item, get_item_slot, progress_quest, check_achievements,
 )
 
-# V5.0.0: 계획 기반 서버 리뉴얼·선택 백업·작성자 음성방 자동 TTS
+# V5.0.1: 리뉴얼 드롭다운·슬래시 동기화·davey 음성 핫픽스
 # /tts 최상위 그룹 1개만 추가하며 등록 후 전체 최상위 100개 제한을 다시 검사합니다.
 from apocalypse_bot.commands.v433_voice_sanctuary import register_v433_voice_sanctuary
 register_v433_voice_sanctuary(bot, world_data, save_data)

@@ -132,7 +132,7 @@ def register_v420_ops_center(
         )
         embed.add_field(
             name="🔇 채널 관리",
-            value="`!대화금지 @멤버 [사유]` · `!대화허용 @멤버` · `!투표종료 메시지ID`",
+            value="`!대화금지 @멤버 [사유]` · `!대화허용 @멤버` · `!투표종료 메시지id`",
             inline=False,
         )
         embed.set_footer(text="이 모듈의 새 명령어는 prefix 전용이라 슬래시 100개 제한을 사용하지 않습니다.")
@@ -516,11 +516,11 @@ def register_v420_ops_center(
         await ctx.send(f"✅ 운영 메모 `#{번호}`를 삭제했습니다.")
 
     @bot.command(name="투표종료", help="현재 채널의 아바돈 투표 메시지를 집계합니다.")
-    async def close_poll(ctx: commands.Context, 메시지ID: int) -> None:
+    async def close_poll(ctx: commands.Context, 메시지id: int) -> None:
         if not await require_operator(ctx):
             return
         try:
-            message = await ctx.channel.fetch_message(메시지ID)
+            message = await ctx.channel.fetch_message(메시지id)
         except discord.NotFound:
             await ctx.send("❌ 해당 메시지를 찾지 못했습니다. 현재 채널의 메시지 ID인지 확인해주세요.")
             return

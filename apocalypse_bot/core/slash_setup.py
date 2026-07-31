@@ -317,6 +317,28 @@ def _make_slash_app_command(
     return bridge.app_command
 
 
+
+def _validate_discord_command_names(bot: commands.Bot) -> None:
+    """Fail before Discord HTTP 400 when a slash command or option uses uppercase letters."""
+    invalid: list[str] = []
+
+    def walk_option(option: dict, path: str) -> None:
+        name = str(option.get("name", ""))
+        if name and name != name.lower():
+            invalid.append(f"{path} option={name}")
+        for child in option.get("options", []) or []:
+            walk_option(child, f"{path}/{name}")
+
+    for command in bot.tree.get_commands():
+        payload = command.to_dict(bot.tree)
+        name = str(payload.get("name", ""))
+        if name and name != name.lower():
+            invalid.append(f"command={name}")
+        for option in payload.get("options", []) or []:
+            walk_option(option, f"/{name}")
+    if invalid:
+        raise RuntimeError("Discord 슬래시 이름 규칙 위반: " + ", ".join(invalid[:20]))
+
 def register_grouped_slash_commands(bot: commands.Bot) -> None:
     """Discord 최상위 slash 100개 제한을 넘지 않도록 명령어를 그룹으로 묶습니다."""
     if getattr(bot, "_abaddon_slash_groups_registered", False):
@@ -384,6 +406,8 @@ def register_grouped_slash_commands(bot: commands.Bot) -> None:
     total_count = sum(1 for _ in bot.tree.walk_commands())
     if root_count > 100:
         raise RuntimeError(f"Discord 최상위 슬래시 명령어 제한 초과: {root_count}/100")
+
+    _validate_discord_command_names(bot)
 
     bot._abaddon_slash_groups_registered = True
     bot._abaddon_slash_root_count = root_count

@@ -160,7 +160,7 @@ def register_v421_utility_pack(
                 "`!셀프역할추가 이모지 @역할 [설명]`\n"
                 "`!셀프역할삭제 이모지` · `!셀프역할목록`\n"
                 "`!셀프역할패널 [제목]` · `!셀프역할패널목록`\n"
-                "`!셀프역할패널삭제 메시지ID`"
+                "`!셀프역할패널삭제 메시지id`"
             ),
             inline=False,
         )
@@ -350,11 +350,11 @@ def register_v421_utility_pack(
         ))
 
     @bot.command(name="셀프역할패널삭제", help="메시지 ID로 셀프 역할 패널 등록과 메시지를 삭제합니다.")
-    async def self_role_panel_delete(ctx: commands.Context, 메시지ID: int) -> None:
+    async def self_role_panel_delete(ctx: commands.Context, 메시지id: int) -> None:
         if not await require_manager(ctx):
             return
         panels = panel_store(ctx.guild)
-        panel = panels.pop(str(메시지ID), None)
+        panel = panels.pop(str(메시지id), None)
         if not isinstance(panel, dict):
             await ctx.send("❌ 저장된 셀프 역할 패널을 찾지 못했습니다.")
             return
@@ -362,13 +362,13 @@ def register_v421_utility_pack(
         deleted_message = False
         if isinstance(channel, discord.TextChannel):
             try:
-                message = await channel.fetch_message(메시지ID)
+                message = await channel.fetch_message(메시지id)
                 await message.delete(reason=f"ABADDON 셀프 역할 패널 삭제: {ctx.author}")
                 deleted_message = True
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 pass
         grants = grant_store(ctx.guild)
-        panel_source = str(메시지ID)
+        panel_source = str(메시지id)
         for user_id, role_map in list(grants.items()):
             if not isinstance(role_map, dict):
                 grants.pop(user_id, None)
@@ -384,7 +384,7 @@ def register_v421_utility_pack(
                 grants.pop(user_id, None)
         save_data()
         await ctx.send(
-            f"✅ 셀프 역할 패널 `{메시지ID}` 등록을 삭제했습니다."
+            f"✅ 셀프 역할 패널 `{메시지id}` 등록을 삭제했습니다."
             + (" 메시지도 삭제했습니다." if deleted_message else " 메시지는 찾지 못했거나 삭제 권한이 없었습니다.")
             + " 기존에 지급된 역할은 유지됩니다."
         )

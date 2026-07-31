@@ -20,7 +20,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "5.0.0"
+VERSION = "5.0.1"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
@@ -843,8 +843,13 @@ def _menu_view(guild: discord.Guild, destinations: Sequence[Tuple[str, str, disc
     return view
 
 
-def _dependency_state() -> Tuple[bool, bool]:
-    return importlib.util.find_spec("nacl") is not None, importlib.util.find_spec("edge_tts") is not None
+def _dependency_state() -> Tuple[bool, bool, bool]:
+    """Return PyNaCl, davey, and edge-tts availability for the actual runtime."""
+    return (
+        importlib.util.find_spec("nacl") is not None,
+        importlib.util.find_spec("davey") is not None,
+        importlib.util.find_spec("edge_tts") is not None,
+    )
 
 
 def _package_version(name: str) -> str:
@@ -857,12 +862,13 @@ def _package_version(name: str) -> str:
 
 
 def _tts_diagnostic_lines() -> List[str]:
-    has_nacl, has_edge = _dependency_state()
+    has_nacl, has_davey, has_edge = _dependency_state()
     ffmpeg = shutil.which("ffmpeg")
     return [
         f"Python: `{sys.version.split()[0]}`",
         f"discord.py: `{_package_version('discord.py')}`",
         f"PyNaCl: `{'설치됨 ' + _package_version('PyNaCl') if has_nacl else '미설치'}`",
+        f"davey: `{'설치됨 ' + _package_version('davey') if has_davey else '미설치'}`",
         f"edge-tts: `{'설치됨 ' + _package_version('edge-tts') if has_edge else '미설치'}`",
         f"FFmpeg: `{'확인됨' if ffmpeg else '찾지 못함'}`",
         f"Opus: `{'로드됨' if discord.opus.is_loaded() else '미로드'}`",
@@ -940,7 +946,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.0"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.1"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
             if response.status != 200:
@@ -969,12 +975,17 @@ async def _ensure_voice_connection(
     channel = guild.get_channel(int(channel_id))
     if not isinstance(channel, discord.VoiceChannel):
         return None, "설정된 음성 채널을 찾지 못했습니다."
-    has_nacl, _ = _dependency_state()
+    has_nacl, has_davey, _ = _dependency_state()
     if not has_nacl:
         return None, (
             "PyNaCl을 실제 실행 환경에서 불러오지 못했습니다. "
-            "Render Build Command가 `pip install -r requirements.txt`인지 확인하고 "
+            "Render Build Command가 `pip install --upgrade pip && pip install -r requirements.txt`인지 확인하고 "
             "`Clear build cache & deploy`를 실행한 뒤 `!TTS 진단`으로 재확인하세요."
+        )
+    if not has_davey:
+        return None, (
+            "discord.py 2.7 음성 연결에 필요한 `davey`가 설치되지 않았습니다. "
+            "v5.0.1 requirements.txt를 반영하고 Render에서 `Clear build cache & deploy`를 실행하세요."
         )
     me = guild.me
     if me is not None:
@@ -1373,15 +1384,15 @@ def register_v433_voice_sanctuary(
         guild = await require_guild(ctx)
         if guild is None:
             return
-        has_nacl, has_edge = _dependency_state()
+        has_nacl, has_davey, has_edge = _dependency_state()
         embed = discord.Embed(title="🩺 TTS 실행 환경 진단", color=0x6D2335)
         embed.description = "\n".join(_tts_diagnostic_lines())
-        if not has_nacl:
+        if not has_nacl or not has_davey:
             embed.add_field(
                 name="Render 조치",
                 value=(
                     "1. Build Command를 `pip install --upgrade pip && pip install -r requirements.txt`로 확인\n"
-                    "2. `PyNaCl>=1.6.2`와 `edge-tts>=6.1.0` 확인\n"
+                    "2. `discord.py[voice]>=2.7`, `PyNaCl>=1.6.2`, `davey>=0.1.6` 확인\n"
                     "3. Manual Deploy → Clear build cache & deploy"
                 ),
                 inline=False,
@@ -1400,7 +1411,7 @@ def register_v433_voice_sanctuary(
         settings = _layout_settings(world_data, guild.id)["tts"]
         text_channel = guild.get_channel(settings.get("text_channel_id") or 0)
         voice_channel = guild.get_channel(settings.get("voice_channel_id") or 0)
-        has_nacl, has_edge = _dependency_state()
+        has_nacl, has_davey, has_edge = _dependency_state()
         embed = discord.Embed(title="🔊 TTS 음성 성역 상태", color=0x6D2335)
         embed.add_field(name="자동 낭독", value="켜짐" if settings.get("enabled") else "꺼짐", inline=True)
         embed.add_field(name="음성 연결", value="연결됨" if guild.voice_client else "연결 안 됨", inline=True)
@@ -1744,28 +1755,118 @@ def register_v433_voice_sanctuary(
         guild = await require_admin(ctx)
         if guild is None:
             return
+        owner_id = ctx.author.id
+
+        async def run_command(interaction: discord.Interaction, subcommand_name: str, *args: Any, **kwargs: Any) -> None:
+            if interaction.user.id != owner_id:
+                await interaction.response.send_message("❌ 이 메뉴를 연 관리자만 사용할 수 있습니다.", ephemeral=True)
+                return
+            command_obj = bot.get_command(f"서버리뉴얼 {subcommand_name}")
+            if command_obj is None:
+                await interaction.response.send_message(
+                    f"❌ 서버 리뉴얼 하위 명령 `{subcommand_name}`을 찾지 못했습니다.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.defer(ephemeral=True)
+            try:
+                await command_obj.callback(ctx, *args, **kwargs)
+                await interaction.followup.send("✅ 선택한 서버 리뉴얼 기능을 실행했습니다.", ephemeral=True)
+            except Exception as exc:
+                await interaction.followup.send(
+                    f"❌ 메뉴 실행 실패: `{type(exc).__name__}: {str(exc)[:180]}`",
+                    ephemeral=True,
+                )
+
+        class ThemeSelect(discord.ui.Select):
+            def __init__(self, mode: str) -> None:
+                self.mode = mode
+                options = [
+                    discord.SelectOption(
+                        label=f"{name} · {THEME_META[name]['label']}"[:100],
+                        value=name,
+                        emoji="🎨",
+                    )
+                    for name in STYLE_NAMES
+                ]
+                placeholder = "미리 볼 테마 선택" if "preview" in mode else "적용 계획을 만들 테마 선택"
+                super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
+
+            async def callback(self, interaction: discord.Interaction) -> None:
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message("❌ 이 메뉴를 연 관리자만 사용할 수 있습니다.", ephemeral=True)
+                    return
+                style = self.values[0]
+                command_map = {
+                    "layout_preview": "미리보기",
+                    "layout_apply": "적용",
+                    "game_preview": "게임미리보기",
+                    "game_apply": "게임정리",
+                }
+                await run_command(interaction, command_map[self.mode], style)
+
+        class ThemeView(discord.ui.View):
+            def __init__(self, mode: str) -> None:
+                super().__init__(timeout=300)
+                self.add_item(ThemeSelect(mode))
+
+        class RenewalMenu(discord.ui.Select):
+            def __init__(self) -> None:
+                options = [
+                    discord.SelectOption(label="테마 미리보기", value="layout_preview", emoji="🔎", description="일반 서버 구조 변경 계획만 확인"),
+                    discord.SelectOption(label="테마 적용 계획 만들기", value="layout_apply", emoji="🎨", description="백업 후 단계별 계획 생성"),
+                    discord.SelectOption(label="게임·음성 구역 미리보기", value="game_preview", emoji="🎮", description="RPG·게임·음성 구역만 확인"),
+                    discord.SelectOption(label="게임·음성 구역 계획 만들기", value="game_apply", emoji="🧭", description="게임 구역 단계별 계획 생성"),
+                    discord.SelectOption(label="현재 상태 수동 백업", value="backup", emoji="💾", description="현재 깨끗한 서버 구조 저장"),
+                    discord.SelectOption(label="백업 목록·복구 선택", value="backups", emoji="🗃️", description="드롭다운으로 복구 기준 선택"),
+                    discord.SelectOption(label="계획 상태 확인", value="plan_status", emoji="📋", description="진행률과 다음 작업 확인"),
+                    discord.SelectOption(label="다음 단계 1개 실행", value="next", emoji="▶️", description="Discord 변경을 한 개만 처리"),
+                    discord.SelectOption(label="복구 다음 단계 1개", value="recover_next", emoji="🛟", description="선택한 백업 복구를 한 개 진행"),
+                    discord.SelectOption(label="계획 취소", value="cancel", emoji="⏹️", description="남은 리뉴얼 계획 제거"),
+                    discord.SelectOption(label="빈 카테고리 선택 삭제", value="empty", emoji="🗑️", description="비어 있는 카테고리만 선택"),
+                ]
+                super().__init__(placeholder="서버 리뉴얼 기능을 선택하세요", min_values=1, max_values=1, options=options)
+
+            async def callback(self, interaction: discord.Interaction) -> None:
+                if interaction.user.id != owner_id:
+                    await interaction.response.send_message("❌ 이 메뉴를 연 관리자만 사용할 수 있습니다.", ephemeral=True)
+                    return
+                choice = self.values[0]
+                if choice in {"layout_preview", "layout_apply", "game_preview", "game_apply"}:
+                    await interaction.response.send_message(
+                        "🎨 테마를 선택하세요. 선택만으로 미리보기 또는 안전 계획 생성이 실행됩니다.",
+                        view=ThemeView(choice),
+                        ephemeral=True,
+                    )
+                    return
+                command_map = {
+                    "backups": ("백업목록", (), {}),
+                    "plan_status": ("계획상태", (), {}),
+                    "next": ("다음", (), {}),
+                    "recover_next": ("복구다음", (), {}),
+                    "cancel": ("계획취소", (), {}),
+                    "empty": ("빈카테고리선택", (), {}),
+                    "backup": ("백업", (), {"name": "드롭다운 수동 백업"}),
+                }
+                subcommand_name, args, kwargs = command_map[choice]
+                await run_command(interaction, subcommand_name, *args, **kwargs)
+
+        class RenewalMenuView(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=300)
+                self.add_item(RenewalMenu())
+
         embed = discord.Embed(
-            title="🕯 ABADDON 서버 리뉴얼",
+            title="🕯 ABADDON 서버 리뉴얼 제어실",
             description=(
-                "현재 채널을 삭제하지 않고 카테고리·채널명·순서를 정돈합니다.\n"
-                "v5 안전 엔진은 계획을 먼저 만들고 관리자 명령마다 Discord 변경을 한 개씩만 처리합니다."
+                "아래 드롭다운에서 기능을 선택하세요.\n"
+                "테마 적용과 복구는 **계획 생성 후 한 번에 Discord 변경 1개만** 처리합니다."
             ),
             color=0x6D2335,
         )
-        embed.add_field(
-            name="사용 순서",
-            value=(
-                "`!서버리뉴얼 백업 현재정상`\n"
-                "`!서버리뉴얼 미리보기 고딕`\n"
-                "`!서버리뉴얼 적용 고딕`\n"
-                "`!서버리뉴얼 다음`\n"
-                "`!서버리뉴얼 계획상태`\n"
-                "`!서버리뉴얼 되돌리기`"
-            ),
-            inline=False,
-        )
-        embed.add_field(name="안전 원칙", value="미인식 채널 유지 · 적용 전 자동 백업 · 생성 항목 추적 · 선택 삭제 지원", inline=False)
-        await ctx.send(embed=embed)
+        embed.add_field(name="권장 순서", value="수동 백업 → 미리보기 → 적용 계획 → 다음 단계", inline=False)
+        embed.add_field(name="안전 원칙", value="미인식 채널 유지 · 적용 전 자동 백업 · 429 감지 시 중단 · 선택 삭제", inline=False)
+        await ctx.send(embed=embed, view=RenewalMenuView())
 
     @server_renewal.command(name="테마목록", aliases=["themes", "테마"])
     async def server_renewal_themes(ctx: commands.Context):
@@ -1817,10 +1918,23 @@ def register_v433_voice_sanctuary(
         }
         settings["last_operation_status"] = "renewal_plan_ready"
         save_data()
+        action_lines = [f"{index}. {item.get('label', item.get('kind', '작업'))}" for index, item in enumerate(actions[:12], start=1)]
+        if not actions:
+            settings.pop("renewal_plan", None)
+            settings["last_operation_status"] = "renewal_no_changes"
+            save_data()
+            await ctx.send(
+                f"✅ **{style} 테마 기준으로 바꿀 항목이 없습니다.**\n"
+                "현재 인식된 기존 채널은 이미 목표 이름·카테고리와 같거나, 테마 대상 채널로 인식되지 않았습니다.\n"
+                "`!서버리뉴얼 미리보기 테마`에서 인식 목록을 먼저 확인하세요."
+            )
+            return
         await ctx.send(
             f"🧭 **{style} 테마 안전 계획 생성 완료**\n"
             f"변경 항목: **{len(actions)}개** · 자동 백업: **{backup.get('name')}**\n\n"
-            "아직 채널을 수정하지 않았습니다. 실제 적용은 `!서버리뉴얼 다음`을 한 번씩 실행하세요.\n"
+            + "\n".join(action_lines)
+            + (f"\n… 외 {len(actions)-12}개" if len(actions) > 12 else "")
+            + "\n\n아직 채널을 수정하지 않았습니다. 드롭다운의 `다음 단계 1개 실행` 또는 `!서버리뉴얼 다음`을 사용하세요.\n"
             "상태: `!서버리뉴얼 계획상태` · 취소: `!서버리뉴얼 계획취소`"
         )
 
@@ -1859,10 +1973,19 @@ def register_v433_voice_sanctuary(
         }
         settings["last_operation_status"] = "game_plan_ready"
         save_data()
+        action_lines = [f"{index}. {item.get('label', item.get('kind', '작업'))}" for index, item in enumerate(actions[:12], start=1)]
+        if not actions:
+            settings.pop("renewal_plan", None)
+            settings["last_operation_status"] = "game_plan_no_changes"
+            save_data()
+            await ctx.send("✅ 게임·음성 구역에서 변경할 항목을 찾지 못했습니다. 미리보기에서 인식된 채널을 확인하세요.")
+            return
         await ctx.send(
             f"🎮 **게임·음성 구역 {style} 안전 계획 생성 완료**\n"
-            f"변경 항목: **{len(actions)}개** · 자동 백업 저장 완료\n"
-            "실제 적용: `!서버리뉴얼 다음` · 상태: `!서버리뉴얼 계획상태`"
+            f"변경 항목: **{len(actions)}개** · 자동 백업 저장 완료\n\n"
+            + "\n".join(action_lines)
+            + (f"\n… 외 {len(actions)-12}개" if len(actions) > 12 else "")
+            + "\n\n드롭다운의 `다음 단계 1개 실행` 또는 `!서버리뉴얼 다음`을 사용하세요."
         )
 
     @server_renewal.command(name="백업", aliases=["수동백업", "backup"])

@@ -695,7 +695,7 @@ def register_v410_server_management(
             value=(
                 "`!경고 @유저 사유` · `!경고조회 @유저` · `!경고취소 @유저 사건번호`\n"
                 "`!타임아웃 @유저 10분 사유` · `!타임아웃해제 @유저 사유`\n"
-                "`!추방 @유저 사유` · `!차단 @유저 사유` · `!차단해제 유저ID 사유`"
+                "`!추방 @유저 사유` · `!차단 @유저 사유` · `!차단해제 유저id 사유`"
             ),
             inline=False,
         )
@@ -1167,14 +1167,14 @@ def register_v410_server_management(
         )
 
     @bot.command(name="차단해제", help="유저 ID로 서버 차단을 해제합니다.")
-    async def unban_member(ctx: commands.Context, 유저ID: int, *, 사유: str = "관리자 해제") -> None:
+    async def unban_member(ctx: commands.Context, 유저id: int, *, 사유: str = "관리자 해제") -> None:
         if not await require_operator(ctx):
             return
         if not (ctx.author.guild_permissions.ban_members or ctx.author.id == ctx.guild.owner_id):
             await ctx.send("❌ 실행자에게 `멤버 차단` 권한이 없습니다.")
             return
         try:
-            user = await bot.fetch_user(유저ID)
+            user = await bot.fetch_user(유저id)
             await ctx.guild.unban(user, reason=f"{ctx.author} | {사유}")
         except discord.NotFound:
             await ctx.send("⚠️ 해당 유저는 차단 목록에 없습니다.")
