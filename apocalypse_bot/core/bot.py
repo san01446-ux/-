@@ -4243,3 +4243,5 @@ register_grouped_slash_commands(bot)
 
 # V5.0.2: 자동 TTS 닉네임 낭독 제거 · 채팅 내용만 재생
 # V5.0.3: Edge NoAudioReceived 재시도·백오프·안정 음성·Google 대체 합성 강화
+
+# V5.0.4: 서버 리뉴얼 5분 단계 간격·HTTP 429 감지·15분 격리·45초 안전 중단

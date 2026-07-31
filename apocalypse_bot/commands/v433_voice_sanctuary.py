@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import importlib.metadata
 import importlib.util
+import logging
 import os
 import shutil
 import sys
@@ -20,7 +21,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "5.0.3"
+VERSION = "5.0.4"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
@@ -31,10 +32,14 @@ EDGE_RETRY_DELAYS = (0.0, 2.0)
 EDGE_STABLE_FALLBACK_VOICES = ("ko-KR-SunHiNeural", "ko-KR-InJoonNeural")
 RENEWAL_EDIT_DELAY = 6.0
 RENEWAL_API_TIMEOUT = 45.0
-RENEWAL_STEP_COOLDOWN = 90
+RENEWAL_STEP_COOLDOWN = 300
+RENEWAL_PLAN_WARMUP = 300
+RENEWAL_429_QUARANTINE = 900
 BACKUP_LIMIT = 10
 RENEWAL_RATE_LIMIT_CAP = 30.0
 RENEWAL_TASKS: Dict[int, asyncio.Task[Any]] = {}
+RENEWAL_HTTP_429_UNTIL = 0
+RENEWAL_HTTP_429_LAST = ""
 
 VOICE_PRESETS: Dict[str, Dict[str, str]] = {
     "선히": {"edge": "ko-KR-SunHiNeural", "label": "밝고 자연스러운 여성 음성", "gender": "여성"},
@@ -254,6 +259,37 @@ def _roman_label(index: int) -> str:
 
 class RenewalApiTimeout(RuntimeError):
     pass
+
+
+class _Renewal429LogHandler(logging.Handler):
+    """discord.py가 내부 재시도한 429도 감지해 리뉴얼 작업을 격리합니다."""
+
+    _abaddon_renewal_429_handler = True
+
+    def emit(self, record: logging.LogRecord) -> None:
+        global RENEWAL_HTTP_429_UNTIL, RENEWAL_HTTP_429_LAST
+        try:
+            message = record.getMessage()
+        except Exception:
+            return
+        if "429" not in message or "rate limit" not in message.lower():
+            return
+        RENEWAL_HTTP_429_UNTIL = max(
+            RENEWAL_HTTP_429_UNTIL,
+            int(time.time()) + RENEWAL_429_QUARANTINE,
+        )
+        RENEWAL_HTTP_429_LAST = message[:300]
+
+
+def _install_renewal_429_handler() -> None:
+    logger = logging.getLogger("discord.http")
+    if any(getattr(handler, "_abaddon_renewal_429_handler", False) for handler in logger.handlers):
+        return
+    logger.addHandler(_Renewal429LogHandler())
+
+
+def _renewal_quarantine_remaining() -> int:
+    return max(0, int(RENEWAL_HTTP_429_UNTIL - time.time()))
 
 
 async def _renewal_api(awaitable):
@@ -1023,7 +1059,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.3"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/5.0.4"}
     _remove_audio_file(output_path)
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
@@ -1070,7 +1106,7 @@ async def _ensure_voice_connection(
     if not has_davey:
         return None, (
             "discord.py 2.7 음성 연결에 필요한 `davey`가 설치되지 않았습니다. "
-            "v5.0.3 requirements.txt를 반영하고 Render에서 `Clear build cache & deploy`를 실행하세요."
+            "v5.0.4 requirements.txt를 반영하고 Render에서 `Clear build cache & deploy`를 실행하세요."
         )
     me = guild.me
     if me is not None:
@@ -1115,6 +1151,8 @@ def register_v433_voice_sanctuary(
     world_data: Dict[str, Any],
     save_data,
 ) -> None:
+    _install_renewal_429_handler()
+
     async def require_guild(ctx: commands.Context) -> Optional[discord.Guild]:
         if ctx.guild is None:
             await ctx.send("❌ 서버 안에서만 사용할 수 있습니다.")
@@ -1719,8 +1757,8 @@ def register_v433_voice_sanctuary(
             "created_at": int(time.time()),
             "cursor": 0,
             "actions": actions,
-            "next_allowed_at": 0,
-            "status": "ready",
+            "next_allowed_at": int(time.time()) + RENEWAL_PLAN_WARMUP,
+            "status": "warming_up",
             "last_error": None,
         }
 
@@ -1920,6 +1958,7 @@ def register_v433_voice_sanctuary(
                     discord.SelectOption(label="다음 단계 1개 실행", value="next", emoji="▶️", description="Discord 변경을 한 개만 처리"),
                     discord.SelectOption(label="복구 다음 단계 1개", value="recover_next", emoji="🛟", description="선택한 백업 복구를 한 개 진행"),
                     discord.SelectOption(label="계획 취소", value="cancel", emoji="⏹️", description="남은 리뉴얼 계획 제거"),
+                    discord.SelectOption(label="429 안전상태", value="ratelimit", emoji="🛡️", description="현재 격리·대기시간 확인"),
                     discord.SelectOption(label="빈 카테고리 선택 삭제", value="empty", emoji="🗑️", description="비어 있는 카테고리만 선택"),
                 ]
                 super().__init__(placeholder="서버 리뉴얼 기능을 선택하세요", min_values=1, max_values=1, options=options)
@@ -1942,6 +1981,7 @@ def register_v433_voice_sanctuary(
                     "next": ("다음", (), {}),
                     "recover_next": ("복구다음", (), {}),
                     "cancel": ("계획취소", (), {}),
+                    "ratelimit": ("429상태", (), {}),
                     "empty": ("빈카테고리선택", (), {}),
                     "backup": ("백업", (), {"name": "드롭다운 수동 백업"}),
                 }
@@ -1962,7 +2002,7 @@ def register_v433_voice_sanctuary(
             color=0x6D2335,
         )
         embed.add_field(name="권장 순서", value="수동 백업 → 미리보기 → 적용 계획 → 다음 단계", inline=False)
-        embed.add_field(name="안전 원칙", value="미인식 채널 유지 · 적용 전 자동 백업 · 429 감지 시 중단 · 선택 삭제", inline=False)
+        embed.add_field(name="안전 원칙", value="미인식 채널 유지 · 적용 전 자동 백업 · 5분 단계 간격 · 429 시 15분 격리", inline=False)
         await ctx.send(embed=embed, view=RenewalMenuView())
 
     @server_renewal.command(name="테마목록", aliases=["themes", "테마"])
@@ -2009,8 +2049,8 @@ def register_v433_voice_sanctuary(
             "created_at": int(time.time()),
             "cursor": 0,
             "actions": actions,
-            "next_allowed_at": 0,
-            "status": "ready",
+            "next_allowed_at": int(time.time()) + RENEWAL_PLAN_WARMUP,
+            "status": "warming_up",
             "last_error": None,
         }
         settings["last_operation_status"] = "renewal_plan_ready"
@@ -2031,7 +2071,8 @@ def register_v433_voice_sanctuary(
             f"변경 항목: **{len(actions)}개** · 자동 백업: **{backup.get('name')}**\n\n"
             + "\n".join(action_lines)
             + (f"\n… 외 {len(actions)-12}개" if len(actions) > 12 else "")
-            + "\n\n아직 채널을 수정하지 않았습니다. 드롭다운의 `다음 단계 1개 실행` 또는 `!서버리뉴얼 다음`을 사용하세요.\n"
+            + f"\n\n아직 채널을 수정하지 않았습니다. 429 예방을 위해 첫 실행은 <t:{settings['renewal_plan']['next_allowed_at']}:R> 가능합니다.\n"
+            "그 뒤 드롭다운의 `다음 단계 1개 실행` 또는 `!서버리뉴얼 다음`을 사용하세요.\n"
             "상태: `!서버리뉴얼 계획상태` · 취소: `!서버리뉴얼 계획취소`"
         )
 
@@ -2064,8 +2105,8 @@ def register_v433_voice_sanctuary(
             "created_at": int(time.time()),
             "cursor": 0,
             "actions": actions,
-            "next_allowed_at": 0,
-            "status": "ready",
+            "next_allowed_at": int(time.time()) + RENEWAL_PLAN_WARMUP,
+            "status": "warming_up",
             "last_error": None,
         }
         settings["last_operation_status"] = "game_plan_ready"
@@ -2082,7 +2123,7 @@ def register_v433_voice_sanctuary(
             f"변경 항목: **{len(actions)}개** · 자동 백업 저장 완료\n\n"
             + "\n".join(action_lines)
             + (f"\n… 외 {len(actions)-12}개" if len(actions) > 12 else "")
-            + "\n\n드롭다운의 `다음 단계 1개 실행` 또는 `!서버리뉴얼 다음`을 사용하세요."
+            + f"\n\n429 예방을 위해 첫 실행은 <t:{settings['renewal_plan']['next_allowed_at']}:R> 가능합니다. 이후 `!서버리뉴얼 다음`을 사용하세요."
         )
 
     @server_renewal.command(name="백업", aliases=["수동백업", "backup"])
@@ -2232,7 +2273,7 @@ def register_v433_voice_sanctuary(
             wait = int(float(value)) if value is not None else 180
         except (TypeError, ValueError):
             wait = 180
-        return max(120, min(wait + 30, 900))
+        return max(RENEWAL_429_QUARANTINE, min(wait + 60, 1800))
 
     @server_renewal.command(name="다음", aliases=["next", "계속"])
     async def server_renewal_next(ctx: commands.Context):
@@ -2254,6 +2295,14 @@ def register_v433_voice_sanctuary(
             await ctx.send("✅ 서버 리뉴얼 계획이 모두 끝났습니다.")
             return
         now = int(time.time())
+        if now < RENEWAL_HTTP_429_UNTIL:
+            plan["next_allowed_at"] = max(int(plan.get("next_allowed_at", 0) or 0), RENEWAL_HTTP_429_UNTIL)
+            plan["status"] = "quarantine"
+            plan["last_error"] = "최근 Discord HTTP 429 감지 — 15분 안전 격리"
+            settings["last_operation_status"] = "renewal_429_quarantine"
+            save_data()
+            await ctx.send(f"🛡️ 최근 429가 감지되어 리뉴얼을 격리 중입니다. <t:{RENEWAL_HTTP_429_UNTIL}:R> 다시 실행하세요.")
+            return
         next_allowed = int(plan.get("next_allowed_at", 0) or 0)
         if now < next_allowed:
             await ctx.send(f"⏳ 안전 대기 중입니다. <t:{next_allowed}:R> 다시 실행하세요.")
@@ -2263,11 +2312,20 @@ def register_v433_voice_sanctuary(
         if current_task is not None:
             RENEWAL_TASKS[guild.id] = current_task
         cap_state = _recovery_rate_limit_cap()
+        before_429_until = RENEWAL_HTTP_429_UNTIL
         try:
-            await execute_renewal_action(ctx, guild, action, plan)
+            await _renewal_api(execute_renewal_action(ctx, guild, action, plan))
             plan["cursor"] = cursor + 1
-            plan["next_allowed_at"] = int(time.time()) + RENEWAL_STEP_COOLDOWN
-            plan["status"] = "running" if cursor + 1 < len(actions) else "complete"
+            detected_429 = RENEWAL_HTTP_429_UNTIL > before_429_until
+            plan["next_allowed_at"] = max(
+                int(time.time()) + RENEWAL_STEP_COOLDOWN,
+                RENEWAL_HTTP_429_UNTIL if detected_429 else 0,
+            )
+            plan["status"] = (
+                "complete" if cursor + 1 >= len(actions)
+                else "quarantine" if detected_429
+                else "running"
+            )
             plan["last_error"] = None
             settings["last_operation_status"] = "renewal_step_ok"
             if cursor + 1 >= len(actions):
@@ -2277,6 +2335,7 @@ def register_v433_voice_sanctuary(
                 f"✅ **서버 변경 1개 완료** · {cursor + 1}/{len(actions)}\n"
                 f"처리: `{action.get('label', action.get('kind'))}`\n"
                 + ("모든 계획이 끝났습니다." if cursor + 1 >= len(actions) else f"다음 실행: <t:{plan['next_allowed_at']}:R>")
+                + ("\n🛡️ 처리 중 429가 감지되어 15분 안전 격리를 적용했습니다." if detected_429 else "")
             )
         except LookupError as exc:
             plan["cursor"] = cursor + 1
@@ -2286,7 +2345,15 @@ def register_v433_voice_sanctuary(
         except Exception as exc:
             name = exc.__class__.__name__
             status = getattr(exc, "status", None)
-            if name == "RateLimited" or status == 429:
+            if isinstance(exc, RenewalApiTimeout):
+                wait = RENEWAL_429_QUARANTINE
+                plan["next_allowed_at"] = int(time.time()) + wait
+                plan["status"] = "quarantine"
+                plan["last_error"] = "Discord 응답 45초 초과 — 15분 안전 격리"
+                settings["last_operation_status"] = "renewal_api_timeout"
+                save_data()
+                await ctx.send(f"🛡️ Discord 응답이 길어져 안전 중단했습니다. <t:{plan['next_allowed_at']}:R> 다시 실행하세요.")
+            elif name == "RateLimited" or status == 429:
                 wait = _rate_limit_wait(exc)
                 plan["next_allowed_at"] = int(time.time()) + wait
                 plan["status"] = "cooldown"
@@ -2331,6 +2398,28 @@ def register_v433_voice_sanctuary(
             f"최근 오류: `{plan.get('last_error') or '없음'}`"
         )
 
+    @server_renewal.command(name="429상태", aliases=["ratelimit", "쿨다운", "안전대기"])
+    async def server_renewal_rate_limit_status(ctx: commands.Context):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        remaining = _renewal_quarantine_remaining()
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        plans = [settings.get("renewal_plan"), settings.get("recovery_plan")]
+        plan_waits = [int(plan.get("next_allowed_at", 0) or 0) for plan in plans if isinstance(plan, dict)]
+        plan_until = max(plan_waits, default=0)
+        now = int(time.time())
+        if remaining <= 0 and plan_until <= now:
+            await ctx.send("✅ 현재 서버 리뉴얼 429 격리 상태가 아닙니다. 새 계획은 생성 후 5분, 각 단계 사이도 5분 대기합니다.")
+            return
+        until = max(RENEWAL_HTTP_429_UNTIL, plan_until)
+        detail = RENEWAL_HTTP_429_LAST or "저장된 안전 대기시간"
+        await ctx.send(
+            "🛡️ **서버 리뉴얼 429 안전상태**\n"
+            f"다음 변경 가능: <t:{until}:R>\n"
+            f"최근 감지: `{detail[:180]}`"
+        )
+
     @server_renewal.command(name="계획취소", aliases=["plancancel", "적용취소"])
     async def server_renewal_plan_cancel(ctx: commands.Context):
         guild = await require_admin(ctx)
@@ -2367,6 +2456,14 @@ def register_v433_voice_sanctuary(
             await ctx.send("✅ 단계별 복구가 모두 끝났습니다. 남은 빈 복제 카테고리는 `!서버리뉴얼 빈카테고리선택`으로 한 개씩 정리하세요.")
             return
         now = int(time.time())
+        if now < RENEWAL_HTTP_429_UNTIL:
+            plan["next_allowed_at"] = max(int(plan.get("next_allowed_at", 0) or 0), RENEWAL_HTTP_429_UNTIL)
+            plan["status"] = "quarantine"
+            plan["last_error"] = "최근 Discord HTTP 429 감지 — 15분 안전 격리"
+            settings["last_operation_status"] = "recovery_429_quarantine"
+            save_data()
+            await ctx.send(f"🛡️ 최근 429가 감지되어 복구를 격리 중입니다. <t:{RENEWAL_HTTP_429_UNTIL}:R> 다시 실행하세요.")
+            return
         next_allowed = int(plan.get("next_allowed_at", 0) or 0)
         if now < next_allowed:
             await ctx.send(f"⏳ Discord 채널 변경 제한을 식히는 중입니다. <t:{next_allowed}:R> 다시 실행하세요.")
@@ -2385,17 +2482,28 @@ def register_v433_voice_sanctuary(
             RENEWAL_TASKS[guild.id] = current_task
         reason = f"ABADDON v{VERSION} 단계별 안전 복구 / {ctx.author}"
         cap_state = _recovery_rate_limit_cap()
+        before_429_until = RENEWAL_HTTP_429_UNTIL
         try:
             kind = str(action.get("kind"))
-            if kind == "rename":
-                await bot.http.edit_channel(channel.id, name=str(action.get("name", channel.name)), reason=reason)
-            elif kind == "move":
-                await bot.http.edit_channel(channel.id, parent_id=action.get("parent_id"), reason=reason)
-            else:
-                raise RuntimeError(f"알 수 없는 복구 작업: {kind}")
+            async def perform_recovery_edit() -> None:
+                if kind == "rename":
+                    await bot.http.edit_channel(channel.id, name=str(action.get("name", channel.name)), reason=reason)
+                elif kind == "move":
+                    await bot.http.edit_channel(channel.id, parent_id=action.get("parent_id"), reason=reason)
+                else:
+                    raise RuntimeError(f"알 수 없는 복구 작업: {kind}")
+            await _renewal_api(perform_recovery_edit())
             plan["cursor"] = cursor + 1
-            plan["next_allowed_at"] = int(time.time()) + RENEWAL_STEP_COOLDOWN
-            plan["status"] = "running" if cursor + 1 < len(actions) else "complete"
+            detected_429 = RENEWAL_HTTP_429_UNTIL > before_429_until
+            plan["next_allowed_at"] = max(
+                int(time.time()) + RENEWAL_STEP_COOLDOWN,
+                RENEWAL_HTTP_429_UNTIL if detected_429 else 0,
+            )
+            plan["status"] = (
+                "complete" if cursor + 1 >= len(actions)
+                else "quarantine" if detected_429
+                else "running"
+            )
             plan["last_error"] = None
             settings["last_operation_status"] = "recovery_step_ok"
             if cursor + 1 >= len(actions):
@@ -2405,11 +2513,20 @@ def register_v433_voice_sanctuary(
                 f"✅ **1개 항목 복구 완료** · {cursor + 1}/{len(actions)}\n"
                 f"처리: `{action.get('label', kind)}`\n"
                 + ("모든 복구가 끝났습니다." if cursor + 1 >= len(actions) else f"다음 실행 가능: <t:{plan['next_allowed_at']}:R>")
+                + ("\n🛡️ 처리 중 429가 감지되어 15분 안전 격리를 적용했습니다." if detected_429 else "")
             )
         except Exception as exc:
             name = exc.__class__.__name__
             status = getattr(exc, "status", None)
-            if name == "RateLimited" or status == 429:
+            if isinstance(exc, RenewalApiTimeout):
+                wait = RENEWAL_429_QUARANTINE
+                plan["next_allowed_at"] = int(time.time()) + wait
+                plan["status"] = "quarantine"
+                plan["last_error"] = "Discord 응답 45초 초과 — 15분 안전 격리"
+                settings["last_operation_status"] = "recovery_api_timeout"
+                save_data()
+                await ctx.send(f"🛡️ Discord 응답이 길어져 복구를 안전 중단했습니다. <t:{plan['next_allowed_at']}:R> 다시 실행하세요.")
+            elif name == "RateLimited" or status == 429:
                 wait = _rate_limit_wait(exc)
                 plan["next_allowed_at"] = int(time.time()) + wait
                 plan["status"] = "cooldown"
