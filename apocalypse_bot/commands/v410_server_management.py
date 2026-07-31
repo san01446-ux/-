@@ -758,7 +758,8 @@ def register_v410_server_management(
                 f"운영 역할: **{len(settings.get('mod_role_ids', []))}개**\n"
                 f"문의 카테고리: **{getattr(category, 'name', '미설정')}** ({category_note})\n\n"
                 "자동 관리는 안전을 위해 기본적으로 꺼져 있습니다. `!자동관리 켜기`로 활성화하세요.\n"
-                "자동 이모지·격리 기능은 `!운영강화설정`으로 연결하세요."
+                "자동 이모지·격리 기능은 `!운영강화설정`으로 연결하세요.\n"
+                "전체 상태 확인은 `!운영대시보드`를 사용하세요."
             )
             print(
                 f"[운영초기설정 완료] guild={guild.id} user={ctx.author.id} "
@@ -791,7 +792,7 @@ def register_v410_server_management(
             await ctx.send("❌ 서버 안에서만 사용할 수 있습니다.")
             return
         me = ctx.guild.me
-        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지")
+        command_names = ("운영초기설정", "운영설정", "운영강화설정", "자동이모지", "운영대시보드")
         registered = [name for name in command_names if bot.get_command(name) is not None]
         missing = [name for name in command_names if bot.get_command(name) is None]
         perms = me.guild_permissions if me is not None else None

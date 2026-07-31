@@ -25,6 +25,10 @@ REACTION_PRESETS: Dict[str, List[str]] = {
     "거래": ["💰", "👀", "✅"],
     "투표": ["👍", "👎"],
     "일반": ["❤️", "😂", "🔥"],
+    "질문": ["❓", "💡", "✅"],
+    "창작": ["🎨", "❤️", "🔥"],
+    "모집": ["🙋", "✅", "👀"],
+    "인증": ["✅", "🛡️", "🎉"],
 }
 
 AUTO_CHANNEL_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
@@ -35,6 +39,10 @@ AUTO_CHANNEL_KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("이벤트", ("이벤트", "행사")),
     ("거래", ("거래", "장터", "거래소", "암시장")),
     ("투표", ("투표", "설문")),
+    ("질문", ("질문", "도움", "문의", "qna", "q-and-a")),
+    ("창작", ("창작", "그림", "팬아트", "작품")),
+    ("모집", ("모집", "파티", "길드원", "구인")),
+    ("인증", ("인증", "출석체크", "가입확인")),
 )
 
 DEFAULT_KEYWORD_RULES = [
@@ -60,7 +68,7 @@ def register_v411_server_guard_plus(
     world_data: Dict[str, Any],
     save_data,
 ) -> None:
-    """ABADDON V4.1.1 automatic reactions and expanded server administration."""
+    """ABADDON V4.2 automatic reactions and expanded server administration."""
 
     if getattr(bot, "_abaddon_v411_guard_plus_registered", False):
         return
@@ -89,6 +97,14 @@ def register_v411_server_guard_plus(
         reactions.setdefault("keyword_rules", [])
         reactions.setdefault("max_per_message", 5)
         reactions.setdefault("react_to_webhooks", False)
+        reactions.setdefault("smart_attachments", False)
+        reactions.setdefault("custom_presets", {})
+        if not isinstance(reactions.get("channels"), dict):
+            reactions["channels"] = {}
+        if not isinstance(reactions.get("keyword_rules"), list):
+            reactions["keyword_rules"] = []
+        if not isinstance(reactions.get("custom_presets"), dict):
+            reactions["custom_presets"] = {}
 
         anti_raid = settings.setdefault("anti_raid", {})
         anti_raid.setdefault("enabled", False)
@@ -261,6 +277,36 @@ def register_v411_server_guard_plus(
             if any(keyword in lowered for keyword in keywords):
                 return preset
         return None
+
+    def available_reaction_presets(settings: Dict[str, Any]) -> Dict[str, List[str]]:
+        presets = {name: list(emojis) for name, emojis in REACTION_PRESETS.items()}
+        custom = settings.get("auto_reactions", {}).get("custom_presets", {})
+        if isinstance(custom, dict):
+            for name, emojis in custom.items():
+                clean_name = str(name).strip()[:30]
+                if not clean_name or not isinstance(emojis, list):
+                    continue
+                cleaned = [str(item).strip() for item in emojis if str(item).strip()][:10]
+                if cleaned:
+                    presets[clean_name] = cleaned
+        return presets
+
+    def smart_attachment_emojis(message: discord.Message) -> List[str]:
+        if not message.attachments:
+            return []
+        result: List[str] = []
+        for attachment in message.attachments[:5]:
+            content_type = (attachment.content_type or "").lower()
+            filename = attachment.filename.lower()
+            if content_type.startswith("image/") or filename.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+                result.extend(["📸", "❤️", "👀"])
+            elif content_type.startswith("video/") or filename.endswith((".mp4", ".mov", ".webm", ".mkv")):
+                result.extend(["🎬", "🔥", "👀"])
+            elif content_type.startswith("audio/") or filename.endswith((".mp3", ".wav", ".ogg", ".m4a")):
+                result.extend(["🎵", "🎧", "🔥"])
+            else:
+                result.extend(["📎", "✅", "👀"])
+        return result
 
     async def auto_configure_reaction_channels(guild: discord.Guild) -> Dict[str, str]:
         settings = get_settings(guild)
@@ -465,6 +511,16 @@ def register_v411_server_guard_plus(
             ),
             inline=False,
         )
+        embed.add_field(
+            name="🧰 V4.2 운영 도구 센터",
+            value=(
+                "`!운영대시보드` · `!봇권한` · `!운영설정내보내기`\n"
+                "`!운영메모 내용` · `!채널정보` · `!역할정보 @역할`\n"
+                "`!대화금지 @멤버 사유` · `!대화허용 @멤버` · `!투표종료 메시지ID`\n"
+                "전체 목록: `!운영도구도움말`"
+            ),
+            inline=False,
+        )
         embed.set_footer(text="봇에 관리자 권한이 있어도 아바돈 역할은 관리 대상 역할보다 위에 있어야 합니다.")
         await ctx.send(embed=embed)
 
@@ -475,12 +531,17 @@ def register_v411_server_guard_plus(
         settings = get_settings(ctx.guild)
         reactions = settings["auto_reactions"]
         reactions["enabled"] = True
+        reactions["smart_attachments"] = True
         if not reactions.get("keyword_rules"):
             reactions["keyword_rules"] = [dict(rule) for rule in DEFAULT_KEYWORD_RULES]
         configured = await auto_configure_reaction_channels(ctx.guild)
         role = await create_quarantine_role(ctx.guild)
         save_data()
-        lines = [f"✅ 자동 이모지 **활성화**", f"✅ 자동 감지 채널 **{len(configured)}개**"]
+        lines = [
+            "✅ 자동 이모지 **활성화**",
+            "✅ 사진·영상·음성·파일 스마트 반응 **활성화**",
+            f"✅ 자동 감지 채널 **{len(configured)}개**",
+        ]
         lines.append(f"✅ 격리 역할: {role.mention}" if role else "⚠️ 격리 역할 생성 실패")
         if configured:
             preview = "\n".join(f"• `{name}` → **{preset}**" for name, preset in list(configured.items())[:12])
@@ -535,13 +596,15 @@ def register_v411_server_guard_plus(
         if target is None:
             await ctx.send("❌ 텍스트 채널을 지정해주세요.")
             return
-        normalized = 모드.strip()
-        if normalized not in REACTION_PRESETS:
-            await ctx.send("❌ 모드는 `공지/건의/버그/미디어/이벤트/거래/투표/일반` 중 하나입니다.")
+        settings = get_settings(ctx.guild)
+        normalized = 모드.strip()[:30]
+        presets = available_reaction_presets(settings)
+        if normalized not in presets:
+            await ctx.send("❌ 존재하지 않는 모드입니다. `!이모지프리셋목록`으로 사용할 수 있는 프리셋을 확인하세요.")
             return
-        get_settings(ctx.guild)["auto_reactions"]["channels"][str(target.id)] = normalized
+        settings["auto_reactions"]["channels"][str(target.id)] = normalized
         save_data()
-        await ctx.send(f"✅ {target.mention}에 **{normalized}** 반응 {''.join(REACTION_PRESETS[normalized])}을 연결했습니다.")
+        await ctx.send(f"✅ {target.mention}에 **{normalized}** 반응 {''.join(presets[normalized])}을 연결했습니다.")
 
     @bot.command(name="이모지채널삭제", help="채널의 자동 이모지 규칙을 제거합니다.")
     async def remove_reaction_channel(
@@ -563,7 +626,9 @@ def register_v411_server_guard_plus(
     async def list_reaction_channels(ctx: commands.Context) -> None:
         if not await require_operator(ctx):
             return
-        mappings = get_settings(ctx.guild)["auto_reactions"].get("channels", {})
+        settings = get_settings(ctx.guild)
+        mappings = settings["auto_reactions"].get("channels", {})
+        presets = available_reaction_presets(settings)
         lines = []
         for channel_id, preset in mappings.items():
             try:
@@ -571,7 +636,7 @@ def register_v411_server_guard_plus(
             except (TypeError, ValueError):
                 channel = None
             label = channel.mention if isinstance(channel, discord.TextChannel) else f"삭제된 채널 `{channel_id}`"
-            lines.append(f"• {label} → **{preset}** {''.join(REACTION_PRESETS.get(str(preset), []))}")
+            lines.append(f"• {label} → **{preset}** {''.join(presets.get(str(preset), []))}")
         await ctx.send(embed=discord.Embed(title="✨ 자동 이모지 채널", description="\n".join(lines)[:4000] if lines else "설정된 채널이 없습니다.", color=0x9B59B6))
 
     @bot.command(name="이모지규칙추가", help="키워드가 포함된 메시지에 자동 반응할 이모지를 추가합니다.")
@@ -612,6 +677,109 @@ def register_v411_server_guard_plus(
         rules = get_settings(ctx.guild)["auto_reactions"].get("keyword_rules", [])
         lines = [f"`{index}.` **{rule.get('keyword', '?')}** → {' '.join(map(str, rule.get('emojis', [])))}" for index, rule in enumerate(rules, 1)]
         await ctx.send(embed=discord.Embed(title="🔑 키워드 이모지 규칙", description="\n".join(lines)[:4000] if lines else "등록된 규칙이 없습니다.", color=0x9B59B6))
+
+    @bot.command(name="이모지프리셋목록", help="기본 및 사용자 자동 반응 프리셋을 확인합니다.")
+    async def list_reaction_presets(ctx: commands.Context) -> None:
+        if not await require_operator(ctx):
+            return
+        settings = get_settings(ctx.guild)
+        presets = available_reaction_presets(settings)
+        custom_names = set(settings["auto_reactions"].get("custom_presets", {}).keys())
+        lines = [
+            f"• **{name}** {'(사용자)' if name in custom_names else '(기본)'} → {' '.join(emojis)}"
+            for name, emojis in presets.items()
+        ]
+        await ctx.send(embed=discord.Embed(
+            title="✨ 자동 이모지 프리셋",
+            description="\n".join(lines)[:4000],
+            color=0x9B59B6,
+        ))
+
+    @bot.command(name="이모지프리셋추가", help="사용자 자동 반응 프리셋을 추가하거나 갱신합니다.")
+    async def add_reaction_preset(ctx: commands.Context, *, 설정: str) -> None:
+        if not await require_manager(ctx):
+            return
+        if "|" not in 설정:
+            await ctx.send("❌ 예시: `!이모지프리셋추가 응원 | 🔥 💪 ❤️`")
+            return
+        name, emoji_text = (part.strip() for part in 설정.split("|", 1))
+        name = name[:30]
+        emojis = [item.strip() for item in re.split(r"[\s,]+", emoji_text) if item.strip()][:10]
+        if not name or not emojis:
+            await ctx.send("❌ 프리셋 이름과 이모지를 모두 입력해주세요.")
+            return
+        if name in REACTION_PRESETS:
+            await ctx.send("❌ 기본 프리셋 이름은 덮어쓸 수 없습니다. 다른 이름을 사용해주세요.")
+            return
+        settings = get_settings(ctx.guild)
+        custom = settings["auto_reactions"].setdefault("custom_presets", {})
+        if name not in custom and len(custom) >= 30:
+            await ctx.send("❌ 사용자 프리셋은 서버당 최대 30개까지 만들 수 있습니다.")
+            return
+        custom[name] = emojis
+        save_data()
+        await ctx.send(f"✅ 사용자 프리셋 **{name}** → {' '.join(emojis)}를 저장했습니다.")
+
+    @bot.command(name="이모지프리셋삭제", help="사용자 자동 반응 프리셋을 삭제합니다.")
+    async def remove_reaction_preset(ctx: commands.Context, *, 이름: str) -> None:
+        if not await require_manager(ctx):
+            return
+        name = 이름.strip()[:30]
+        settings = get_settings(ctx.guild)
+        custom = settings["auto_reactions"].setdefault("custom_presets", {})
+        if name not in custom:
+            await ctx.send("❌ 해당 사용자 프리셋을 찾지 못했습니다.")
+            return
+        custom.pop(name, None)
+        mappings = settings["auto_reactions"].setdefault("channels", {})
+        removed_channels = [channel_id for channel_id, preset in mappings.items() if preset == name]
+        for channel_id in removed_channels:
+            mappings.pop(channel_id, None)
+        save_data()
+        await ctx.send(f"✅ **{name}** 프리셋을 삭제했습니다. 연결 해제 채널: **{len(removed_channels)}개**")
+
+    @bot.command(name="이모지첨부반응", help="사진·영상·음성·파일 첨부 스마트 반응을 설정합니다.")
+    async def attachment_reaction_toggle(ctx: commands.Context, 상태: str = "상태") -> None:
+        if not await require_manager(ctx):
+            return
+        reactions = get_settings(ctx.guild)["auto_reactions"]
+        if 상태.strip().lower() in {"상태", "status"}:
+            await ctx.send(f"📎 첨부 스마트 반응: **{'켜짐' if reactions.get('smart_attachments') else '꺼짐'}**")
+            return
+        value = parse_toggle(상태)
+        if value is None:
+            await ctx.send("❌ `!이모지첨부반응 켜기` 또는 `!이모지첨부반응 끄기`로 입력하세요.")
+            return
+        reactions["smart_attachments"] = value
+        save_data()
+        await ctx.send(f"📎 첨부 스마트 반응을 **{'켰습니다' if value else '껐습니다'}**.")
+
+    @bot.command(name="이모지최대개수", help="메시지 하나에 자동으로 추가할 반응 개수를 설정합니다.")
+    async def set_reaction_maximum(ctx: commands.Context, 개수: int) -> None:
+        if not await require_manager(ctx):
+            return
+        if 개수 < 1 or 개수 > 10:
+            await ctx.send("❌ 자동 반응 개수는 1~10 사이로 설정해주세요.")
+            return
+        get_settings(ctx.guild)["auto_reactions"]["max_per_message"] = 개수
+        save_data()
+        await ctx.send(f"✅ 메시지당 자동 반응 최대 개수를 **{개수}개**로 설정했습니다.")
+
+    @bot.command(name="이모지웹훅", help="웹훅 메시지에도 자동 반응할지 설정합니다.")
+    async def webhook_reaction_toggle(ctx: commands.Context, 상태: str = "상태") -> None:
+        if not await require_manager(ctx):
+            return
+        reactions = get_settings(ctx.guild)["auto_reactions"]
+        if 상태.strip().lower() in {"상태", "status"}:
+            await ctx.send(f"🪝 웹훅 자동 반응: **{'켜짐' if reactions.get('react_to_webhooks') else '꺼짐'}**")
+            return
+        value = parse_toggle(상태)
+        if value is None:
+            await ctx.send("❌ `!이모지웹훅 켜기` 또는 `!이모지웹훅 끄기`로 입력하세요.")
+            return
+        reactions["react_to_webhooks"] = value
+        save_data()
+        await ctx.send(f"🪝 웹훅 자동 반응을 **{'켰습니다' if value else '껐습니다'}**.")
 
     # ------------------------------------------------------------------
     # Anti raid and quarantine
@@ -1079,7 +1247,9 @@ def register_v411_server_guard_plus(
     # ------------------------------------------------------------------
 
     async def handle_auto_reactions(message: discord.Message) -> None:
-        if message.guild is None or message.author.bot or not isinstance(message.channel, discord.TextChannel):
+        if message.guild is None or not isinstance(message.channel, discord.TextChannel):
+            return
+        if message.author.bot and message.webhook_id is None:
             return
         if message.webhook_id and not get_settings(message.guild)["auto_reactions"].get("react_to_webhooks", False):
             return
@@ -1090,9 +1260,12 @@ def register_v411_server_guard_plus(
         if not reactions.get("enabled", False):
             return
         emojis: List[str] = []
+        presets = available_reaction_presets(settings)
         preset = reactions.get("channels", {}).get(str(message.channel.id))
-        if preset in REACTION_PRESETS:
-            emojis.extend(REACTION_PRESETS[preset])
+        if preset in presets:
+            emojis.extend(presets[preset])
+        if reactions.get("smart_attachments", False):
+            emojis.extend(smart_attachment_emojis(message))
         normalized = (message.content or "").lower()
         for rule in reactions.get("keyword_rules", []):
             keyword = str(rule.get("keyword", "")).lower().strip()
@@ -1183,4 +1356,4 @@ def register_v411_server_guard_plus(
     bot.add_listener(handle_anti_raid_join, "on_member_join")
 
     bot._abaddon_v411_guard_plus_registered = True
-    print("[V4.1.1 SERVER GUARD PLUS] 자동 이모지/안티레이드/확장 관리 등록 완료", flush=True)
+    print("[V4.2 SERVER GUARD PLUS] 스마트 자동 이모지/안티레이드/확장 관리 등록 완료", flush=True)
