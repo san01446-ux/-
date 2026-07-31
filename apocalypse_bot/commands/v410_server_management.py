@@ -55,6 +55,9 @@ def register_v410_server_management(
         log_channels.setdefault("member", 0)
         log_channels.setdefault("operation", 0)
         settings.setdefault("welcome_channel_id", 0)
+        settings.setdefault("welcome_notice_channel_id", 0)
+        settings.setdefault("welcome_rules_channel_id", 0)
+        settings.setdefault("welcome_register_channel_id", 0)
         settings.setdefault("leave_channel_id", 0)
         settings.setdefault("autorole_id", 0)
         settings.setdefault("mod_role_ids", [])
@@ -196,6 +199,57 @@ def register_v410_server_management(
         except (TypeError, ValueError):
             return None
         return guild.get_channel(cid)
+
+    def find_text_channel(
+        guild: discord.Guild,
+        configured_id: Any,
+        keywords: Iterable[str],
+    ) -> Optional[discord.TextChannel]:
+        configured = resolve_channel(guild, configured_id)
+        if isinstance(configured, discord.TextChannel):
+            return configured
+
+        def normalise(value: str) -> str:
+            return re.sub(r"[^0-9a-z가-힣]", "", value.lower())
+
+        wanted = [normalise(keyword) for keyword in keywords]
+        best: Optional[discord.TextChannel] = None
+        best_score = 0
+        for channel in guild.text_channels:
+            name = normalise(channel.name)
+            score = 0
+            for keyword in wanted:
+                if not keyword:
+                    continue
+                if name == keyword:
+                    score = max(score, 100)
+                elif keyword in name:
+                    score = max(score, 70 + min(20, len(keyword)))
+            if score > best_score:
+                best = channel
+                best_score = score
+        return best if best_score >= 70 else None
+
+    def welcome_link_channels(
+        guild: discord.Guild,
+        settings: Dict[str, Any],
+    ) -> Tuple[Optional[discord.TextChannel], Optional[discord.TextChannel], Optional[discord.TextChannel]]:
+        notice = find_text_channel(
+            guild,
+            settings.get("welcome_notice_channel_id", 0),
+            ("공지사항", "서버공지", "공지", "announcement", "notice"),
+        )
+        rules = find_text_channel(
+            guild,
+            settings.get("welcome_rules_channel_id", 0),
+            ("서버기본규칙", "기본규칙", "이용규칙", "규칙", "rules"),
+        )
+        register = find_text_channel(
+            guild,
+            settings.get("welcome_register_channel_id", 0),
+            ("생존자등록", "가입", "등록", "rpg", "봇명령어"),
+        )
+        return notice, rules, register
 
     def classify_log_type(title: str) -> str:
         text = title or ""
@@ -1343,6 +1397,73 @@ def register_v410_server_management(
         save_data()
         await ctx.send(f"✅ 환영 채널을 {채널.mention}(으)로 설정했습니다.")
 
+    @bot.command(
+        name="인삿말설정",
+        aliases=["인사말설정", "환영안내설정"],
+        help="환영 메시지에 표시할 공지·규칙·가입 채널을 지정합니다.",
+    )
+    async def set_welcome_guide(
+        ctx: commands.Context,
+        환영채널: discord.TextChannel,
+        공지채널: discord.TextChannel,
+        규칙채널: discord.TextChannel,
+        가입채널: Optional[discord.TextChannel] = None,
+    ) -> None:
+        if not await require_manager(ctx):
+            return
+        settings = get_settings(ctx.guild)
+        settings["welcome_channel_id"] = 환영채널.id
+        settings["welcome_notice_channel_id"] = 공지채널.id
+        settings["welcome_rules_channel_id"] = 규칙채널.id
+        settings["welcome_register_channel_id"] = 가입채널.id if 가입채널 else 0
+        save_data()
+        register_text = 가입채널.mention if 가입채널 else "별도 채널 미지정"
+        await ctx.send(
+            "✅ 신규 멤버 인삿말 구성을 저장했습니다.\n"
+            f"환영 메시지: {환영채널.mention}\n"
+            f"공지사항: {공지채널.mention}\n"
+            f"서버 기본규칙: {규칙채널.mention}\n"
+            f"RPG 가입 안내: {register_text}\n\n"
+            "신규 멤버는 별도 복잡한 인증 없이 `!가입 생존자`로 바로 시작할 수 있습니다."
+        )
+
+    @bot.command(name="인삿말미리보기", aliases=["인사말미리보기", "환영미리보기"])
+    async def preview_welcome_guide(ctx: commands.Context) -> None:
+        if not await require_manager(ctx):
+            return
+        settings = get_settings(ctx.guild)
+        notice, rules, register = welcome_link_channels(ctx.guild, settings)
+        embed = discord.Embed(
+            title="🆕 새로운 생존자가 도착했습니다",
+            description=(
+                f"{ctx.author.mention} **{ctx.guild.name}**에 온 걸 환영합니다!\n\n"
+                f"📢 **서버 공지사항** · {getattr(notice, 'mention', '미설정')}\n"
+                f"📕 **서버 기본규칙** · {getattr(rules, 'mention', '미설정')}\n"
+                + (f"🪪 **생존자 등록 채널** · {register.mention}\n" if register else "")
+                + "\n별도 복잡한 가입 절차는 없습니다. `!가입 생존자`를 입력하면 RPG를 바로 사용할 수 있습니다."
+            ),
+            color=0x6D2335,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_thumbnail(url=ctx.author.display_avatar.url)
+        embed.set_footer(text="실제 입장 메시지 미리보기")
+        await ctx.send(embed=embed)
+
+    @bot.command(name="인삿말상태", aliases=["인사말상태"])
+    async def welcome_guide_status(ctx: commands.Context) -> None:
+        if not await require_manager(ctx):
+            return
+        settings = get_settings(ctx.guild)
+        welcome = resolve_channel(ctx.guild, settings.get("welcome_channel_id", 0))
+        notice, rules, register = welcome_link_channels(ctx.guild, settings)
+        await ctx.send(
+            "🧭 **인삿말 설정 상태**\n"
+            f"환영 채널: {getattr(welcome, 'mention', '미설정')}\n"
+            f"공지사항: {getattr(notice, 'mention', '자동 감지 실패')}\n"
+            f"서버 기본규칙: {getattr(rules, 'mention', '자동 감지 실패')}\n"
+            f"가입 안내: {getattr(register, 'mention', '`!가입 생존자` 직접 안내')}"
+        )
+
     @bot.command(name="퇴장채널", help="멤버 퇴장 메시지 채널을 지정합니다.")
     async def set_leave_channel(ctx: commands.Context, 채널: discord.TextChannel) -> None:
         if not await require_manager(ctx):
@@ -1751,11 +1872,15 @@ def register_v410_server_management(
                 pass
         channel = resolve_channel(member.guild, settings.get("welcome_channel_id", 0))
         if isinstance(channel, discord.TextChannel):
+            notice, rules, register = welcome_link_channels(member.guild, settings)
             embed = discord.Embed(
                 title="🆕 새로운 생존자가 도착했습니다",
                 description=(
-                    f"{member.mention} **{member.guild.name}**에 온 걸 환영합니다!\n"
-                    "이용규칙을 확인하고 아바돈 RPG에 참여해보세요."
+                    f"{member.mention} **{member.guild.name}**에 온 걸 환영합니다!\n\n"
+                    f"📢 **서버 공지사항** · {getattr(notice, 'mention', '채널 준비 중')}\n"
+                    f"📕 **서버 기본규칙** · {getattr(rules, 'mention', '채널 준비 중')}\n"
+                    + (f"🪪 **생존자 등록** · {register.mention}\n" if register else "")
+                    + "\n별도 복잡한 가입 절차는 없습니다. `!가입 생존자`를 입력하면 RPG를 바로 사용할 수 있습니다."
                 ),
                 color=0x2ECC71,
                 timestamp=discord.utils.utcnow(),
@@ -1866,6 +1991,9 @@ def register_v410_server_management(
             settings["log_channel_id"] = 0
         if int(settings.get("welcome_channel_id", 0) or 0) == channel.id:
             settings["welcome_channel_id"] = 0
+        for key in ("welcome_notice_channel_id", "welcome_rules_channel_id", "welcome_register_channel_id"):
+            if int(settings.get(key, 0) or 0) == channel.id:
+                settings[key] = 0
         if int(settings.get("leave_channel_id", 0) or 0) == channel.id:
             settings["leave_channel_id"] = 0
         for uid, cid in list(settings.get("open_tickets", {}).items()):

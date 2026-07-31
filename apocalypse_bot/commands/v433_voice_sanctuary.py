@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib.metadata
 import importlib.util
 import os
+import shutil
+import sys
 import re
 import tempfile
 import time
@@ -16,11 +19,12 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "4.3.3"
+VERSION = "4.3.3.2"
 TTS_MAX_TEXT = 180
 TTS_QUEUE_LIMIT = 20
 TTS_USER_COOLDOWN = 4.0
 DEFAULT_IDLE_SECONDS = 600
+RENEWAL_EDIT_DELAY = 0.8
 
 VOICE_PRESETS: Dict[str, Dict[str, str]] = {
     "서현": {"edge": "ko-KR-SunHiNeural", "label": "차분한 여성 음성"},
@@ -95,6 +99,200 @@ def _voice_channel_specs(style: str) -> List[Dict[str, Any]]:
     ]
 
 
+def _game_zone_specs(style: str) -> List[Dict[str, Any]]:
+    categories = {
+        "깔끔": {
+            "growth": "〔 RPG · 성장 〕",
+            "game": "〔 게임 · 도박 〕",
+            "media": "〔 음악 · 미디어 〕",
+            "test": "〔 테스트 〕",
+            "voice": "〔 음성 라운지 〕",
+        },
+        "고딕": {
+            "growth": "╭─〔 ⚔ 종말 전장 〕─╮",
+            "game": "╭─〔 🎲 운명의 방 〕─╮",
+            "media": "╭─〔 🎵 망자의 선율 〕─╮",
+            "test": "╭─〔 🧪 봉인 실험실 〕─╮",
+            "voice": "╭─〔 🔊 메아리의 방 〕─╮",
+        },
+        "커뮤니티": {
+            "growth": "━━━ RPG · 성장 ━━━",
+            "game": "━━━ 게임 · 도박 ━━━",
+            "media": "━━━ 음악 · 미디어 ━━━",
+            "test": "━━━ 테스트 ━━━",
+            "voice": "━━━ 음성 라운지 ━━━",
+        },
+    }[style]
+    return [
+        {
+            "key": "rpg",
+            "category": categories["growth"],
+            "name": "⚔️・아포칼립스-rpg",
+            "keywords": ("아포칼립스rpg", "아포칼립스", "rpg"),
+        },
+        {
+            "key": "level_notice",
+            "category": categories["growth"],
+            "name": "🎉・레벨-알림",
+            "keywords": ("레벨알림", "레벨", "levelnotify", "levelup"),
+        },
+        {
+            "key": "daily_quiz",
+            "category": categories["growth"],
+            "name": "🧭・오늘의-퀴즈방",
+            "keywords": ("오늘의퀴즈방", "오늘의퀴즈", "퀴즈방", "퀴즈", "quiz"),
+        },
+        {
+            "key": "gambling",
+            "category": categories["game"],
+            "name": "🎲・도박장",
+            "keywords": ("도박장", "도박", "카지노", "casino", "gambling"),
+        },
+        {
+            "key": "ksi",
+            "category": categories["game"],
+            "name": "🤖・크시",
+            "keywords": ("크시", "kshi", "ksi"),
+        },
+        {
+            "key": "tiktok",
+            "category": categories["media"],
+            "name": "📱・틱톡",
+            "keywords": ("틱톡", "tiktok", "shorts"),
+        },
+        {
+            "key": "karaoke",
+            "category": categories["media"],
+            "name": "🎵・노래방",
+            "keywords": ("노래방", "음악", "뮤직", "music", "song"),
+        },
+        {
+            "key": "bot_test",
+            "category": categories["test"],
+            "name": "🧪・봇-테스트",
+            "keywords": ("봇테스트", "테스트", "test"),
+        },
+    ]
+
+
+def _game_zone_category_names(style: str) -> Dict[str, str]:
+    specs = _game_zone_specs(style)
+    result = {"growth": specs[0]["category"], "game": specs[3]["category"], "media": specs[5]["category"], "test": specs[7]["category"]}
+    result["voice"] = {
+        "깔끔": "〔 음성 라운지 〕",
+        "고딕": "╭─〔 🔊 메아리의 방 〕─╮",
+        "커뮤니티": "━━━ 음성 라운지 ━━━",
+    }[style]
+    return result
+
+
+def _roman_label(index: int) -> str:
+    romans = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X")
+    return romans[index] if 0 <= index < len(romans) else str(index + 1)
+
+
+async def _renewal_pause() -> None:
+    # Discord의 채널 위치/이름 변경 라우트는 짧은 시간에 몰리면 429가 발생할 수 있습니다.
+    await asyncio.sleep(RENEWAL_EDIT_DELAY)
+
+
+def _category_score(category: discord.CategoryChannel, keywords: Iterable[str]) -> int:
+    name = _normalise_name(category.name)
+    score = 0
+    for keyword in keywords:
+        norm = _normalise_name(keyword)
+        if not norm:
+            continue
+        if name == norm:
+            score = max(score, 100)
+        elif norm in name:
+            score = max(score, 70)
+    return score
+
+
+def _best_category(guild: discord.Guild, keywords: Iterable[str], excluded: set[int]) -> Optional[discord.CategoryChannel]:
+    best = None
+    best_score = 0
+    for category in guild.categories:
+        if category.id in excluded:
+            continue
+        score = _category_score(category, keywords)
+        if score > best_score:
+            best = category
+            best_score = score
+    return best if best_score >= 70 else None
+
+
+def _detect_game_zone_channels(
+    guild: discord.Guild,
+    style: str,
+) -> Tuple[List[Tuple[Dict[str, Any], Optional[discord.TextChannel]]], List[discord.VoiceChannel], Optional[discord.CategoryChannel], Optional[discord.CategoryChannel], Optional[discord.CategoryChannel]]:
+    used: set[int] = set()
+    text_matches: List[Tuple[Dict[str, Any], Optional[discord.TextChannel]]] = []
+    for spec in _game_zone_specs(style):
+        channel = _best_channel(guild.text_channels, spec["keywords"], used)
+        if isinstance(channel, discord.TextChannel):
+            used.add(channel.id)
+        else:
+            channel = None
+        text_matches.append((spec, channel))
+
+    excluded: set[int] = set()
+    bot_game_category = _best_category(guild, ("BOT GAME", "봇게임", "봇 게임", "게임봇"), excluded)
+    if bot_game_category is not None:
+        excluded.add(bot_game_category.id)
+    voice_category = _best_category(guild, ("말해라", "음성", "voice", "보이스"), excluded)
+    if voice_category is not None:
+        excluded.add(voice_category.id)
+    test_category = _best_category(guild, ("테스트", "test"), excluded)
+
+    numbered_names = {"i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
+    voices: List[discord.VoiceChannel] = []
+    if voice_category is not None:
+        voices = [channel for channel in voice_category.voice_channels]
+    if not voices:
+        voices = [
+            channel
+            for channel in guild.voice_channels
+            if _normalise_name(channel.name) in numbered_names
+            or any(keyword in _normalise_name(channel.name) for keyword in ("말해라", "음성", "voice", "보이스"))
+        ]
+    voices.sort(key=lambda channel: (channel.category.position if channel.category else 9999, channel.position, channel.id))
+    return text_matches, voices, bot_game_category, voice_category, test_category
+
+
+def _game_zone_preview_embed(guild: discord.Guild, style: str) -> discord.Embed:
+    text_matches, voices, bot_game_category, voice_category, test_category = _detect_game_zone_channels(guild, style)
+    categories = _game_zone_category_names(style)
+    embed = discord.Embed(
+        title=f"🎮 봇 게임·음성 구역 정리 미리보기 · {style}",
+        description=(
+            "사용 중인 채널을 삭제하지 않고 **RPG·성장 / 게임·도박 / 음악·미디어 / 테스트 / 음성 라운지**로 나눕니다.\n"
+            "기존 `BOT GAME`, `말해라`, `테스트` 카테고리는 가능한 경우 새 이름으로 재사용합니다."
+        ),
+        color=0x6D2335 if style == "고딕" else 0x5865F2,
+    )
+    detected = [channel for _, channel in text_matches if channel is not None]
+    embed.add_field(name="찾은 텍스트 채널", value=f"**{len(detected)}개 / {len(text_matches)}개**", inline=True)
+    embed.add_field(name="찾은 음성 채널", value=f"**{len(voices)}개**", inline=True)
+    reused = sum(category is not None for category in (bot_game_category, voice_category, test_category))
+    embed.add_field(name="재사용할 카테고리", value=f"**{reused}개**", inline=True)
+
+    lines: List[str] = []
+    for spec, channel in text_matches:
+        if channel is not None:
+            lines.append(f"• {channel.mention} → `{spec['category']}` / `{spec['name']}`")
+    for index, channel in enumerate(voices):
+        lines.append(f"• {channel.mention} → `{categories['voice']}` / `🔊・음성-{_roman_label(index)}`")
+    embed.add_field(name="정리 계획", value="\n".join(lines[:20]) or "인식한 대상 채널이 없습니다.", inline=False)
+    embed.add_field(
+        name="적용 명령",
+        value=f"`!서버리뉴얼 게임정리 {style}`\n되돌리기: `!서버리뉴얼 되돌리기`",
+        inline=False,
+    )
+    return embed
+
+
 STYLE_NAMES = {"깔끔", "고딕", "커뮤니티"}
 ESSENTIAL_KEYS = {"notice", "rules", "roles", "general", "bot", "voice_lobby", "voice_afk"}
 ADMIN_KEYS = {"admin", "logs"}
@@ -141,6 +339,8 @@ def _layout_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any
     tts.setdefault("volume", 1.0)
     tts.setdefault("idle_seconds", DEFAULT_IDLE_SECONDS)
     tts.setdefault("announce_names", True)
+    tts.setdefault("auto_join", True)
+    tts.setdefault("require_author_in_voice", False)
     settings.setdefault("layout", {})
     settings["layout"].setdefault("style", None)
     settings["layout"].setdefault("backup", None)
@@ -345,6 +545,28 @@ def _dependency_state() -> Tuple[bool, bool]:
     return importlib.util.find_spec("nacl") is not None, importlib.util.find_spec("edge_tts") is not None
 
 
+def _package_version(name: str) -> str:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return "미설치"
+    except Exception:
+        return "확인 실패"
+
+
+def _tts_diagnostic_lines() -> List[str]:
+    has_nacl, has_edge = _dependency_state()
+    ffmpeg = shutil.which("ffmpeg")
+    return [
+        f"Python: `{sys.version.split()[0]}`",
+        f"discord.py: `{_package_version('discord.py')}`",
+        f"PyNaCl: `{'설치됨 ' + _package_version('PyNaCl') if has_nacl else '미설치'}`",
+        f"edge-tts: `{'설치됨 ' + _package_version('edge-tts') if has_edge else '미설치'}`",
+        f"FFmpeg: `{'확인됨' if ffmpeg else '찾지 못함'}`",
+        f"Opus: `{'로드됨' if discord.opus.is_loaded() else '미로드'}`",
+    ]
+
+
 class VoiceRuntime:
     def __init__(self) -> None:
         self.queues: Dict[int, asyncio.Queue[Dict[str, Any]]] = {}
@@ -402,7 +624,7 @@ async def _synth_google(text: str, speed: float, output_path: str) -> None:
     }
     url = "https://translate.google.com/translate_tts?" + urlencode(params)
     timeout = aiohttp.ClientTimeout(total=20)
-    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/4.3.3"}
+    headers = {"User-Agent": "Mozilla/5.0 ABADDON-TTS/4.3.3.2"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as response:
             if response.status != 200:
@@ -431,6 +653,13 @@ async def _ensure_voice_connection(
     channel = guild.get_channel(int(channel_id))
     if not isinstance(channel, discord.VoiceChannel):
         return None, "설정된 음성 채널을 찾지 못했습니다."
+    has_nacl, _ = _dependency_state()
+    if not has_nacl:
+        return None, (
+            "PyNaCl을 실제 실행 환경에서 불러오지 못했습니다. "
+            "Render Build Command가 `pip install -r requirements.txt`인지 확인하고 "
+            "`Clear build cache & deploy`를 실행한 뒤 `!TTS 진단`으로 재확인하세요."
+        )
     me = guild.me
     if me is not None:
         permissions = channel.permissions_for(me)
@@ -443,9 +672,7 @@ async def _ensure_voice_connection(
         elif voice.channel.id != channel.id:
             await voice.move_to(channel)
     except RuntimeError as exc:
-        if "PyNaCl" in str(exc) or "voice" in str(exc).lower():
-            return None, "음성 의존성이 없습니다. `requirements.txt`에 `PyNaCl`을 추가한 뒤 재배포하세요."
-        return None, f"음성 연결 실패: {type(exc).__name__}: {str(exc)[:180]}"
+        return None, f"음성 런타임 오류: {type(exc).__name__}: {str(exc)[:220]}"
     except (discord.ClientException, discord.Forbidden, discord.HTTPException) as exc:
         return None, f"음성 연결 실패: {type(exc).__name__}: {str(exc)[:180]}"
     return voice, None
@@ -566,8 +793,8 @@ def register_v433_voice_sanctuary(
             description=(
                 "텍스트를 음성 채널에서 읽고, 지정한 채팅 채널의 메시지를 자동 낭독합니다.\n\n"
                 "`!음성입장` · `!말해 내용` · `!음성퇴장`\n"
-                "`!TTS 켜기` · `!TTS 끄기` · `!TTS 채널 #채널`\n"
-                "`!TTS 목소리` · `!TTS 속도 1.0` · `!TTS 볼륨 100`"
+                "`!TTS 채널설정 #텍스트채널 음성채널` · `!TTS 켜기` · `!TTS 끄기`\n"
+                "`!TTS 목소리` · `!TTS 속도 1.0` · `!TTS 볼륨 100` · `!TTS 진단`"
             ),
             color=0x6D2335,
         )
@@ -631,28 +858,79 @@ def register_v433_voice_sanctuary(
         )
         await ctx.send(("✅ " if ok else "❌ ") + message, delete_after=8)
 
+    async def configure_tts_channels(
+        ctx: commands.Context,
+        text_channel: discord.TextChannel,
+        voice_channel: discord.VoiceChannel,
+        *,
+        enable: bool = True,
+    ) -> None:
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings["text_channel_id"] = text_channel.id
+        settings["voice_channel_id"] = voice_channel.id
+        settings["enabled"] = bool(enable)
+        settings["auto_join"] = True
+        settings["require_author_in_voice"] = False
+        save_data()
+        state = "켜짐" if enable else "꺼짐"
+        await ctx.send(
+            "✅ TTS 자동 채널 설정을 저장했습니다.\n"
+            f"텍스트: {text_channel.mention}\n"
+            f"음성: {voice_channel.mention}\n"
+            f"자동 낭독: **{state}**\n\n"
+            "이제 지정 텍스트 채널에 일반 메시지가 올라오면, 작성자가 음성방에 없어도 "
+            "아바돈이 지정 음성 채널로 자동 입장해 읽습니다."
+        )
+
+    @tts_group.command(name="채널설정", aliases=["자동채널", "setchannel"])
+    async def tts_channel_setup(
+        ctx: commands.Context,
+        text_channel: discord.TextChannel,
+        voice_channel: discord.VoiceChannel,
+    ):
+        await configure_tts_channels(ctx, text_channel, voice_channel, enable=True)
+
+    @bot.command(name="채널설정", aliases=["TTS채널설정"])
+    async def tts_channel_setup_shortcut(
+        ctx: commands.Context,
+        text_channel: discord.TextChannel,
+        voice_channel: discord.VoiceChannel,
+    ):
+        await configure_tts_channels(ctx, text_channel, voice_channel, enable=True)
+
     @tts_group.command(name="켜기", aliases=["on"])
     async def tts_enable(ctx: commands.Context):
         guild = await require_admin(ctx)
         if guild is None or not isinstance(ctx.author, discord.Member):
             return
-        if not ctx.author.voice or not isinstance(ctx.author.voice.channel, discord.VoiceChannel):
-            await ctx.send("❌ 먼저 자동 낭독에 사용할 음성 채널에 들어가 주세요.")
-            return
         settings = _layout_settings(world_data, guild.id)["tts"]
-        settings["enabled"] = True
-        settings["text_channel_id"] = ctx.channel.id
-        settings["voice_channel_id"] = ctx.author.voice.channel.id
-        voice, error = await _ensure_voice_connection(bot, guild, ctx.author.voice.channel.id)
-        if voice is None:
-            settings["enabled"] = False
-            await ctx.send(f"❌ {error}")
+        if ctx.author.voice and isinstance(ctx.author.voice.channel, discord.VoiceChannel):
+            settings["voice_channel_id"] = ctx.author.voice.channel.id
+        if not settings.get("voice_channel_id"):
+            await ctx.send(
+                "❌ 음성 채널이 설정되지 않았습니다.\n"
+                "`!TTS 채널설정 #텍스트채널 음성채널` 또는 `!채널설정 #텍스트채널 음성채널`을 사용하세요."
+            )
             return
+        if isinstance(ctx.channel, discord.TextChannel) and not settings.get("text_channel_id"):
+            settings["text_channel_id"] = ctx.channel.id
+        if not settings.get("text_channel_id"):
+            await ctx.send("❌ 자동 낭독 텍스트 채널을 먼저 설정해 주세요.")
+            return
+        settings["enabled"] = True
+        settings["auto_join"] = True
+        settings["require_author_in_voice"] = False
         save_data()
+        text_channel = guild.get_channel(int(settings["text_channel_id"]))
+        voice_channel = guild.get_channel(int(settings["voice_channel_id"]))
         await ctx.send(
             "✅ 자동 TTS를 켰습니다.\n"
-            f"텍스트: {ctx.channel.mention}\n음성: {ctx.author.voice.channel.mention}\n"
-            "같은 음성 채널에 들어온 사용자의 일반 메시지만 읽습니다."
+            f"텍스트: {getattr(text_channel, 'mention', '미설정')}\n"
+            f"음성: {getattr(voice_channel, 'mention', '미설정')}\n"
+            "지정 텍스트 채널에 메시지가 올라오면 아바돈이 자동 입장해 읽습니다."
         )
 
     @tts_group.command(name="끄기", aliases=["off"])
@@ -679,6 +957,17 @@ def register_v433_voice_sanctuary(
         settings["text_channel_id"] = target.id
         save_data()
         await ctx.send(f"✅ 자동 낭독 채널을 {target.mention}로 지정했습니다.")
+
+    @tts_group.command(name="음성채널", aliases=["보이스채널"])
+    async def tts_voice_channel(ctx: commands.Context, channel: discord.VoiceChannel):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        settings = _layout_settings(world_data, guild.id)["tts"]
+        settings["voice_channel_id"] = channel.id
+        settings["auto_join"] = True
+        save_data()
+        await ctx.send(f"✅ 자동 낭독 음성 채널을 {channel.mention}로 지정했습니다.")
 
     @tts_group.command(name="목소리", aliases=["음성"])
     async def tts_voice(ctx: commands.Context, voice_name: Optional[str] = None):
@@ -744,6 +1033,30 @@ def register_v433_voice_sanctuary(
             guild.voice_client.stop()
         await ctx.send(f"✅ TTS 대기열 **{removed}개**를 비웠습니다.")
 
+    @tts_group.command(name="진단", aliases=["diagnose", "검사"])
+    async def tts_diagnose(ctx: commands.Context):
+        guild = await require_guild(ctx)
+        if guild is None:
+            return
+        has_nacl, has_edge = _dependency_state()
+        embed = discord.Embed(title="🩺 TTS 실행 환경 진단", color=0x6D2335)
+        embed.description = "\n".join(_tts_diagnostic_lines())
+        if not has_nacl:
+            embed.add_field(
+                name="Render 조치",
+                value=(
+                    "1. Build Command를 `pip install --upgrade pip && pip install -r requirements.txt`로 확인\n"
+                    "2. `PyNaCl>=1.6.2`와 `edge-tts>=6.1.0` 확인\n"
+                    "3. Manual Deploy → Clear build cache & deploy"
+                ),
+                inline=False,
+            )
+        elif not has_edge:
+            embed.add_field(name="안내", value="edge-tts가 없어 Google 대체 음성을 사용합니다.", inline=False)
+        else:
+            embed.add_field(name="결과", value="필수 음성 패키지가 정상적으로 감지됐습니다.", inline=False)
+        await ctx.send(embed=embed)
+
     @tts_group.command(name="상태", aliases=["status"])
     async def tts_status(ctx: commands.Context):
         guild = await require_guild(ctx)
@@ -759,6 +1072,7 @@ def register_v433_voice_sanctuary(
         embed.add_field(name="대기열", value=f"{VOICE_RUNTIME.queue_for(guild.id).qsize()}/{TTS_QUEUE_LIMIT}", inline=True)
         embed.add_field(name="텍스트 채널", value=getattr(text_channel, "mention", "미설정"), inline=True)
         embed.add_field(name="음성 채널", value=getattr(voice_channel, "mention", "미설정"), inline=True)
+        embed.add_field(name="자동 입장", value="켜짐" if settings.get("auto_join", True) else "꺼짐", inline=True)
         embed.add_field(name="목소리", value=f"{settings.get('voice', '서현')} · {settings.get('speed', 1.0)}배 · {int(float(settings.get('volume', 1.0))*100)}%", inline=True)
         embed.add_field(
             name="음성 의존성",
@@ -843,12 +1157,14 @@ def register_v433_voice_sanctuary(
                     if admin_only:
                         kwargs["overwrites"] = _admin_category_overwrites(guild, ctx.author, bot_member)
                     category = await guild.create_category(category_name, **kwargs)
+                    await _renewal_pause()
                     created_categories += 1
                 categories[category_name] = category
 
             for index, category_name in enumerate(category_names):
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                     await categories[category_name].edit(position=index, reason=reason)
+                    await _renewal_pause()
 
             for spec, channel in text_matches:
                 category = categories[spec["category"]]
@@ -862,15 +1178,18 @@ def register_v433_voice_sanctuary(
                             allow_reactions=spec["key"] == "roles",
                         )
                     await guild.create_text_channel(spec["name"], **kwargs)
+                    await _renewal_pause()
                     created_channels += 1
                 elif channel is not None:
                     await channel.edit(name=spec["name"], category=category, reason=reason)
+                    await _renewal_pause()
                     changed_channels += 1
 
             for spec, channel in voice_matches:
                 category = categories[spec["category"]]
                 if channel is None and spec["key"] in ESSENTIAL_KEYS:
                     await guild.create_voice_channel(spec["name"], category=category, reason=reason)
+                    await _renewal_pause()
                     created_channels += 1
                 elif channel is not None:
                     await channel.edit(name=spec["name"], category=category, reason=reason)
@@ -894,6 +1213,145 @@ def register_v433_voice_sanctuary(
         except discord.HTTPException as exc:
             await progress.edit(content=f"❌ Discord API 오류로 중단됐습니다: `{type(exc).__name__}: {str(exc)[:250]}`")
 
+    @server_renewal.command(name="게임미리보기", aliases=["봇게임미리보기", "게임프리뷰"])
+    async def server_renewal_game_preview(ctx: commands.Context, style: str = "깔끔"):
+        guild = await require_admin(ctx)
+        if guild is None:
+            return
+        if style not in STYLE_NAMES:
+            await ctx.send("❌ 테마는 `깔끔`, `고딕`, `커뮤니티` 중에서 선택하세요.")
+            return
+        await ctx.send(embed=_game_zone_preview_embed(guild, style))
+
+    @server_renewal.command(name="게임정리", aliases=["봇게임정리", "게임채널정리"])
+    async def server_renewal_game_apply(ctx: commands.Context, style: str = "깔끔"):
+        guild = await require_admin(ctx)
+        if guild is None or not isinstance(ctx.author, discord.Member):
+            return
+        if style not in STYLE_NAMES:
+            await ctx.send("❌ 테마는 `깔끔`, `고딕`, `커뮤니티` 중에서 선택하세요.")
+            return
+        bot_member = guild.me
+        if bot_member is None or not bot_member.guild_permissions.manage_channels:
+            await ctx.send("❌ 봇에 `채널 관리` 권한이 필요합니다.")
+            return
+
+        text_matches, voices, bot_game_category, voice_category, test_category = _detect_game_zone_channels(guild, style)
+        if not any(channel is not None for _, channel in text_matches) and not voices:
+            await ctx.send("❌ 정리할 봇 게임·음성 채널을 찾지 못했습니다. 채널 이름을 확인해 주세요.")
+            return
+
+        settings = _layout_settings(world_data, guild.id)["layout"]
+        settings["backup"] = _snapshot_guild(guild)
+        save_data()
+        progress = await ctx.send(f"🎮 **{style} 테마로 봇 게임·음성 구역을 나누는 중입니다...**")
+        category_names = _game_zone_category_names(style)
+        reason = f"ABADDON v{VERSION} 봇 게임·음성 구역 정리 / {ctx.author} ({ctx.author.id})"
+        categories: Dict[str, discord.CategoryChannel] = {}
+        created_categories = 0
+        changed_channels = 0
+        reused_categories = 0
+
+        detected_positions = [
+            category.position
+            for category in (bot_game_category, voice_category, test_category)
+            if category is not None
+        ]
+        base_position = min(detected_positions) if detected_positions else max(0, len(guild.categories) - 1)
+
+        async def prepare_category(
+            key: str,
+            preferred: Optional[discord.CategoryChannel] = None,
+        ) -> discord.CategoryChannel:
+            nonlocal created_categories, reused_categories
+            target_name = category_names[key]
+            existing = discord.utils.get(guild.categories, name=target_name)
+            if existing is not None:
+                categories[key] = existing
+                return existing
+            if preferred is not None and preferred.id not in {category.id for category in categories.values()}:
+                await preferred.edit(name=target_name, reason=reason)
+                await _renewal_pause()
+                categories[key] = preferred
+                reused_categories += 1
+                return preferred
+            created = await guild.create_category(target_name, reason=reason)
+            await _renewal_pause()
+            categories[key] = created
+            created_categories += 1
+            return created
+
+        try:
+            await prepare_category("growth", bot_game_category)
+            await prepare_category("game")
+            await prepare_category("media")
+            await prepare_category("test", test_category)
+            await prepare_category("voice", voice_category)
+
+            for offset, key in enumerate(("growth", "game", "media", "test", "voice")):
+                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                    await categories[key].edit(position=base_position + offset, reason=reason)
+                    await _renewal_pause()
+
+            spec_to_key = {
+                "rpg": "growth",
+                "level_notice": "growth",
+                "daily_quiz": "growth",
+                "gambling": "game",
+                "ksi": "game",
+                "tiktok": "media",
+                "karaoke": "media",
+                "bot_test": "test",
+            }
+            moved_ids: set[int] = set()
+            for spec, channel in text_matches:
+                if channel is None:
+                    continue
+                target_key = spec_to_key[spec["key"]]
+                await channel.edit(name=spec["name"], category=categories[target_key], reason=reason)
+                await _renewal_pause()
+                moved_ids.add(channel.id)
+                changed_channels += 1
+
+            # BOT GAME 안에 남은 미인식 텍스트 채널은 삭제하지 않고 게임·도박 구역으로 옮깁니다.
+            if bot_game_category is not None:
+                leftovers = [
+                    channel for channel in list(bot_game_category.text_channels)
+                    if channel.id not in moved_ids
+                ]
+                for channel in leftovers:
+                    await channel.edit(category=categories["game"], reason=reason)
+                    await _renewal_pause()
+                    changed_channels += 1
+
+            for index, channel in enumerate(voices):
+                await channel.edit(
+                    name=f"🔊・음성-{_roman_label(index)}",
+                    category=categories["voice"],
+                    reason=reason,
+                )
+                await _renewal_pause()
+                changed_channels += 1
+
+            settings["style"] = style
+            settings["game_zone_applied_at"] = int(time.time())
+            settings["game_zone_applied_by"] = ctx.author.id
+            save_data()
+            await progress.edit(
+                content=(
+                    f"✅ **봇 게임·음성 구역 정리 완료 · {style}**\n"
+                    f"정돈한 채널: **{changed_channels}개**\n"
+                    f"재사용한 카테고리: **{reused_categories}개**\n"
+                    f"새 카테고리: **{created_categories}개**\n\n"
+                    "사용 중인 채널·메시지는 삭제하지 않았습니다. 빈 옛 카테고리는 "
+                    "`!서버리뉴얼 빈카테고리`로 확인한 뒤 정리하세요."
+                )
+            )
+        except discord.Forbidden:
+            await progress.edit(content="❌ 권한 부족으로 중단됐습니다. 봇 역할의 `채널 관리` 권한과 역할 순서를 확인하세요.")
+        except discord.HTTPException as exc:
+            await progress.edit(content=f"❌ Discord API 오류로 중단됐습니다: `{type(exc).__name__}: {str(exc)[:250]}`")
+
     @server_renewal.command(name="되돌리기", aliases=["undo", "복원"])
     async def server_renewal_undo(ctx: commands.Context):
         guild = await require_admin(ctx)
@@ -914,11 +1372,14 @@ def register_v433_voice_sanctuary(
             if category is None:
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                     category = await guild.create_category(str(row.get("name", "복구된 카테고리")), reason=reason)
+                    await _renewal_pause()
                     await category.edit(position=int(row.get("position", category.position)), reason=reason)
+                    await _renewal_pause()
                     restored += 1
                 continue
             with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                 await category.edit(name=str(row.get("name", category.name)), position=int(row.get("position", category.position)), reason=reason)
+                await _renewal_pause()
                 restored += 1
         category_map = {category.id: category for category in guild.categories}
         for row in backup.get("channels", []):
@@ -934,6 +1395,7 @@ def register_v433_voice_sanctuary(
                     position=int(row.get("position", channel.position)),
                     reason=reason,
                 )
+                await _renewal_pause()
                 restored += 1
         settings["style"] = None
         settings["restored_at"] = int(time.time())
@@ -1072,8 +1534,11 @@ def register_v433_voice_sanctuary(
         if message.channel.id != settings.get("text_channel_id"):
             return
         voice_channel_id = settings.get("voice_channel_id")
-        if not message.author.voice or message.author.voice.channel.id != voice_channel_id:
+        if not voice_channel_id:
             return
+        if settings.get("require_author_in_voice", False):
+            if not message.author.voice or message.author.voice.channel.id != voice_channel_id:
+                return
         now = time.monotonic()
         key = (message.guild.id, message.author.id)
         if now - VOICE_RUNTIME.user_cooldowns.get(key, 0.0) < TTS_USER_COOLDOWN:
