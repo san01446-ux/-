@@ -1498,6 +1498,7 @@ async def 명령어(ctx):
 예: `/장비 강화`, `/전투 던전`, `/도박 룰렛`, `/거래 판매`, `/시즌 일일퀘스트`
 🎮 **v6 통합 게임 드롭다운:** `!게임` — 주요 RPG·카지노·원정·스토리 기능을 카테고리별로 실행
 🕯️ **v6.2 대화·기억 제어실:** `!대화` — 아바돈 대화, 서버 지식 등록·검색, 오늘의 질문과 교감 기록
+🌋 **v6.3 다중 월드보스:** 6종 보스·서버 공동 HP·기여도·보상·전용 이미지
 
 🔹 **대화 / 서버 기억**
 `!대화` `!아바돈 내용` `!가르치기` `!지식` `!지식 검색 단어`
@@ -1520,7 +1521,8 @@ async def 명령어(ctx):
 🔹 **전투 / 보스**
 `!괴물목록 [난이도]` `!던전 약함/보통/강함/지옥`
 `!지역목록` `!지역정보 [지역명]` `!지역이동 지역명` `!지역탐색` `!좀비도감 [지역명]`
-`!레이드` `!레이드공격` `!월드보스` `!월드보스공격` `!보스도감`
+`!레이드` `!레이드공격` `!월드보스` `!월드보스공격` `!월드보스기여도` `!보스랭킹`
+`!월드보스보상` `!월드보스목록` `!월드보스도감` `!보스도감`
 `!심층던전 [층]` `!던전기록` `!PVP @유저`
 
 🔹 **채집 생활**
@@ -1579,14 +1581,14 @@ async def 명령어(ctx):
 ※ 카지노는 별도 칩을 사용합니다. 생존 룰렛 피격 시 식량이 최대 배팅액의 10배까지 감소하며 마이너스가 될 수 있습니다.
 
 🔹 **알바 / 코인 / 실시간 암시장**
-`!도박잔액` `!알바` `!코인` `!도박정보`
+`!도박잔액` `!알바` `!코인` `!돈주세요` `!땅파기` `!도박정보`
 `!시세` `!매수 일반 10` `!매도`/`!코인판매`(드롭다운) `!자산` `!암시장기록`
 `!암시장알림설정 [@역할]` `!암시장알림상태` `!암시장알림해제`
 ※ 시세는 전 서버 공통으로 1분마다 변동합니다.
 
 🔹 **관리자**
 `!가방조회 @유저` `!식량지급 @유저 금액`
-`!식량회수 @유저 금액` `!월드보스리셋`
+`!식량회수 @유저 금액` `!월드보스리셋 보스명` `!월드보스테스트 보스명`
 """
     await send_pages(ctx.channel, text)
 
@@ -1741,15 +1743,110 @@ async def 돈주세요(ctx):
         return
 
     u = get_user(ctx.author.id)
-    reward = random.randint(0, 8000)
-    u["balance"] += reward
-    u["stats"]["earned"] += reward
-    save_data()
-
-    await ctx.send(
-        f"🎁 떠돌이 상인이 식량 **{reward:,}개**를 던져줬습니다.\n"
-        f"현재 잔액: **{u['balance']:,}개**"
+    before = int(u.get("balance", 0))
+    asset_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "assets", "game_cards", "support.png",
     )
+    filename = "support.png"
+
+    stage1 = discord.Embed(
+        title="🎁 긴급 지원 교섭 시작",
+        description="떠돌이 상인의 무전 신호를 확인하고 있습니다...",
+        color=discord.Color.gold(),
+    )
+    stage1.add_field(name="📡 1단계", value="신호 발신자 확인", inline=True)
+    stage1.add_field(name="🔐 2단계", value="보급 상자 봉인 검사", inline=True)
+    if os.path.isfile(asset_path):
+        stage1.set_image(url=f"attachment://{filename}")
+        message = await ctx.send(embed=stage1, file=discord.File(asset_path, filename=filename))
+    else:
+        message = await ctx.send(embed=stage1)
+
+    await asyncio.sleep(0.65)
+    stage2 = discord.Embed(
+        title="🔍 보급 상자 검사 중",
+        description="상인의 제안과 상자 무게가 일치하는지 대조합니다...",
+        color=discord.Color.orange(),
+    )
+    stage2.add_field(name="🧾 거래 기록", value="암시장 서명 대조 중", inline=True)
+    stage2.add_field(name="⚖️ 위험 판정", value="사기·빈 상자 가능성 확인", inline=True)
+    if os.path.isfile(asset_path):
+        stage2.set_image(url=f"attachment://{filename}")
+    try:
+        await message.edit(embed=stage2, content=None)
+    except (discord.Forbidden, discord.HTTPException, AttributeError):
+        pass
+    await asyncio.sleep(0.65)
+
+    roll = random.random()
+    if roll < 0.12:
+        loss = min(max(0, before), random.randint(120, 900))
+        u["balance"] = before - loss
+        outcome = "failure"
+        title = "💸 가짜 지원 상인에게 당했습니다"
+        description = random.choice([
+            "상자가 비어 있었습니다. 운송 보증금만 사라졌습니다.",
+            "상인이 연막탄을 터뜨리고 수수료를 챙겨 달아났습니다.",
+            "위조된 보급 증서였습니다. 확인 비용을 지불했습니다.",
+        ])
+        delta = -loss
+        color = discord.Color.red()
+    elif roll < 0.22:
+        outcome = "empty"
+        title = "📭 빈 보급 상자"
+        description = "상인은 약속을 지켰지만 상자 안에는 쓸 만한 물자가 없었습니다."
+        delta = 0
+        color = discord.Color.dark_grey()
+    else:
+        reward = random.randint(300, 8000)
+        u["balance"] = before + reward
+        u.setdefault("stats", {}).setdefault("earned", 0)
+        u["stats"]["earned"] += reward
+        outcome = "jackpot" if reward >= 7000 else "success"
+        title = "💎 희귀 지원 상자 확보" if outcome == "jackpot" else "🎁 긴급 지원금 수령"
+        description = random.choice([
+            "떠돌이 상인이 폐허 너머로 보급 상자를 밀어 보냈습니다.",
+            "구호 신호를 확인한 상단이 식량 묶음을 전달했습니다.",
+            "검은 시장의 익명 후원자가 생존 자금을 남겼습니다.",
+        ])
+        delta = reward
+        color = discord.Color.gold() if outcome == "jackpot" else discord.Color.green()
+
+    save_data()
+    final = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now())
+    final.set_author(name=ctx.author.display_name, icon_url=str(ctx.author.display_avatar.url))
+    final.add_field(
+        name="💰 이번 결과" if delta >= 0 else "💸 이번 손실",
+        value=f"**{delta:+,} 식량**",
+        inline=True,
+    )
+    final.add_field(name="💳 현재 잔액", value=f"**{int(u['balance']):,} 식량**", inline=True)
+    final.add_field(name="⏳ 다음 교섭", value="**12분 후**", inline=True)
+    final.add_field(
+        name="🎲 결과 구조",
+        value="정상 지원 · 빈 상자 · 낮은 확률의 사기 상인",
+        inline=False,
+    )
+    if os.path.isfile(asset_path):
+        final.set_image(url=f"attachment://{filename}")
+    final.set_footer(text="ABADDON 긴급 지원 교섭 · 실패 손실은 현재 잔액을 넘지 않습니다")
+    try:
+        await message.edit(embed=final, content=None)
+    except (discord.Forbidden, discord.HTTPException, AttributeError):
+        await ctx.send(embed=final)
+
+    reactions = {
+        "failure": ("💸", "❌", "😱"),
+        "empty": ("📭", "🫥"),
+        "success": ("🎁", "✅", "💰"),
+        "jackpot": ("💎", "🎊", "🔥", "🏆"),
+    }
+    for emoji in reactions[outcome]:
+        try:
+            await message.add_reaction(emoji)
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            break
 
 
 @bot.hybrid_command()
@@ -3180,9 +3277,7 @@ async def 랭킹(ctx):
 # =========================================================
 # 도박 시스템
 # =========================================================
-@bot.hybrid_command()
-@commands.cooldown(1, 60, commands.BucketType.user)
-async def 탐색(ctx, 방향: str, 배팅액: int):
+async def _legacy_탐색_v1(ctx, 방향: str, 배팅액: int):
     if not await check_registered(ctx):
         return
 
@@ -3213,9 +3308,7 @@ async def 탐색(ctx, 방향: str, 배팅액: int):
     await ctx.send(result)
 
 
-@bot.hybrid_command()
-@commands.cooldown(1, 60, commands.BucketType.user)
-async def 주파수(ctx, 배팅액: int):
+async def _legacy_주파수_v1(ctx, 배팅액: int):
     if not await check_registered(ctx):
         return
 
@@ -3260,9 +3353,7 @@ async def 주파수(ctx, 배팅액: int):
 roulette_state = {}
 
 
-@bot.hybrid_command()
-@commands.cooldown(1, 60, commands.BucketType.user)
-async def 룰렛(ctx, 배팅액: int):
+async def _legacy_룰렛_v1(ctx, 배팅액: int):
     if not await check_registered(ctx):
         return
 
@@ -3300,9 +3391,7 @@ async def 룰렛(ctx, 배팅액: int):
     await ctx.send(result)
 
 
-@bot.hybrid_command()
-@commands.cooldown(1, 3600, commands.BucketType.user)
-async def 파산신청(ctx):
+async def _legacy_파산신청_v1(ctx):
     if not await check_registered(ctx):
         return
 
@@ -4400,6 +4489,13 @@ register_v610_digging_treasure(bot, get_user, check_registered, save_data)
 # prefix 전용 명령으로 추가해 Discord 글로벌 slash 최상위 개수는 증가하지 않습니다.
 from apocalypse_bot.commands.v620_dialogue_memory import register_v620_dialogue_memory
 register_v620_dialogue_memory(bot, world_data, save_data)
+
+# V6.3.0: 기존 월드보스 하이브리드 명령 callback 통합 + 다중 보스 6종·기여도·수동 보상·이미지
+# 기존 최상위 슬래시 이름을 재사용하고 신규 보조 기능은 prefix 전용으로 추가합니다.
+from apocalypse_bot.commands.v630_world_boss import register_v630_world_boss
+register_v630_world_boss(
+    bot, get_user, check_registered, save_data, world_data, calculate_user_power, add_title,
+)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.

@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "6.2.3"
+VERSION = "6.3.0"
 MENU_TIMEOUT = 300
 STORY3_START_NODE = "eclipse_signal"
 
@@ -93,7 +93,7 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
     ),
     "combat": (
         "⚔️ 전투·지역",
-        "훈련, 던전, 레이드, 월드보스, PVP와 지역 탐색을 실행합니다.",
+        "훈련, 던전, 일반 레이드, PVP와 지역 탐색을 실행합니다.",
         (
             _a("training", "훈련", "기본 전투 훈련을 진행합니다.", "훈련"),
             _a("monsters", "괴물 목록", "난이도별 괴물을 확인합니다.", "괴물목록", "선택: 쉬움/보통/어려움", force_modal=False),
@@ -103,9 +103,6 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("boss_codex", "보스 도감", "발견한 보스 정보를 확인합니다.", "보스도감"),
             _a("raid", "레이드 현황", "진행 중인 레이드를 확인합니다.", "레이드"),
             _a("raid_attack", "레이드 공격", "진행 중인 레이드를 공격합니다.", "레이드공격"),
-            _a("worldboss", "월드보스 현황", "월드보스 상태를 확인합니다.", "월드보스"),
-            _a("worldboss_attack", "월드보스 공격", "월드보스를 공격합니다.", "월드보스공격"),
-            _a("boss_ranking", "보스 랭킹", "월드보스 피해 랭킹을 확인합니다.", "보스랭킹"),
             _a("pvp", "PVP", "상대 멘션 또는 ID를 입력해 대결합니다.", "pvp", "예: @상대", force_modal=True),
             _a("region_list", "지역 목록", "이동 가능한 지역을 확인합니다.", "지역목록"),
             _a("region_info", "지역 정보", "특정 지역의 위험도와 보상을 확인합니다.", "지역정보", "예: 폐허도심", force_modal=True),
@@ -117,6 +114,21 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("invasion_attack", "침공 공격", "침공 보스를 공격합니다.", "침공공격"),
             _a("invasion_rank", "침공 랭킹", "침공 피해 랭킹을 확인합니다.", "침공랭킹"),
             _a("invasion_shop", "침공 상점", "침공 토큰 상점을 확인합니다.", "침공상점"),
+        ),
+    ),
+    "worldboss": (
+        "🌋 월드보스·레이드",
+        "서버 공동 HP를 공유하는 6종 보스의 공격·기여도·보상·도감을 관리합니다.",
+        (
+            _a("worldboss_status", "현재 월드보스", "활성 보스의 HP, 페이즈, 약점과 TOP 5를 확인합니다.", "월드보스"),
+            _a("worldboss_attack_v630", "월드보스 공격", "하루 10회, 45초 간격으로 공동 보스를 공격합니다.", "월드보스공격"),
+            _a("worldboss_contribution", "내 기여도", "누적 피해, 현재 순위와 오늘 남은 공격을 확인합니다.", "월드보스기여도"),
+            _a("worldboss_ranking_v630", "서버 기여도 순위", "현재 전투의 누적 피해 순위를 확인합니다.", "보스랭킹"),
+            _a("worldboss_reward", "보상 수령", "처치 완료 후 기여도 보상을 한 번만 수령합니다.", "월드보스보상"),
+            _a("worldboss_list", "보스 6종 목록", "보스별 HP, 특성, 약점과 전용 재료를 확인합니다.", "월드보스목록"),
+            _a("worldboss_codex_v630", "내 월드보스 도감", "보스별 누적 피해·공격·처치 기록을 확인합니다.", "월드보스도감"),
+            _a("worldboss_spawn_admin", "관리자 보스 소환", "보스명을 입력해 서버 공동 보스를 소환합니다.", "월드보스리셋", "예: 아틀라스", force_modal=True),
+            _a("worldboss_test_admin", "관리자 테스트 소환", "HP 50,000 테스트 보스를 소환합니다.", "월드보스테스트", "예: 문지기", force_modal=True),
         ),
     ),
     "expedition": (

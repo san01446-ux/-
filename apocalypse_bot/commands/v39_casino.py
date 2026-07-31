@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 import random
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -479,7 +480,16 @@ def register_v39_commands(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
-        await ctx.send(embed=_casino_lobby_embed(ctx, user, world_data))
+        embed = _casino_lobby_embed(ctx, user, world_data)
+        asset_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "assets", "game_cards", "casino.png",
+        )
+        if os.path.isfile(asset_path):
+            embed.set_image(url="attachment://casino.png")
+            await ctx.send(embed=embed, file=discord.File(asset_path, filename="casino.png"))
+        else:
+            await ctx.send(embed=embed)
 
     async def show_balance(ctx: commands.Context) -> None:
         if not await check_registered(ctx):

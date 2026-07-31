@@ -583,9 +583,42 @@ def register_v37_commands(
         jackpot_chance = min(0.10, 0.03 + (level - 1) * 0.002)
         roll = random.random()
         before = int(user.get("balance", 0))
-        suspense = await ctx.send("🧰 **폐허 알바 배정 중...**\n오늘 맡을 작업장을 찾고 있습니다.")
-        await asyncio.sleep(0.7)
+        asset_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "assets", "game_cards", "work.png",
+        )
+        asset_filename = "work.png"
+        stage_embed = discord.Embed(
+            title="🧰 폐허 알바 배정 중",
+            description="오늘 맡을 작업장과 위험도를 확인합니다...",
+            color=discord.Color.dark_teal(),
+        )
+        stage_embed.add_field(name="📋 작업 배정", value="직종·위험도 조회", inline=True)
+        stage_embed.add_field(name="🦺 안전 점검", value="장비·보상 확인", inline=True)
+        if os.path.isfile(asset_path):
+            stage_embed.set_image(url=f"attachment://{asset_filename}")
+            suspense = await ctx.send(embed=stage_embed, file=discord.File(asset_path, filename=asset_filename))
+        else:
+            suspense = await ctx.send(embed=stage_embed)
+        await asyncio.sleep(0.65)
+        work_stage = discord.Embed(
+            title="🔧 작업 진행 중",
+            description=random.choice([
+                "발전기 배선을 연결하고 있습니다...",
+                "무너진 보급 창고의 물자를 분류합니다...",
+                "거점 방벽의 균열을 보수하고 있습니다...",
+                "감염체를 피해 배달 경로를 통과합니다...",
+            ]),
+            color=discord.Color.orange(),
+        )
+        work_stage.add_field(name="진행도", value="`███████░░░` **70%**", inline=False)
+        if os.path.isfile(asset_path):
+            work_stage.set_image(url=f"attachment://{asset_filename}")
+        await _edit_embed(suspense, work_stage)
+        await asyncio.sleep(0.65)
 
+        bonus_resource = None
+        bonus_amount = 0
         if roll < bad_chance:
             loss = min(max(0, before), random.randint(200, 1100) + level * random.randint(5, 25))
             user["balance"] = before - loss
@@ -642,6 +675,12 @@ def register_v37_commands(
             success = True
             work_outcome = "success"
 
+        if success and random.random() < (0.42 if work_outcome == "jackpot" else 0.24):
+            bonus_resource = random.choice(["고철", "광석", "나무"])
+            bonus_amount = random.randint(2, 4) if work_outcome == "jackpot" else random.randint(1, 2)
+            resources = user.setdefault("resources", {})
+            resources[bonus_resource] = int(resources.get(bonus_resource, 0)) + bonus_amount
+
         work["attempts"] = attempts + 1
         work["last_work"] = _utc_now().isoformat()
         level_ups = _level_up_work(work)
@@ -694,6 +733,12 @@ def register_v37_commands(
             value=f"**Lv.{int(work['level'])}**{level_up_text}",
             inline=True,
         )
+        if bonus_resource and bonus_amount:
+            result_embed.add_field(
+                name="📦 추가 발견물",
+                value=f"**{bonus_resource} +{bonus_amount}**",
+                inline=True,
+            )
         result_embed.add_field(
             name="📈 성장 효과",
             value="레벨이 높을수록 사고 확률은 내려가고 보상·대박 확률은 올라갑니다.",
@@ -702,13 +747,15 @@ def register_v37_commands(
         image_url = WORK_RESULT_IMAGE_URLS.get(work_outcome, "")
         if image_url:
             result_embed.set_image(url=image_url)
+        elif os.path.isfile(asset_path):
+            result_embed.set_image(url=f"attachment://{asset_filename}")
         if remaining == 0:
             result_embed.add_field(
                 name="⛏️ 다음 수입 루트",
                 value="오늘 알바를 모두 사용했습니다. 이제 `!땅파기`로 물자와 보물을 찾을 수 있습니다.",
                 inline=False,
             )
-        result_embed.set_footer(text="ABADDON 폐허 아르바이트 · 결과 이미지는 설정 시 자동 표시")
+        result_embed.set_footer(text="ABADDON 폐허 아르바이트 · 단계형 작업 연출 · 실패 비용은 잔액 보호")
         await _edit_embed(suspense, result_embed)
         if work_outcome == "failure":
             await _safe_reactions(suspense, ("🔨", "😭", "💸", "❌"))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import secrets
 from datetime import datetime, timezone
@@ -11,7 +12,7 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.2.4"
+VERSION = "6.3.0"
 KST = ZoneInfo("Asia/Seoul")
 DIG_DAILY_LIMIT = 50
 DIG_COOLDOWN_SECONDS = 60
@@ -508,19 +509,33 @@ def register_v610_digging_treasure(
             await _safe_reactions(message, ("⏳", "⛏️", "🪨"))
             return
 
-        suspense = await ctx.send(
-            "⛏️ **폐허 지반을 파내는 중...**\n"
-            "▰▰▱▱▱ 40% · 콘크리트층을 분리합니다."
+        asset_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "assets", "game_cards", "digging.png",
         )
+        asset_filename = "digging.png"
+        stage_embed = discord.Embed(
+            title="⛏️ 폐허 지반 굴착 중",
+            description="콘크리트층과 금속 잔해를 분리합니다.",
+            color=discord.Color.dark_teal(),
+        )
+        stage_embed.add_field(name="진행도", value="`████░░░░░░` **40%**", inline=False)
+        if os.path.isfile(asset_path):
+            stage_embed.set_image(url=f"attachment://{asset_filename}")
+            suspense = await ctx.send(embed=stage_embed, file=discord.File(asset_path, filename=asset_filename))
+        else:
+            suspense = await ctx.send(embed=stage_embed)
         await _safe_reactions(suspense, ("⛏️", "🪨"))
         await asyncio.sleep(0.7)
-        await _safe_edit(
-            suspense,
-            content=(
-                "🧤 **잔해 신호를 분류하는 중...**\n"
-                "▰▰▰▰▱ 80% · 금속성과 생체 신호를 확인합니다."
-            ),
+        scan_embed = discord.Embed(
+            title="🧤 잔해 신호 분류 중",
+            description="금속성·식량·보물 신호를 한 번에 대조합니다.",
+            color=discord.Color.orange(),
         )
+        scan_embed.add_field(name="진행도", value="`████████░░` **80%**", inline=False)
+        if os.path.isfile(asset_path):
+            scan_embed.set_image(url=f"attachment://{asset_filename}")
+        await _safe_edit(suspense, content=None, embed=scan_embed)
         await asyncio.sleep(0.7)
 
         profile["attempts"] = attempts + 1
@@ -535,10 +550,13 @@ def register_v610_digging_treasure(
             profile["pending"].append(treasure)
             profile["treasure_count"] = int(profile.get("treasure_count", 0)) + 1
             save_data()
+            result_embed = _dig_result_embed(user, profile, cash_reward, remaining, treasure=treasure)
+            if os.path.isfile(asset_path):
+                result_embed.set_image(url=f"attachment://{asset_filename}")
             await _safe_edit(
                 suspense,
                 content=None,
-                embed=_dig_result_embed(user, profile, cash_reward, remaining, treasure=treasure),
+                embed=result_embed,
             )
             await _safe_reactions(suspense, ("💥", "📦", "💎", "💰", "❓", "✨", "⛏️"))
             return
@@ -548,10 +566,13 @@ def register_v610_digging_treasure(
         if bool(result.get("empty")):
             profile["empty_count"] = int(profile.get("empty_count", 0)) + 1
         save_data()
+        result_embed = _dig_result_embed(user, profile, cash_reward, remaining, result=result)
+        if os.path.isfile(asset_path):
+            result_embed.set_image(url=f"attachment://{asset_filename}")
         await _safe_edit(
             suspense,
             content=None,
-            embed=_dig_result_embed(user, profile, cash_reward, remaining, result=result),
+            embed=result_embed,
         )
         reactions = tuple(result.get("reactions", ("⛏️", "✅")))
         await _safe_reactions(suspense, tuple(dict.fromkeys((*reactions, "💰"))))
