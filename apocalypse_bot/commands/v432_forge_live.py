@@ -320,6 +320,57 @@ def build_forge_card_png(tier: str, slot: str, success: bool, level: int) -> byt
         y = int(cy + math.sin(angle) * radius * 0.66)
         _draw_circle(pixels, width, height, x, y, rng.randint(1, 4), glow, True, alpha=rng.uniform(0.35, 0.9))
 
+    # v6.3.3 visual evolution: higher enhancement levels visibly change silhouette and aura.
+    stage = 0
+    for threshold in (5, 7, 10, 12, 15, 18, 20):
+        if level >= threshold:
+            stage += 1
+    if success and stage:
+        for ring in range(stage):
+            radius = 142 + ring * 12
+            _draw_circle(pixels, width, height, cx, cy, radius, accent, False, 1 + ring // 3, 0.18 + ring * 0.05)
+        # Expanding side fins / wings make the silhouette richer at high stages.
+        if level >= 7:
+            _fill_polygon(pixels, width, height, [(400, 215), (320, 170), (350, 238), (305, 285), (420, 260)], accent, 0.28)
+            _fill_polygon(pixels, width, height, [(600, 215), (680, 170), (650, 238), (695, 285), (580, 260)], accent, 0.28)
+        if level >= 10:
+            for offset in (-92, -58, 58, 92):
+                _draw_line(pixels, width, height, cx + offset, 112, cx + int(offset * 0.68), 322, glow, 3, 0.42)
+        if level >= 12:
+            for angle in range(0, 360, 30):
+                rad = math.radians(angle)
+                x0 = int(cx + math.cos(rad) * 142)
+                y0 = int(cy + math.sin(rad) * 92)
+                x1 = int(cx + math.cos(rad) * 184)
+                y1 = int(cy + math.sin(rad) * 122)
+                _draw_line(pixels, width, height, x0, y0, x1, y1, accent, 4, 0.55)
+        if level >= 15:
+            _fill_polygon(pixels, width, height, [(500, 75), (474, 112), (490, 108), (500, 128), (510, 108), (526, 112)], glow, 0.9)
+            _draw_circle(pixels, width, height, cx, 82, 34, glow, False, 4, 0.68)
+        if level >= 18:
+            for _ in range(7):
+                sx = rng.randint(320, 680)
+                sy = rng.randint(90, 330)
+                ex = sx + rng.randint(-55, 55)
+                ey = sy + rng.randint(-35, 35)
+                _draw_line(pixels, width, height, sx, sy, ex, ey, glow, 3, 0.65)
+        if level >= 20:
+            for radius in (190, 205, 220):
+                _draw_circle(pixels, width, height, cx, cy, radius, outcome, False, 2, 0.35)
+            for angle in range(0, 360, 15):
+                rad = math.radians(angle)
+                x0 = int(cx + math.cos(rad) * 175)
+                y0 = int(cy + math.sin(rad) * 118)
+                x1 = int(cx + math.cos(rad) * 224)
+                y1 = int(cy + math.sin(rad) * 148)
+                _draw_line(pixels, width, height, x0, y0, x1, y1, glow, 2, 0.65)
+    elif not success:
+        # Failure cards show visible cracks instead of the success aura.
+        for _ in range(5 + min(10, level // 2)):
+            x = rng.randint(395, 605)
+            y = rng.randint(125, 310)
+            _draw_line(pixels, width, height, x, y, x + rng.randint(-28, 28), y + rng.randint(12, 42), (196, 40, 58), 2, 0.72)
+
     return _encode_png(width, height, pixels)
 
 

@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.3.1"
+VERSION = "6.3.3"
 KST = ZoneInfo("Asia/Seoul")
 DIG_DAILY_LIMIT = 50
 DIG_COOLDOWN_SECONDS = 60
@@ -449,7 +449,18 @@ def register_v610_digging_treasure(
         embed.add_field(name="💰 현재 잔액", value=f"**{int(user['balance']):,} 식량**", inline=True)
         embed.add_field(name="📦 남은 미감정", value=f"**{len(pending)}개**", inline=True)
         embed.set_footer(text=f"ABADDON 보물 감정소 v{VERSION} · 감정과 동시에 식량으로 매입됩니다")
-        await _safe_edit(suspense, content=None, embed=embed)
+        relic_visual = getattr(bot, "v633_edit_relic_visual", None)
+        if relic_visual:
+            await relic_visual(
+                suspense,
+                embed,
+                grade=final_grade,
+                treasure_name=str(treasure.get("name", "감정 완료 유물")),
+                upgraded=upgraded,
+                discovered=False,
+            )
+        else:
+            await _safe_edit(suspense, content=None, embed=embed)
         await _safe_reactions(suspense, _grade_reactions(final_grade))
 
     class AppraiserSelect(discord.ui.Select):
@@ -557,11 +568,22 @@ def register_v610_digging_treasure(
                 value="✨ 잔해 아래에서 평범하지 않은 봉인 신호가 확인됐습니다.",
                 inline=False,
             )
-            visual_edit = getattr(bot, "v631_edit_visual", None)
-            if visual_edit:
-                await visual_edit(suspense, result_embed, "activities/digging/rare")
+            relic_visual = getattr(bot, "v633_edit_relic_visual", None)
+            if relic_visual:
+                await relic_visual(
+                    suspense,
+                    result_embed,
+                    grade=str(treasure.get("grade", "E")),
+                    treasure_name=str(treasure.get("name", "미감정 유물")),
+                    upgraded=False,
+                    discovered=True,
+                )
             else:
-                await _safe_edit(suspense, content=None, embed=result_embed)
+                visual_edit = getattr(bot, "v631_edit_visual", None)
+                if visual_edit:
+                    await visual_edit(suspense, result_embed, "activities/digging/rare")
+                else:
+                    await _safe_edit(suspense, content=None, embed=result_embed)
             await _safe_reactions(suspense, ("💥", "📦", "💎", "💰", "❓", "✨", "⛏️"))
             maybe_encounter = getattr(bot, "v631_maybe_encounter", None)
             if maybe_encounter:

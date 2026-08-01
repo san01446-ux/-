@@ -48,32 +48,41 @@ TIP_POOLS: Mapping[str, Sequence[str]] = {
 
 _RECENT_ASSETS: Dict[str, List[str]] = {}
 FIXED_ASSET_MAP: Mapping[str, str] = {
-    "activities/fishing/encounter": "activities/mining/failure/01.jpg",
-    "activities/fishing/encounter_success": "activities/mining/failure/01.jpg",
+    # 낚시: 실제 낚시/어획 장면 위주로 고정
+    "activities/fishing/encounter": "activities/fishing/encounter/02.jpg",
+    "activities/fishing/encounter_success": "activities/fishing/encounter_success/01.jpg",
     "activities/fishing/encounter_failure": "activities/mining/failure/01.jpg",
-    "activities/fishing/success": "activities/mining/failure/01.jpg",
+    "activities/fishing/success": "activities/coin/failure/01.jpg",
     "activities/fishing/failure": "activities/mining/failure/01.jpg",
-    "activities/fishing/rare": "activities/mining/failure/01.jpg",
-    "activities/mining/encounter": "activities/mining/encounter/01.jpg",
-    "activities/mining/encounter_success": "activities/mining/encounter_success/01.jpg",
+    "activities/fishing/rare": "activities/fishing/rare/02.jpg",
+
+    # 광산: 나무 패는 이미지 대신 실제 채굴/광맥 장면 사용
+    "activities/mining/encounter": "activities/coin/encounter/01.jpg",
+    "activities/mining/encounter_success": "activities/coin/encounter_success/01.jpg",
     "activities/mining/encounter_failure": "activities/mining/encounter_failure/01.jpg",
-    "activities/mining/success": "activities/mining/success/01.jpg",
-    "activities/mining/failure": "activities/mining/failure/02.jpg",
-    "activities/mining/rare": "activities/mining/rare/01.jpg",
-    "activities/coin/encounter": "activities/coin/encounter/01.jpg",
-    "activities/coin/encounter_success": "activities/coin/encounter_success/01.jpg",
-    "activities/coin/failure": "activities/coin/failure/01.jpg",
-    "activities/coin/success": "activities/coin/success/01.jpg",
-    "activities/coin/rare": "activities/coin/rare/01.jpg",
-    "activities/exploration/encounter": "activities/exploration/encounter/01.jpg",
-    "activities/exploration/encounter_failure": "activities/exploration/encounter_failure/01.jpg",
-    "activities/exploration/failure": "activities/exploration/failure/01.jpg",
-    "activities/exploration/success": "activities/exploration/success/01.jpg",
-    "activities/exploration/rare": "activities/exploration/rare/01.jpg",
+    "activities/mining/success": "activities/coin/success/01.jpg",
+    "activities/mining/failure": "activities/mining/encounter_failure/01.jpg",
+    "activities/mining/rare": "activities/coin/rare/01.jpg",
+
+    # 코인탐색: 탐지/신호/스캔 느낌으로 고정
+    "activities/coin/encounter": "activities/fishing/encounter/01.jpg",
+    "activities/coin/encounter_success": "activities/support/encounter/02.jpg",
+    "activities/coin/failure": "activities/fishing/encounter_failure/01.jpg",
+    "activities/coin/success": "activities/fishing/failure/01.jpg",
+    "activities/coin/rare": "activities/mining/encounter/01.jpg",
+
+    # 탐색은 기존 도박 성격을 반영해 테이블/선택 장면으로 고정
+    "activities/exploration/encounter": "activities/support/encounter/01.jpg",
+    "activities/exploration/encounter_failure": "activities/support/encounter_failure/01.jpg",
+    "activities/exploration/failure": "activities/support/failure/02.jpg",
+    "activities/exploration/success": "activities/support/encounter_success/02.jpg",
+    "activities/exploration/rare": "activities/support/rare/01.jpg",
+
+    # 돈주세요/특별교섭
     "activities/support/encounter": "activities/support/encounter/01.jpg",
     "activities/support/encounter_success": "activities/support/encounter_success/01.jpg",
     "activities/support/encounter_failure": "activities/support/encounter_failure/01.jpg",
-    "activities/support/success": "activities/support/success/01.jpg",
+    "activities/support/success": "activities/support/success/03.jpg",
     "activities/support/failure": "activities/support/failure/01.jpg",
     "activities/support/rare": "activities/support/rare/01.jpg",
 }

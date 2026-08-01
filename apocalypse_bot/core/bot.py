@@ -1489,108 +1489,305 @@ async def 가입(ctx, *, 암호: str = ""):
     )
 
 
+COMMAND_GUIDE_CATEGORIES = [
+    {
+        "id": "start",
+        "emoji": "🧾",
+        "title": "가입 / 정보 / 기본",
+        "hint": "처음 시작, 지갑, 랭킹, 상태 확인",
+        "commands": [
+            "!가입 생존자", "!튜토리얼", "!정보", "!지갑", "!상태", "!랭킹",
+            "!출석", "!출석보상", "!송금 @유저 금액", "!돈주세요", "!훈련", "!휴식",
+            "!직업목록", "!직업선택 직업명", "!직업정보 [직업명]", "!직업변경 직업명",
+            "!칭호목록", "!칭호 칭호이름"
+        ],
+    },
+    {
+        "id": "life",
+        "emoji": "🌿",
+        "title": "생활 / 인카운트 / 보물",
+        "hint": "채집, 낚시, 광산, 땅파기, 감정소",
+        "commands": [
+            "!알바", "!채집", "!낚시", "!벌목", "!광산", "!생활숙련도",
+            "!코인 / !코인탐색", "!돈주세요", "!땅파기 / !굴착 / !삽질",
+            "!보물감정 / !보물감정소 / !감정소", "!감정사 / !감정사목록", "!보물함",
+            "!인카운트도감 / !조우도감 / !랜덤이벤트도감"
+        ],
+    },
+    {
+        "id": "shop",
+        "emoji": "🛒",
+        "title": "상점 / 장비 / 제작",
+        "hint": "구매, 인벤토리, 강화, 제작",
+        "commands": [
+            "!상점 [티어]", "!장비목록 [티어]", "!구매 아이템명", "!신규장비 [티어]",
+            "!인벤토리", "!강화 아이템명", "!강화정보 아이템명", "!보호강화 아이템명",
+            "!강화기록", "!강화연출", "!장비외형 아이템명", "!강화랭킹", "!장비옵션 아이템명", "!옵션재설정 아이템명",
+            "!세트효과", "!재료", "!제작목록", "!제작 아이템명"
+        ],
+    },
+    {
+        "id": "battle",
+        "emoji": "⚔️",
+        "title": "전투 / 보스 / 던전",
+        "hint": "괴물, 지역, 레이드, 월드보스",
+        "commands": [
+            "!괴물목록 [난이도]", "!던전 약함/보통/강함/지옥", "!심층던전 [층]", "!던전기록",
+            "!지역목록", "!지역정보 [지역명]", "!지역이동 지역명", "!지역탐색", "!좀비도감 [지역명]",
+            "!레이드", "!레이드공격", "!월드보스", "!월드보스공격", "!월드보스기여도",
+            "!월드보스보상", "!월드보스목록", "!월드보스도감", "!보스도감", "!보스랭킹", "!PVP @유저"
+        ],
+    },
+    {
+        "id": "trade",
+        "emoji": "💰",
+        "title": "거래 / 암시장 / 금융",
+        "hint": "거래소, 판매, 은행, 사채, 암시장",
+        "commands": [
+            "!거래소", "!거래검색 키워드", "!판매 아이템명 가격", "!구매등록번호 번호", "!판매취소 번호",
+            "!경매등록 아이템명 시작가", "!입찰 번호 금액", "!경매마감 번호", "!거래기록",
+            "!시세", "!매수 일반 10", "!매도 / !코인판매", "!자산", "!암시장기록",
+            "!은행", "!입금 금액", "!출금 금액", "!대출 금액", "!상환 금액",
+            "!사채", "!사채빌리기 금액", "!사채상환 금액", "!사채추심"
+        ],
+    },
+    {
+        "id": "casino",
+        "emoji": "🎲",
+        "title": "카지노 / 도박",
+        "hint": "블랙잭, 룰렛, 탐색 도박",
+        "commands": [
+            "!카지노", "!카지노환전 구매/판매 금액", "!블랙잭", "!하이로우", "!슬롯", "!다이스", "!바카라",
+            "!럭키휠", "!코인플립 앞/뒤 금액", "!올인 앞/뒤", "!카지노미션", "!카지노상점",
+            "!룰렛 배팅액", "!주파수 배팅액", "!탐색 왼쪽/오른쪽 배팅액", "!파산신청", "!도박잔액", "!도박정보"
+        ],
+    },
+    {
+        "id": "story",
+        "emoji": "📖",
+        "title": "스토리 / 원정 / 유물",
+        "hint": "시즌 스토리, 원정, 유물 장착",
+        "commands": [
+            "!스토리", "!스토리 시작", "!스토리 선택 번호", "!스토리 기록", "!스토리 재시작",
+            "!시즌2", "!시즌2 시작", "!시즌2 선택 번호", "!시즌2 기록", "!시즌2 재시작", "!시즌2 장면 [번호]",
+            "!시즌2 수집", "!시즌2 계승", "!시즌2 복구", "!시즌3", "!시즌3 시작", "!시즌3 선택 번호",
+            "!시즌3 기록", "!시즌3 재시작", "!원정 도움말", "!원정 목록", "!원정 출발 지역명",
+            "!원정 행동 공격/기술/방어/집중/응급/도주", "!원정 보급", "!원정 유물", "!원정 장비",
+            "!원정 임무 [주간]", "!원정 임무보상 일일/주간 번호", "!원정 복구", "!원정 기록", "!원정 랭킹",
+            "!유물", "!유물 장착/해제/강화/분해", "!도감", "!도감 장비/펫/몬스터", "!도감보상"
+        ],
+    },
+    {
+        "id": "pet",
+        "emoji": "🐾",
+        "title": "펫",
+        "hint": "펫 상점, 장착, 모험, 진화",
+        "commands": [
+            "!펫", "!펫상점", "!펫구매 펫이름", "!펫목록", "!펫장착 펫이름",
+            "!펫정보 [펫이름]", "!펫훈련", "!펫먹이", "!펫모험", "!펫진화"
+        ],
+    },
+    {
+        "id": "guild_party",
+        "emoji": "👥",
+        "title": "길드 / 파티",
+        "hint": "길드 생성, 가입, 파티 사냥",
+        "commands": [
+            "!길드목록", "!길드생성 길드명", "!길드가입 길드명", "!길드정보", "!길드기부 금액", "!길드강화", "!길드탈퇴",
+            "!파티생성", "!파티가입 @리더", "!파티정보", "!파티사냥", "!파티탈퇴"
+        ],
+    },
+    {
+        "id": "quest",
+        "emoji": "🎯",
+        "title": "퀘스트 / 시즌패스 / 업적",
+        "hint": "일일, 주간, 시즌보상, 업적",
+        "commands": [
+            "!일일퀘스트", "!퀘스트보상", "!주간퀘스트", "!주간보상", "!시즌패스", "!시즌보상 레벨", "!업적"
+        ],
+    },
+    {
+        "id": "base",
+        "emoji": "🏕️",
+        "title": "기지 / 치료 / 생존",
+        "hint": "기지건설, 자원, 병원, 의약품",
+        "commands": [
+            "!의약품", "!약품구매 붕대 1", "!사용 붕대", "!병원", "!자원",
+            "!기지", "!기지건설", "!기지강화", "!기지수확"
+        ],
+    },
+    {
+        "id": "talk",
+        "emoji": "💬",
+        "title": "대화 / 서버 기억",
+        "hint": "아바돈 대화, 지식 등록/검색",
+        "commands": [
+            "!대화", "!아바돈 내용", "!가르치기", "!지식", "!지식 검색 단어", "!오늘의질문",
+            "!밸런스게임", "!교감", "!한마디", "!응원 [@유저]", "!지식 검수", "!지식 삭제 기억ID",
+            "!지식 자동반응 켜기/끄기"
+        ],
+    },
+    {
+        "id": "server",
+        "emoji": "🛠️",
+        "title": "서버 / 유틸 / 관리자",
+        "hint": "서버설정, 실시간피드, 관리자 도구",
+        "commands": [
+            "!서버설정", "!서버세팅 미리보기/실행/상태/취소", "!퀴즈알림설정", "!퀴즈알림상태", "!퀴즈알림해제",
+            "!실시간피드상태", "!실시간피드테스트", "!실시간피드 켜기/끄기", "!실시간공지 내용",
+            "!가방조회 @유저", "!식량지급 @유저 금액", "!식량회수 @유저 금액", "!월드보스리셋 보스명", "!월드보스테스트 보스명"
+        ],
+    },
+]
+
+
+def _normalize_help_keyword(text):
+    return str(text or "").lower().replace("`", "").replace("!", "").replace("/", "").replace(" ", "")
+
+
+def _command_chunks(commands_list, max_len=900):
+    chunks = []
+    current = []
+    current_len = 0
+    for cmd in commands_list:
+        line = f"• `{cmd}`"
+        if current and current_len + len(line) + 1 > max_len:
+            chunks.append("\n".join(current))
+            current = [line]
+            current_len = len(line)
+        else:
+            current.append(line)
+            current_len += len(line) + 1
+    if current:
+        chunks.append("\n".join(current))
+    return chunks
+
+
+def _make_help_embed(category=None):
+    color = discord.Color.dark_teal()
+    if category is None:
+        embed = discord.Embed(
+            title="📚 아포칼립스 명령어 가이드",
+            description=(
+                "드롭다운으로 카테고리를 바로 열 수 있습니다.\n"
+                "검색도 지원합니다. 예: `!명령어 감`, `!명령어 펫`, `!명령어 광`\n\n"
+                "한 글자만 입력해도 비슷한 명령어를 찾아줍니다."
+            ),
+            color=color,
+        )
+        for cat in COMMAND_GUIDE_CATEGORIES[:12]:
+            embed.add_field(name=f"{cat['emoji']} {cat['title']}", value=cat['hint'], inline=True)
+        embed.set_footer(text="보물감정소·감정사처럼 헷갈리는 명령은 !명령어 감 으로 찾으면 됩니다.")
+        return embed
+    embed = discord.Embed(title=f"{category['emoji']} {category['title']}", description=category['hint'], color=color)
+    for idx, chunk in enumerate(_command_chunks(category['commands']), start=1):
+        name = "명령어 목록" if idx == 1 else f"명령어 목록 {idx}"
+        embed.add_field(name=name, value=chunk, inline=False)
+    embed.set_footer(text="검색: !명령어 검색어  |  드롭다운에서 다른 카테고리도 바로 열 수 있습니다.")
+    return embed
+
+
+def _search_commands(query, limit=20):
+    token = _normalize_help_keyword(query)
+    if not token:
+        return []
+    results = []
+    for cat in COMMAND_GUIDE_CATEGORIES:
+        title_key = _normalize_help_keyword(cat['title'] + cat['hint'])
+        for cmd in cat['commands']:
+            norm = _normalize_help_keyword(cmd)
+            score = None
+            if norm.startswith(token):
+                score = 0
+            elif token in norm:
+                score = 1
+            elif token in title_key:
+                score = 2
+            if score is not None:
+                results.append((score, len(cmd), cat['title'], cmd))
+    results.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+    seen = set()
+    final = []
+    for _, _, category_title, cmd in results:
+        key = (category_title, cmd)
+        if key in seen:
+            continue
+        seen.add(key)
+        final.append((category_title, cmd))
+        if len(final) >= limit:
+            break
+    return final
+
+
+def _make_search_embed(query, results):
+    embed = discord.Embed(title=f"🔎 명령어 검색: {query}", color=discord.Color.blurple())
+    if not results:
+        embed.description = "일치하는 명령어를 찾지 못했습니다. 드롭다운에서 카테고리를 골라 확인해보세요."
+        return embed
+    lines = [f"• **{category}** — `{cmd}`" for category, cmd in results]
+    description = "\n".join(lines[:15])
+    embed.description = description
+    if len(lines) > 15:
+        embed.add_field(name="추가 결과", value=f"그 외 {len(lines) - 15}개 결과가 더 있습니다. 더 구체적으로 검색해보세요.", inline=False)
+    embed.set_footer(text="예: !명령어 감 / !명령어 펫 / !명령어 광 / !명령어 보물")
+    return embed
+
+
+class CommandCategorySelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label=cat['title'][:100],
+                value=cat['id'],
+                description=cat['hint'][:100],
+                emoji=cat['emoji'],
+            )
+            for cat in COMMAND_GUIDE_CATEGORIES
+        ]
+        super().__init__(placeholder="카테고리를 선택하세요", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected = next((cat for cat in COMMAND_GUIDE_CATEGORIES if cat['id'] == self.values[0]), None)
+        if not selected:
+            await interaction.response.send_message("카테고리를 찾지 못했습니다.", ephemeral=True)
+            return
+        await interaction.response.edit_message(embed=_make_help_embed(selected), view=self.view)
+
+
+class CommandSearchModal(discord.ui.Modal, title="명령어 검색"):
+    검색어 = discord.ui.TextInput(
+        label="찾을 명령어",
+        placeholder="예: 감, 보물, 광산, 펫, 강화",
+        min_length=1,
+        max_length=30,
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        query = str(self.검색어.value).strip()
+        results = _search_commands(query)
+        await interaction.response.send_message(
+            embed=_make_search_embed(query, results),
+            ephemeral=True,
+        )
+
+
+class CommandHelpView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+        self.add_item(CommandCategorySelect())
+
+    @discord.ui.button(label="명령어 검색", emoji="🔎", style=discord.ButtonStyle.primary, row=1)
+    async def search_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(CommandSearchModal())
+
+
 @bot.hybrid_command()
-async def 명령어(ctx):
-    text = """📜 **[아포칼립스 생존 봇 명령어]**
-
-✅ 기존 `!명령어`는 이름 변경 없이 그대로 사용할 수 있습니다.
-ℹ️ 슬래시 명령어는 Discord의 최상위 100개 제한 때문에 카테고리로 정리되었습니다.
-예: `/장비 강화`, `/전투 던전`, `/도박 룰렛`, `/거래 판매`, `/시즌 일일퀘스트`
-🎮 **v6 통합 게임 드롭다운:** `!게임` — 주요 RPG·카지노·원정·스토리 기능을 카테고리별로 실행
-🕯️ **v6.2 대화·기억 제어실:** `!대화` — 아바돈 대화, 서버 지식 등록·검색, 오늘의 질문과 교감 기록
-🌋 **v6.3 다중 월드보스:** 6종 보스·서버 공동 HP·기여도·보상·전용 이미지
-
-🔹 **대화 / 서버 기억**
-`!대화` `!아바돈 내용` `!가르치기` `!지식` `!지식 검색 단어`
-`!오늘의질문` `!밸런스게임` `!교감` `!한마디` `!응원 [@유저]`
-관리자: `!지식 검수` `!지식 삭제 기억ID` `!지식 자동반응 켜기/끄기`
-
-🔹 **가입 / 정보**
-`!가입 생존자` `!정보` `!출석` `!출석보상`
-`!지갑` `!송금 @유저 금액` `!돈주세요` `!훈련` `!랭킹`
-`!칭호목록` `!칭호 칭호이름`
-`!직업목록` `!직업선택 직업명` `!직업정보 [직업명]` `!직업변경 직업명`
-`!상태` `!휴식`
-
-🔹 **상점 / 장비 / 제작**
-`!상점 [티어]` `!장비목록 [티어]` `!구매 아이템명` `!신규장비 [티어]`
-`!인벤토리` `!강화 아이템명` `!강화정보 아이템명` `!보호강화 아이템명`
-`!강화기록` `!강화연출` `!강화랭킹` `!장비옵션 아이템명` `!옵션재설정 아이템명` `!세트효과` `!재료`
-`!제작목록` `!제작 아이템명`
-
-🔹 **전투 / 보스**
-`!괴물목록 [난이도]` `!던전 약함/보통/강함/지옥`
-`!지역목록` `!지역정보 [지역명]` `!지역이동 지역명` `!지역탐색` `!좀비도감 [지역명]`
-`!레이드` `!레이드공격` `!월드보스` `!월드보스공격` `!월드보스기여도` `!보스랭킹`
-`!월드보스보상` `!월드보스목록` `!월드보스도감` `!보스도감`
-`!심층던전 [층]` `!던전기록` `!PVP @유저`
-
-🔹 **채집 생활**
-`!채집` `!낚시` `!벌목` `!광산` `!생활숙련도`
-
-🔹 **치료 / 감염**
-`!상태` `!의약품` `!약품구매 붕대 1` `!사용 붕대` `!병원`
-`!자원` `!기지` `!기지건설` `!기지강화` `!기지수확`
-
-🔹 **길드**
-`!길드목록` `!길드생성 길드명` `!길드가입 길드명`
-`!길드정보` `!길드기부 금액` `!길드강화` `!길드탈퇴`
-
-🔹 **거래소**
-`!거래소` `!거래검색 키워드` `!판매 아이템명 가격` `!구매등록번호 번호`
-`!판매취소 번호` `!경매등록 아이템명 시작가` `!입찰 번호 금액` `!경매마감 번호` `!거래기록`
-
-🔹 **파티**
-`!파티생성` `!파티가입 @리더` `!파티정보`
-`!파티사냥` `!파티탈퇴`
-
-🔹 **펫**
-`!펫` `!펫상점` `!펫구매 펫이름` `!펫목록` `!펫장착 펫이름`
-`!펫정보 [펫이름]` `!펫훈련` `!펫먹이` `!펫모험` `!펫진화`
-슬래시: `/펫 정보/상점/구매/목록/장착/훈련/먹이/모험/진화`
-
-🔹 **퀘스트 / 시즌패스 / 업적**
-`!일일퀘스트` `!퀘스트보상`
-`!주간퀘스트` `!주간보상`
-`!시즌패스` `!시즌보상 레벨`
-`!업적`
-
-🔹 **스토리 / 원정 / 도감 / 서버 설정**
-`!스토리` `!스토리 시작` `!스토리 선택 번호` `!스토리 기록` `!스토리 재시작`
-`!시즌2` `!시즌2 시작` `!시즌2 선택 번호` `!시즌2 기록` `!시즌2 재시작`
-`!시즌2 장면 [번호]` `!시즌2 수집` `!시즌2 계승` `!시즌2 복구`
-`!시즌3` `!시즌3 시작` `!시즌3 선택 번호` `!시즌3 기록` `!시즌3 재시작`
-`!원정 도움말` `!원정 목록` `!원정 출발 지역명` `!원정 행동 공격/기술/방어/집중/응급/도주`
-`!원정 보급` `!원정 유물` `!유물` `!유물 장착/해제/강화/분해`
-`!실시간피드상태` `!실시간피드테스트` `!실시간피드 켜기/끄기` `!실시간공지 내용`
-`!원정 장비` `!원정 임무 [주간]` `!원정 임무보상 일일/주간 번호` `!원정 복구` `!원정 기록` `!원정 랭킹`
-`!도감` `!도감 장비/펫/몬스터` `!도감보상` `!튜토리얼`
-`!서버설정` `!서버세팅 미리보기/실행/상태/취소`
-`!퀴즈알림설정` `!퀴즈알림상태` `!퀴즈알림해제`
-
-🔹 **경제 패치 안내**
-`!경제밸런스` — v4.3.1 가격·보상·도박 변경점 확인
-
-🔹 **BLACK CASINO / 도박 / 금융**
-`!카지노` `!카지노환전 구매/판매 금액` `!블랙잭` `!하이로우` `!슬롯` `!다이스` `!바카라`
-`!럭키휠` `!코인플립 앞/뒤 금액` `!올인 앞/뒤` `!카지노미션` `!카지노상점`
-`!룰렛 배팅액` `!주파수 배팅액` `!탐색 왼쪽/오른쪽 배팅액` `!파산신청`
-`!은행` `!입금 금액` `!출금 금액` `!대출 금액` `!상환 금액`
-`!사채` `!사채빌리기 금액` `!사채상환 금액` `!사채추심`
-슬래시: `/카지노` `/은행` `/사채` `/암시장`
-※ 카지노는 별도 칩을 사용합니다. 생존 룰렛 피격 시 식량이 최대 배팅액의 10배까지 감소하며 마이너스가 될 수 있습니다.
-
-🔹 **알바 / 코인 / 실시간 암시장**
-`!도박잔액` `!알바` `!코인` `!돈주세요` `!땅파기` `!도박정보`
-`!시세` `!매수 일반 10` `!매도`/`!코인판매`(드롭다운) `!자산` `!암시장기록`
-`!암시장알림설정 [@역할]` `!암시장알림상태` `!암시장알림해제`
-※ 시세는 전 서버 공통으로 1분마다 변동합니다.
-
-🔹 **관리자**
-`!가방조회 @유저` `!식량지급 @유저 금액`
-`!식량회수 @유저 금액` `!월드보스리셋 보스명` `!월드보스테스트 보스명`
-"""
-    await send_pages(ctx.channel, text)
+async def 명령어(ctx, *, 검색어: str = None):
+    if 검색어:
+        await ctx.send(embed=_make_search_embed(검색어, _search_commands(검색어)), view=CommandHelpView())
+    else:
+        await ctx.send(embed=_make_help_embed(), view=CommandHelpView())
 
 @bot.hybrid_command()
 async def 정보(ctx):
@@ -1927,6 +2124,17 @@ async def 구매(ctx, *, 아이템이름: str):
     if unlocked:
         msg += "\n🏆 업적 달성: " + ", ".join(x[0] for x in unlocked)
     await ctx.send(msg)
+    visual = getattr(bot, "v633_send_equipment_visual", None)
+    if visual:
+        await visual(
+            ctx,
+            item_name=아이템이름,
+            tier=tier or "일반",
+            slot=get_item_slot(아이템이름),
+            level=0,
+            mode="acquire",
+            description=str(item.get("desc", "")),
+        )
 
 
 @bot.hybrid_command()
@@ -1981,6 +2189,21 @@ async def 장비(ctx):
         f"감염저항 +{totals['감염저항']}% | 행운 +{totals['행운']}"
     )
     await ctx.send("\n".join(lines))
+    visual = getattr(bot, "v633_send_equipment_visual", None)
+    if visual:
+        equipped = [item for item in u.get("equipment", {}).values() if item]
+        if equipped:
+            strongest = max(equipped, key=lambda name: int(u.get("enhancements", {}).get(name, 0)))
+            tier, info = find_item(strongest)
+            await visual(
+                ctx,
+                item_name=strongest,
+                tier=tier or "일반",
+                slot=get_item_slot(strongest),
+                level=int(u.get("enhancements", {}).get(strongest, 0)),
+                mode="status",
+                description=str((info or {}).get("desc", "")),
+            )
 
 
 @bot.hybrid_command()
@@ -1999,6 +2222,18 @@ async def 장착(ctx, *, 아이템이름: str):
     if previous and previous != 아이템이름:
         msg += f"\n기존 장비 **{previous}**은 인벤토리로 돌아갔습니다."
     await ctx.send(msg)
+    visual = getattr(bot, "v633_send_equipment_visual", None)
+    if visual:
+        tier, info = find_item(아이템이름)
+        await visual(
+            ctx,
+            item_name=아이템이름,
+            tier=tier or "일반",
+            slot=slot,
+            level=int(u.get("enhancements", {}).get(아이템이름, 0)),
+            mode="equip",
+            description=str((info or {}).get("desc", "")),
+        )
 
 
 @bot.hybrid_command()
@@ -2069,6 +2304,18 @@ async def 감정(ctx, *, 아이템이름: str):
         f"설명: {info['desc']}\n"
         f"능력치: {stat_text or '특수 능력치 없음'}"
     )
+    visual = getattr(bot, "v633_send_equipment_visual", None)
+    if visual:
+        await visual(
+            ctx,
+            item_name=아이템이름,
+            tier=tier or "일반",
+            slot=get_item_slot(아이템이름),
+            level=int(u.get("enhancements", {}).get(아이템이름, 0)),
+            mode="identify",
+            description=str(info.get("desc", "")),
+            stats_text=stat_text,
+        )
 
 
 # =========================================================
@@ -2232,10 +2479,22 @@ async def 제작(ctx, *, 아이템이름: str):
             inline=True,
         )
         embed.set_footer(text="실패 시 재료는 사라지지 않고 작업대 수리비만 무작위로 차감됩니다")
-        try:
-            await suspense.edit(content=None, embed=embed)
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            pass
+        visual = getattr(bot, "v633_edit_craft_visual", None)
+        tier, _info = find_item(아이템이름)
+        if visual:
+            await visual(
+                suspense,
+                embed,
+                item_name=아이템이름,
+                tier=tier or "일반",
+                slot=get_item_slot(아이템이름),
+                success=False,
+            )
+        else:
+            try:
+                await suspense.edit(content=None, embed=embed)
+            except (discord.Forbidden, discord.HTTPException, AttributeError):
+                pass
         return
 
     for material, amount in recipe.items():
@@ -2264,10 +2523,22 @@ async def 제작(ctx, *, 아이템이름: str):
     if unlocked:
         embed.add_field(name="🏆 업적 달성", value=", ".join(x[0] for x in unlocked), inline=False)
     embed.set_footer(text="ABADDON 제작 기록 · 결과를 항목별 임베드로 표시")
-    try:
-        await suspense.edit(content=None, embed=embed)
-    except (discord.Forbidden, discord.HTTPException, AttributeError):
-        pass
+    visual = getattr(bot, "v633_edit_craft_visual", None)
+    tier, _info = find_item(아이템이름)
+    if visual:
+        await visual(
+            suspense,
+            embed,
+            item_name=아이템이름,
+            tier=tier or "일반",
+            slot=get_item_slot(아이템이름),
+            success=True,
+        )
+    else:
+        try:
+            await suspense.edit(content=None, embed=embed)
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            pass
 
 
 # =========================================================
@@ -4515,6 +4786,16 @@ register_v631_life_visuals(bot, get_user, check_registered, save_data, ITEM_DB)
 
 from apocalypse_bot.commands.v632_life_visuals import register_v632_life_visuals
 register_v632_life_visuals(bot, get_user, check_registered, save_data, ITEM_DB)
+
+from apocalypse_bot.commands.v633_equipment_crafting import register_v633_equipment_crafting
+register_v633_equipment_crafting(
+    bot,
+    get_user,
+    check_registered,
+    find_item,
+    get_item_slot,
+    get_item_stats,
+)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
