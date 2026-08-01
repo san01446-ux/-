@@ -506,6 +506,24 @@ def register_v33_commands(bot, get_user, check_registered, save_data, world_data
         await ctx.send(f"🎬 **선택 결과**\n{choice['result']}\n\n{reward_text}")
         await render_story(ctx, user)
 
+    @story_group.command(name="전투")
+    async def story_combat(ctx, 난이도: str = "보통"):
+        if not await check_registered(ctx):
+            return
+        if not guild_story_enabled(ctx):
+            await ctx.send("⛔ 이 서버에서는 스토리 기능이 꺼져 있습니다.")
+            return
+        user = get_user(ctx.author.id)
+        story = ensure_story(user)
+        if not story.get("started"):
+            await ctx.send("⚠️ 먼저 `!스토리 시작`을 입력하세요.")
+            return
+        starter = getattr(bot, "v636_start_combat", None)
+        if starter is None:
+            await ctx.send("⚠️ 전술 전투 모듈이 아직 준비되지 않았습니다.")
+            return
+        await starter(ctx, "스토리", 난이도)
+
     @story_group.command(name="기록")
     async def story_history(ctx):
         if not await check_registered(ctx):

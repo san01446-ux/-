@@ -15,6 +15,9 @@ from apocalypse_bot.commands.conditions import (
 from apocalypse_bot.commands.v635_visuals import (
     apply_base_reaction_visual, apply_base_stage_visual, format_remaining, parse_iso,
 )
+from apocalypse_bot.commands.v636_world_combat import (
+    weather_combat_multiplier, weather_life_modifiers,
+)
 from apocalypse_bot.commands.status import (
     DUNGEON_STAMINA_COSTS, LIFE_STAMINA_COSTS, apply_damage,
     ensure_vitals, get_max_hp, get_max_stamina, refresh_vitals,
@@ -1634,7 +1637,7 @@ COMMAND_GUIDE_CATEGORIES = [
         "title": "전투 / 보스 / 던전",
         "hint": "괴물, 지역, 레이드, 월드보스",
         "commands": [
-            "!괴물목록 [난이도]", "!던전 약함/보통/강함/지옥", "!심층던전 [층]", "!던전기록",
+            "!괴물목록 [난이도]", "!던전 약함/보통/강함/지옥", "!던전전술 약함/보통/강함/지옥", "!전투 [난이도]", "!전투상태", "!전투포기", "!심층던전 [층]", "!던전기록",
             "!지역목록", "!지역정보 [지역명]", "!지역이동 지역명", "!지역탐색", "!좀비도감 [지역명]",
             "!레이드", "!레이드공격", "!월드보스", "!월드보스공격", "!월드보스기여도",
             "!월드보스보상", "!월드보스목록", "!월드보스도감", "!보스도감", "!보스랭킹", "!PVP @유저"
@@ -1649,6 +1652,7 @@ COMMAND_GUIDE_CATEGORIES = [
             "!거래소", "!거래검색 키워드", "!판매 아이템명 가격", "!구매등록번호 번호", "!판매취소 번호",
             "!경매등록 아이템명 시작가", "!입찰 번호 금액", "!경매마감 번호", "!거래기록",
             "!시세", "!매수 일반 10", "!매도 / !코인판매", "!자산", "!암시장기록",
+            "!자원시장", "!자원구매 나무 10", "!자원판매 광석 5", "!기지칩교환 고철 10",
             "!은행", "!입금 금액", "!출금 금액", "!대출 금액", "!상환 금액",
             "!사채", "!사채빌리기 금액", "!사채상환 금액", "!사채추심"
         ],
@@ -1673,7 +1677,7 @@ COMMAND_GUIDE_CATEGORIES = [
         "title": "스토리 / 원정 / 유물",
         "hint": "시즌 스토리, 원정, 유물 장착",
         "commands": [
-            "!스토리", "!스토리 시작", "!스토리 선택 번호", "!스토리 기록", "!스토리 재시작",
+            "!rpg", "!rpg 시작", "!rpg 전투 [난이도]", "!스토리", "!스토리 시작", "!스토리 선택 번호", "!스토리 전투 [난이도]", "!스토리 기록", "!스토리 재시작",
             "!시즌2", "!시즌2 시작", "!시즌2 선택 번호", "!시즌2 기록", "!시즌2 재시작", "!시즌2 장면 [번호]",
             "!시즌2 수집", "!시즌2 계승", "!시즌2 복구", "!시즌3", "!시즌3 시작", "!시즌3 선택 번호",
             "!시즌3 기록", "!시즌3 재시작", "!원정 도움말", "!원정 목록", "!원정 출발 지역명",
@@ -1721,7 +1725,10 @@ COMMAND_GUIDE_CATEGORIES = [
             "!기지 — 현재 단계·생산량·다음 비용·남은 공사 시간",
             "!기지건설 — Lv.1 야영지 건설",
             "!기지강화 — 자원 지불·시간형 단계 업그레이드·완료 확인",
-            "!기지수확 — 최대 24시간 누적 생산물 수확"
+            "!기지수확 — 최대 24시간 누적 생산물 수확",
+            "!기지방어 / !기지방어공격 — 주간 서버 협동 방어전",
+            "!날씨 — 6시간 주기 인게임 날씨와 효과 확인",
+            "!자원시장 / !기지칩교환 — 기지 자원 경제"
         ],
     },
     {
@@ -3107,7 +3114,8 @@ async def 던전(ctx, 난이도: str = None):
     crit = random.random() < min(0.45, 0.08 + u["level"] * 0.003 + pet_bonus["crit"])
     dodge = random.random() < min(0.40, 0.06 + pet_bonus["dodge"])
 
-    effective_power = int(user_power * (1.7 if crit else 1.0))
+    weather_mult, weather_state = weather_combat_multiplier(ctx.guild.id if ctx.guild else 0)
+    effective_power = int(user_power * (1.7 if crit else 1.0) * weather_mult)
     power_ratio = effective_power / max(monster_power, 1)
 
     # v6.3.5a: 압도적인 전투력 차이에서도 고정 20% 패배가 발생하던 판정을 수정합니다.
@@ -3133,7 +3141,8 @@ async def 던전(ctx, 난이도: str = None):
         f"⚔️ **[{d['name']}]**\n"
         f"🚨 {monster['name']} 출현!\n"
         f"내 전투력: **{user_power}** / 적 전투력: **{monster_power}**\n"
-        f"🎯 최종 승리 확률: **{victory_chance * 100:.1f}%**"
+        f"🎯 최종 승리 확률: **{victory_chance * 100:.1f}%**\n"
+        f"{weather_state['emoji']} 날씨: **{weather_state['name']}** · 전투 효율 ×{weather_mult:.2f}"
     )
     await asyncio.sleep(1.5)
 
@@ -3930,6 +3939,24 @@ async def perform_life_activity(ctx, activity):
             "`!휴식` 또는 시간이 지난 뒤 다시 시도하세요."
         )
         return
+    guild_id = ctx.guild.id if ctx.guild else 0
+    weather_reward, weather_fail, weather_rare, weather_state = weather_life_modifiers(guild_id)
+    if random.random() < weather_fail:
+        u.setdefault("life_mastery", {"채집": 0, "낚시": 0, "벌목": 0, "광산": 0})
+        u["life_mastery"][activity] = int(u.get("life_mastery", {}).get(activity, 0)) + 1
+        progress_weekly(u, "생활 활동")
+        add_season_points(u, 2)
+        save_data()
+        fail_embed = discord.Embed(
+            title=f"{weather_state['emoji']} {activity} 실패 · {weather_state['name']}",
+            description="기상 악화로 현장 작업을 중단했습니다. 자원은 획득하지 못했지만 숙련도는 소폭 상승합니다.",
+            color=discord.Color.orange(),
+        )
+        fail_embed.add_field(name="⚡ 스태미나", value=f"**-{stamina_cost}** · {u['stamina']}/{get_max_stamina(u)}", inline=True)
+        fail_embed.add_field(name="🌦️ 환경 효과", value=weather_state['desc'], inline=False)
+        await ctx.send(embed=fail_embed)
+        return
+
     entries = LIFE_TABLES[activity]
     names = [x[0] for x in entries]
     weights = [x[3] for x in entries]
@@ -3939,7 +3966,7 @@ async def perform_life_activity(ctx, activity):
     mastery_exp = int(u["life_mastery"].get(activity, 0))
     mastery_level = 1 + mastery_exp // 20
     mastery_bonus = min(0.30, (mastery_level - 1) * 0.02)
-    amount = max(1, int(random.randint(minimum, maximum) * exploration_modifier(u) * (1.0 + mastery_bonus)))
+    amount = max(1, int(random.randint(minimum, maximum) * exploration_modifier(u) * (1.0 + mastery_bonus) * weather_reward))
     u["life_mastery"][activity] = mastery_exp + 1
 
     rare_text = ""
@@ -3951,7 +3978,7 @@ async def perform_life_activity(ctx, activity):
         u["resources"][name] = u["resources"].get(name, 0) + amount
         result = f"📦 **{name} {amount}개** 획득"
 
-    if random.random() < 0.05:
+    if random.random() < min(0.20, 0.05 + weather_rare):
         u["materials"]["고대파편"] = u["materials"].get("고대파편", 0) + 1
         rare_text = "\n✨ 희귀 발견: **고대파편 1개**"
 
@@ -3971,6 +3998,7 @@ async def perform_life_activity(ctx, activity):
     result_embed.add_field(name="📈 생활 숙련도", value=f"**Lv.{mastery_level}** · {int(u['life_mastery'][activity]) % 20}/20", inline=True)
     result_embed.add_field(name="⚡ 스태미나", value=f"**-{stamina_cost}** · {u['stamina']}/{get_max_stamina(u)}", inline=True)
     result_embed.add_field(name="🎬 현장 반응", value=("✨ 평범한 수확물과 다른 희귀 신호가 확인됐습니다." if rare_text else "✅ 확보한 자원을 분류해 기지 보급 목록에 등록했습니다."), inline=False)
+    result_embed.add_field(name="🌦️ 종말 날씨", value=f"{weather_state['emoji']} **{weather_state['name']}** · 획득량 ×{weather_reward:.2f}", inline=False)
     tip_getter = getattr(bot, "v632_tip", None) if stage2_activity else getattr(bot, "v631_tip", None)
     result_embed.add_field(name="💡 TIP", value=(tip_getter(visual_key) if tip_getter else "생활 숙련도가 오르면 획득량이 증가합니다."), inline=False)
     visual_send = getattr(bot, "v632_send_visual", None) if stage2_activity else getattr(bot, "v631_send_visual", None)
@@ -4140,6 +4168,7 @@ async def 기지건설(ctx):
             color=discord.Color.red(),
         )
         embed.add_field(name="총 건설 비용", value=_base_cost_text(BASE_BUILD_COST), inline=False)
+        embed.add_field(name="자원 확보", value="생활 활동 외에도 `!자원시장`·`!자원구매`·`!기지칩교환`을 사용할 수 있습니다.", inline=False)
         file = apply_base_reaction_visual(embed, "resource_shortage")
         await _send_base_embed(ctx, embed, file)
         return
@@ -4220,6 +4249,7 @@ async def 기지강화(ctx):
         )
         embed.add_field(name="필요 자원", value=_base_cost_text(cost), inline=False)
         embed.add_field(name="필요 시간", value=f"**{format_remaining(cost['seconds'])}**", inline=True)
+        embed.add_field(name="자원 확보", value="생활 활동 외에도 `!자원시장`·`!자원구매`·`!기지칩교환`을 사용할 수 있습니다.", inline=False)
         file = apply_base_reaction_visual(embed, "resource_shortage")
         await _send_base_embed(ctx, embed, file)
         return
@@ -5097,6 +5127,14 @@ register_v634_equipment_menu(
 # V6.3.5: 카지노 결과별 전용 이미지 + 고난도 시간형 기지 업그레이드 + 안내 최신화
 from apocalypse_bot.commands.v635_casino_base import register_v635_casino_base
 register_v635_casino_base(bot)
+
+# V6.3.6: 중복 방지형 환경·기지방어·자원시장·펫 시너지·버튼 전술전투
+from apocalypse_bot.commands.v636_world_combat import register_v636_world_combat
+register_v636_world_combat(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    calculate_user_power, get_max_hp, add_title, add_season_points,
+    ITEM_DB, apply_base_reaction_visual,
+)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.

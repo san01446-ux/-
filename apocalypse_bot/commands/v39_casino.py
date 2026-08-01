@@ -18,6 +18,7 @@ from apocalypse_bot.commands.v37_gambling_experience import (
     _signed,
 )
 from apocalypse_bot.commands.v635_visuals import apply_casino_visual
+from apocalypse_bot.commands.v636_world_combat import pet_casino_adjustment, weather_slot_weights
 from apocalypse_bot.commands.v40_black_casino import (
     add_casino_chips,
     apply_loss_shield,
@@ -713,6 +714,11 @@ def register_v39_commands(
             after = casino_chips(self.user)
             delta = after - self.before
             delta, detail = _apply_loss_protection(self.user, delta, detail)
+            bonus, note = pet_casino_adjustment(self.user, "블랙잭", delta)
+            if bonus:
+                add_casino_chips(self.user, bonus)
+                delta += bonus
+                detail += note
             after = casino_chips(self.user)
             _add_positive_earnings(self.user, delta)
             _record_casino(self.user, "블랙잭", self.total_bet, delta, payout, detail, world_data)
@@ -886,6 +892,11 @@ def register_v39_commands(
             after = casino_chips(self.user)
             delta = after - self.before
             delta, detail = _apply_loss_protection(self.user, delta, detail)
+            bonus, note = pet_casino_adjustment(self.user, "하이로우", delta)
+            if bonus:
+                add_casino_chips(self.user, bonus)
+                delta += bonus
+                detail += note
             after = casino_chips(self.user)
             _add_positive_earnings(self.user, delta)
             _record_casino(self.user, "하이로우", self.bet, delta, payout, detail, world_data)
@@ -992,9 +1003,10 @@ def register_v39_commands(
     # -----------------------------------------------------
     # 슬롯
     # -----------------------------------------------------
-    def draw_slot_symbol(user: Dict[str, Any]) -> str:
+    def draw_slot_symbol(user: Dict[str, Any], guild_id: int = 0) -> str:
         symbols = [item[0] for item in SLOT_SYMBOLS]
         weights = slot_symbol_weights(user, SLOT_SYMBOLS)
+        weights, _weather = weather_slot_weights(guild_id, symbols, weights)
         return random.choices(symbols, weights=weights, k=1)[0]
 
     async def run_slots(ctx: commands.Context, bet: int) -> None:
@@ -1007,7 +1019,7 @@ def register_v39_commands(
         ensure_black_casino_account(user)["chips"] = before - int(bet)
         _mark_play(user, progress_quest)
         slot_buffs = consume_slot_buffs(user)
-        reels = [draw_slot_symbol(user), draw_slot_symbol(user), draw_slot_symbol(user)]
+        reels = [draw_slot_symbol(user, ctx.guild.id if ctx.guild else 0) for _ in range(3)]
         suspense = await ctx.send(f"🎰 **[폐허 슬롯머신]** 배팅 **{bet:,} 칩**\n`[ ? | ? | ? ]` 레버를 당깁니다...")
         for index in range(3):
             await asyncio.sleep(0.7)
@@ -1044,6 +1056,11 @@ def register_v39_commands(
         ensure_black_casino_account(user)["chips"] = casino_chips(user) + payout
         delta = casino_chips(user) - before
         delta, detail = _apply_loss_protection(user, delta, detail)
+        bonus, note = pet_casino_adjustment(user, "슬롯머신", delta)
+        if bonus:
+            add_casino_chips(user, bonus)
+            delta += bonus
+            detail += note
         _add_positive_earnings(user, delta)
         _record_casino(user, "슬롯머신", int(bet), delta, payout, detail, world_data)
         save_data()
@@ -1122,6 +1139,11 @@ def register_v39_commands(
         ensure_black_casino_account(user)["chips"] = casino_chips(user) + payout
         delta = casino_chips(user) - before
         delta, detail = _apply_loss_protection(user, delta, detail)
+        bonus, note = pet_casino_adjustment(user, "다이스", delta)
+        if bonus:
+            add_casino_chips(user, bonus)
+            delta += bonus
+            detail += note
         _add_positive_earnings(user, delta)
         _record_casino(user, "다이스", int(bet), delta, payout, detail, world_data)
         save_data()
@@ -1246,6 +1268,11 @@ def register_v39_commands(
         ensure_black_casino_account(user)["chips"] = casino_chips(user) + payout
         delta = casino_chips(user) - before
         delta, detail = _apply_loss_protection(user, delta, detail)
+        bonus, note = pet_casino_adjustment(user, "바카라", delta)
+        if bonus:
+            add_casino_chips(user, bonus)
+            delta += bonus
+            detail += note
         _add_positive_earnings(user, delta)
         result_detail = (
             f"👤 플레이어 {_hand_text(player)} = **{p_total}**\n"

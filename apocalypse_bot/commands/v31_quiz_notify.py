@@ -288,3 +288,13 @@ def register_v31_commands(bot, get_user, check_registered, save_data, world_data
         )
         embed.set_footer(text="전체 명령어는 !도움말 또는 !명령어")
         await ctx.send(embed=embed)
+
+    @rpg_group.command(name="전투")
+    async def rpg_combat(ctx, 난이도: str = "보통"):
+        if not await check_registered(ctx):
+            return
+        starter = getattr(bot, "v636_start_combat", None)
+        if starter is None:
+            await ctx.send("⚠️ 전술 전투 모듈이 아직 준비되지 않았습니다.")
+            return
+        await starter(ctx, "RPG", 난이도)

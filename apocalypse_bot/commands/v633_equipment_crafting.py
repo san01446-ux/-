@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import hashlib
+import math
 import math
 import random
 from pathlib import Path
@@ -92,7 +94,138 @@ def _asset_path(mapping: Mapping[str, str], name: str) -> Optional[Path]:
     return path if path.is_file() else None
 
 
-def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, discovered: bool = False) -> bytes:
+def _effect_profile(item_name: str) -> str:
+    name = str(item_name or "")
+    groups = (
+        ("electric", ("전기", "EMP", "플라즈마", "레일", "썬더", "천벌", "절대영도", "오메가", "차원")),
+        ("fire", ("화염", "드래곤", "불사조", "신호탄", "폭발")),
+        ("void", ("공허", "심연", "루시퍼", "판도라", "종말", "심판")),
+        ("bio", ("감염", "재생", "생체", "혈청", "유전자", "나무", "약초")),
+        ("defense", ("방패", "갑옷", "방탄", "전술복", "보호대", "헬멧", "우의", "가방", "장갑", "가면", "왕관")),
+        ("precision", ("권총", "소총", "샷건", "캐논", "포", "조준", "스코프", "탐지", "드론", "장치", "코어", "통제키")),
+        ("blade", ("검", "칼", "나이프", "도끼", "낫", "창", "석궁", "파이프", "몽둥이", "철근")),
+    )
+    for profile, keywords in groups:
+        if any(word in name for word in keywords):
+            return profile
+    return "rune"
+
+
+def _unique_accent(item_name: str, base: tuple[int, int, int]) -> tuple[int, int, int]:
+    digest = hashlib.sha256(str(item_name).encode("utf-8")).digest()
+    shift = tuple((digest[i] - 128) // 4 for i in range(3))
+    return tuple(max(40, min(255, base[i] + shift[i])) for i in range(3))
+
+
+def _draw_equipment_effects(image: Image.Image, *, item_name: str, level: int, tier: str, accent: tuple[int, int, int]) -> Image.Image:
+    level = max(0, int(level))
+    if level < 5:
+        return image
+    profile = _effect_profile(item_name)
+    stage = sum(level >= threshold for threshold in (5, 7, 10, 12, 15, 18, 20))
+    rng = random.Random(f"v636:{item_name}:{level}:{tier}")
+    color = _unique_accent(item_name, accent)
+    aura = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(aura, "RGBA")
+    width, height = image.size
+
+    # 모든 장비에 공통으로 적용되는 고유 프레임. 이름 해시로 위치와 색을 달리합니다.
+    for idx in range(stage):
+        inset = 24 + idx * 10
+        alpha = min(220, 45 + idx * 24)
+        draw.rounded_rectangle(
+            (inset, inset, width - inset, height - inset),
+            radius=30,
+            outline=(*color, alpha),
+            width=2 + idx // 2,
+        )
+
+    density = 12 + stage * 11
+    if profile == "electric":
+        for _ in range(2 + stage // 2):
+            x = rng.randint(180, width - 180)
+            points = [(x, 80)]
+            y = 80
+            while y < height - 90:
+                y += rng.randint(45, 85)
+                x += rng.randint(-70, 70)
+                points.append((x, min(y, height - 90)))
+            draw.line(points, fill=(*color, 105 + stage * 12), width=3 + stage // 2)
+        for _ in range(density):
+            x, y = rng.randint(70, width - 70), rng.randint(55, height - 55)
+            draw.ellipse((x-2, y-2, x+2, y+2), fill=(*color, rng.randint(100, 235)))
+    elif profile == "fire":
+        for _ in range(density + 16):
+            x = rng.randint(90, width - 90)
+            y = rng.randint(140, height - 60)
+            r = rng.randint(2, 7)
+            draw.ellipse((x-r, y-r*2, x+r, y+r), fill=(*color, rng.randint(75, 215)))
+        for idx in range(max(1, stage // 2)):
+            draw.arc((220+idx*25, 90+idx*12, width-220-idx*25, height-80-idx*12), 185, 350, fill=(*color, 90+stage*13), width=5)
+    elif profile == "void":
+        for idx in range(2 + stage // 2):
+            pad = 150 + idx * 35
+            draw.ellipse((pad, 60+idx*12, width-pad, height-60-idx*12), outline=(*color, 80+stage*15), width=4)
+        for _ in range(density):
+            x, y = rng.randint(100, width-100), rng.randint(70, height-70)
+            size = rng.randint(5, 15)
+            draw.polygon([(x, y-size), (x+size//2, y), (x, y+size), (x-size//2, y)], fill=(*color, rng.randint(70, 190)))
+    elif profile == "bio":
+        for _ in range(density + 8):
+            x, y = rng.randint(90, width-90), rng.randint(65, height-65)
+            r = rng.randint(2, 8)
+            draw.ellipse((x-r, y-r, x+r, y+r), outline=(*color, rng.randint(80, 210)), width=2)
+        for _ in range(3 + stage // 2):
+            x0 = rng.randint(160, width-420)
+            points = []
+            for step in range(7):
+                points.append((x0 + step*55, 130 + int(math.sin(step + rng.random()) * 90) + step*45))
+            draw.line(points, fill=(*color, 90+stage*13), width=4)
+    elif profile == "defense":
+        for idx in range(1 + stage // 2):
+            pad = 170 + idx*35
+            pts = [(width//2, 70+idx*10), (width-pad, 180), (width-pad+30, height-170), (width//2, height-65), (pad-30, height-170), (pad, 180)]
+            draw.line(pts + [pts[0]], fill=(*color, 90+stage*15), width=4+idx)
+        for _ in range(max(4, stage*2)):
+            x, y = rng.randint(130, width-130), rng.randint(90, height-90)
+            draw.rectangle((x-10, y-4, x+10, y+4), fill=(*color, rng.randint(70, 175)))
+    elif profile == "precision":
+        cx, cy = width//2 + rng.randint(-80,80), height//2 + rng.randint(-35,35)
+        for idx in range(2 + stage//2):
+            r = 90 + idx*55
+            draw.ellipse((cx-r, cy-r, cx+r, cy+r), outline=(*color, 75+stage*14), width=3)
+        draw.line((cx-230, cy, cx+230, cy), fill=(*color, 120+stage*10), width=3)
+        draw.line((cx, cy-220, cx, cy+220), fill=(*color, 120+stage*10), width=3)
+        for y in range(80, height-70, max(24, 50-stage*3)):
+            draw.line((120, y, width-120, y), fill=(*color, 24+stage*7), width=1)
+    elif profile == "blade":
+        for idx in range(1 + stage//2):
+            offset = idx*32
+            draw.line((160, height-90-offset, width-180, 100+offset), fill=(*color, 80+stage*16), width=5+idx)
+        for _ in range(density):
+            x, y = rng.randint(110, width-110), rng.randint(70, height-70)
+            draw.line((x-8, y+8, x+8, y-8), fill=(*color, rng.randint(70,190)), width=2)
+    else:
+        cx, cy = width//2, height//2
+        for idx in range(2 + stage//2):
+            r = 110 + idx*55
+            draw.arc((cx-r, cy-r, cx+r, cy+r), rng.randint(0,90), rng.randint(210,350), fill=(*color, 80+stage*14), width=4)
+        for idx in range(8 + stage):
+            angle = (idx / (8+stage)) * math.tau
+            x = cx + int(math.cos(angle) * 240)
+            y = cy + int(math.sin(angle) * 220)
+            draw.ellipse((x-4, y-4, x+4, y+4), fill=(*color, 160))
+
+    # +15 이상은 장비마다 고유한 오라와 별가루가 강해집니다.
+    if level >= 15:
+        for _ in range(18 + stage*7):
+            x, y = rng.randint(65, width-65), rng.randint(55, height-55)
+            r = rng.randint(1, 5)
+            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*color, rng.randint(90, 230)))
+    return Image.alpha_composite(image, aura.filter(ImageFilter.GaussianBlur(1.4)))
+
+
+def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, discovered: bool = False, item_name: str = "") -> bytes:
     image = Image.open(path).convert("RGBA").resize((1280, 720), Image.Resampling.LANCZOS)
     accent_hex = forge.TIER_COLORS.get(tier, 0xAAB0BC)
     accent = ((accent_hex >> 16) & 255, (accent_hex >> 8) & 255, accent_hex & 255)
@@ -107,36 +240,14 @@ def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, d
         draw.ellipse((626, 382, 654, 410), fill=(238, 230, 205, 220))
         return _encode_webp(image)
 
-    level = max(0, int(level))
-    stage = sum(level >= threshold for threshold in (5, 7, 10, 12, 15, 18, 20))
-    if stage:
-        aura = Image.new("RGBA", image.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(aura, "RGBA")
-        for idx in range(stage):
-            inset = 30 + idx * 12
-            alpha = min(210, 65 + idx * 22)
-            draw.rounded_rectangle((inset, inset, 1280-inset, 720-inset), radius=30, outline=(*accent, alpha), width=3 + idx // 2)
-        rng = random.Random(f"{path.name}:{level}:{tier}")
-        for _ in range(20 + stage * 14):
-            x = rng.randint(70, 1210)
-            y = rng.randint(65, 655)
-            r = rng.randint(1, 5)
-            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*accent, rng.randint(80, 210)))
-        if level >= 10:
-            for x in (470, 520, 760, 810):
-                draw.line((x, 110, x + rng.randint(-55, 55), 610), fill=(*accent, 90), width=4)
-        if level >= 15:
-            draw.arc((300, 70, 980, 650), 190, 350, fill=(*accent, 150), width=8)
-            draw.arc((340, 90, 940, 630), 10, 170, fill=(*accent, 120), width=6)
-        aura = aura.filter(ImageFilter.GaussianBlur(2.2))
-        image = Image.alpha_composite(image, aura)
+    image = _draw_equipment_effects(image, item_name=item_name or path.stem, level=level, tier=tier, accent=accent)
 
     if not success:
         red = Image.new("RGBA", image.size, (155, 10, 25, 58))
         image = Image.alpha_composite(image, red)
         cracks = Image.new("RGBA", image.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(cracks, "RGBA")
-        rng = random.Random(f"failure:{path.name}")
+        rng = random.Random(f"failure:{item_name}:{path.name}")
         for _ in range(11):
             x, y = rng.randint(180, 1100), rng.randint(110, 610)
             points = [(x, y)]
@@ -147,6 +258,7 @@ def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, d
             draw.line(points, fill=(255, 70, 85, 210), width=5)
         image = Image.alpha_composite(image, cracks.filter(ImageFilter.GaussianBlur(0.6)))
     return _encode_webp(image)
+ebp(image)
 
 
 def _encode_webp(image: Image.Image) -> bytes:
@@ -159,7 +271,7 @@ async def _equipment_file(item_name: str, tier: str, slot: str, success: bool, l
     path = _asset_path(EQUIPMENT_ASSETS, item_name)
     if path is not None:
         if PIL_AVAILABLE:
-            image = await asyncio.to_thread(_decorate_named_image, path, tier=tier or "일반", level=level, success=success, discovered=False)
+            image = await asyncio.to_thread(_decorate_named_image, path, tier=tier or "일반", level=level, success=success, discovered=False, item_name=item_name)
             return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
         # Pillow가 설치되지 않은 환경에서도 봇이 중단되지 않도록 원본 장비 이미지를 직접 첨부합니다.
         return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
@@ -173,7 +285,7 @@ async def _treasure_file(treasure_name: str, grade: str, discovered: bool, prefi
         return None
     tier = GRADE_TO_TIER.get(str(grade), "일반")
     if PIL_AVAILABLE:
-        image = await asyncio.to_thread(_decorate_named_image, path, tier=tier, level={"E":1,"D":4,"C":8,"B":13,"A":18}.get(str(grade), 1), success=True, discovered=discovered)
+        image = await asyncio.to_thread(_decorate_named_image, path, tier=tier, level={"E":1,"D":4,"C":8,"B":13,"A":18}.get(str(grade), 1), success=True, discovered=discovered, item_name=treasure_name)
         return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
     # Pillow가 없는 경우에도 감정 결과의 실제 보물 이미지를 그대로 표시합니다.
     return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
