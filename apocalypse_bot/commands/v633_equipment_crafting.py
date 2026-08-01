@@ -2,14 +2,33 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
+import math
+import random
+from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
 import discord
 from discord.ext import commands
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 from apocalypse_bot.commands import v432_forge_live as forge
 
 VERSION = "6.3.3"
+ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v633"
+
+
+def _load_manifest(filename: str) -> Dict[str, str]:
+    path = ASSET_ROOT / filename
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {str(k): str(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+
+
+EQUIPMENT_ASSETS = _load_manifest("equipment_manifest.json")
+TREASURE_ASSETS = _load_manifest("treasure_manifest.json")
 
 STAGE_LABELS = (
     (20, "공허 초월"),
@@ -60,9 +79,93 @@ def _safe_filename(prefix: str) -> str:
     return f"abaddon_v633_{prefix}.png"
 
 
-async def _card_file(tier: str, slot: str, success: bool, level: int, prefix: str) -> discord.File:
+def _asset_path(mapping: Mapping[str, str], name: str) -> Optional[Path]:
+    relative = mapping.get(str(name))
+    if not relative:
+        return None
+    path = ASSET_ROOT / relative
+    return path if path.is_file() else None
+
+
+def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, discovered: bool = False) -> bytes:
+    image = Image.open(path).convert("RGBA").resize((1280, 720), Image.Resampling.LANCZOS)
+    accent_hex = forge.TIER_COLORS.get(tier, 0xAAB0BC)
+    accent = ((accent_hex >> 16) & 255, (accent_hex >> 8) & 255, accent_hex & 255)
+
+    if discovered:
+        image = ImageEnhance.Brightness(image).enhance(0.34).filter(ImageFilter.GaussianBlur(3.0))
+        veil = Image.new("RGBA", image.size, (4, 5, 10, 120))
+        image = Image.alpha_composite(image, veil)
+        draw = ImageDraw.Draw(image, "RGBA")
+        draw.ellipse((500, 150, 780, 430), outline=(*accent, 180), width=10)
+        draw.arc((555, 195, 725, 355), 205, 520, fill=(238, 230, 205, 220), width=18)
+        draw.ellipse((626, 382, 654, 410), fill=(238, 230, 205, 220))
+        return _encode_webp(image)
+
+    level = max(0, int(level))
+    stage = sum(level >= threshold for threshold in (5, 7, 10, 12, 15, 18, 20))
+    if stage:
+        aura = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(aura, "RGBA")
+        for idx in range(stage):
+            inset = 30 + idx * 12
+            alpha = min(210, 65 + idx * 22)
+            draw.rounded_rectangle((inset, inset, 1280-inset, 720-inset), radius=30, outline=(*accent, alpha), width=3 + idx // 2)
+        rng = random.Random(f"{path.name}:{level}:{tier}")
+        for _ in range(20 + stage * 14):
+            x = rng.randint(70, 1210)
+            y = rng.randint(65, 655)
+            r = rng.randint(1, 5)
+            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*accent, rng.randint(80, 210)))
+        if level >= 10:
+            for x in (470, 520, 760, 810):
+                draw.line((x, 110, x + rng.randint(-55, 55), 610), fill=(*accent, 90), width=4)
+        if level >= 15:
+            draw.arc((300, 70, 980, 650), 190, 350, fill=(*accent, 150), width=8)
+            draw.arc((340, 90, 940, 630), 10, 170, fill=(*accent, 120), width=6)
+        aura = aura.filter(ImageFilter.GaussianBlur(2.2))
+        image = Image.alpha_composite(image, aura)
+
+    if not success:
+        red = Image.new("RGBA", image.size, (155, 10, 25, 58))
+        image = Image.alpha_composite(image, red)
+        cracks = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(cracks, "RGBA")
+        rng = random.Random(f"failure:{path.name}")
+        for _ in range(11):
+            x, y = rng.randint(180, 1100), rng.randint(110, 610)
+            points = [(x, y)]
+            for _ in range(rng.randint(2, 5)):
+                x += rng.randint(-75, 75)
+                y += rng.randint(25, 75)
+                points.append((x, y))
+            draw.line(points, fill=(255, 70, 85, 210), width=5)
+        image = Image.alpha_composite(image, cracks.filter(ImageFilter.GaussianBlur(0.6)))
+    return _encode_webp(image)
+
+
+def _encode_webp(image: Image.Image) -> bytes:
+    buffer = io.BytesIO()
+    image.convert("RGB").save(buffer, format="WEBP", quality=89, method=6)
+    return buffer.getvalue()
+
+
+async def _equipment_file(item_name: str, tier: str, slot: str, success: bool, level: int, prefix: str) -> discord.File:
+    path = _asset_path(EQUIPMENT_ASSETS, item_name)
+    if path is not None:
+        image = await asyncio.to_thread(_decorate_named_image, path, tier=tier or "일반", level=level, success=success, discovered=False)
+        return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
     image = await asyncio.to_thread(forge.build_forge_card_png, tier or "일반", slot or "무기", success, max(0, int(level)))
     return discord.File(io.BytesIO(image), filename=_safe_filename(prefix))
+
+
+async def _treasure_file(treasure_name: str, grade: str, discovered: bool, prefix: str) -> Optional[discord.File]:
+    path = _asset_path(TREASURE_ASSETS, treasure_name)
+    if path is None:
+        return None
+    tier = GRADE_TO_TIER.get(str(grade), "일반")
+    image = await asyncio.to_thread(_decorate_named_image, path, tier=tier, level={"E":1,"D":4,"C":8,"B":13,"A":18}.get(str(grade), 1), success=True, discovered=discovered)
+    return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
 
 
 async def send_equipment_visual(
@@ -78,7 +181,7 @@ async def send_equipment_visual(
 ) -> Optional[discord.Message]:
     title, fallback = MODE_LABELS.get(mode, MODE_LABELS["preview"])
     level = max(0, int(level))
-    file = await _card_file(tier, slot, True, level, f"equipment_{mode}")
+    file = await _equipment_file(item_name, tier, slot, True, level, f"equipment_{mode}")
     embed = discord.Embed(
         title=title,
         description=f"**{forge.forge_display_name(item_name, level)}**\n{description or fallback}",
@@ -103,7 +206,7 @@ async def edit_craft_visual(
     slot: str,
     success: bool,
 ) -> None:
-    file = await _card_file(tier, slot, success, 0 if success else 3, "craft_result")
+    file = await _equipment_file(item_name, tier, slot, success, 0 if success else 3, "craft_result")
     embed.set_image(url=f"attachment://{file.filename}")
     embed.add_field(
         name="🎬 제작 연출",
@@ -129,8 +232,11 @@ async def edit_relic_visual(
     discovered: bool = False,
 ) -> None:
     tier = GRADE_TO_TIER.get(str(grade), "일반")
-    level = {"E": 1, "D": 4, "C": 8, "B": 13, "A": 18}.get(str(grade), 1)
-    file = await _card_file(tier, "목걸이", not discovered, level, "relic")
+    file = await _treasure_file(treasure_name, str(grade), discovered, "relic")
+    if file is None:
+        level = {"E": 1, "D": 4, "C": 8, "B": 13, "A": 18}.get(str(grade), 1)
+        fallback = await asyncio.to_thread(forge.build_forge_card_png, tier, "목걸이", not discovered, level)
+        file = discord.File(io.BytesIO(fallback), filename=_safe_filename("relic"))
     embed.set_image(url=f"attachment://{file.filename}")
     if discovered:
         embed.add_field(name="🕯️ 봉인 상태", value="감정 전에는 실제 가치와 등급 보정 결과가 공개되지 않습니다.", inline=False)
@@ -158,6 +264,7 @@ def register_v633_equipment_crafting(
     setattr(bot, "v633_send_equipment_visual", send_equipment_visual)
     setattr(bot, "v633_edit_craft_visual", edit_craft_visual)
     setattr(bot, "v633_edit_relic_visual", edit_relic_visual)
+    setattr(bot, "v633_build_named_equipment_file", _equipment_file)
     setattr(bot, "v633_visual_version", VERSION)
 
     existing_guide = bot.get_command("강화연출")

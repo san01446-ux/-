@@ -869,9 +869,20 @@ def register_v432_forge_live(
         else:
             embed.set_footer(text="강화 표시 이름은 연출용이며 기존 인벤토리 데이터는 그대로 유지됩니다.")
 
-        image = await asyncio.to_thread(build_forge_card_png, tier, str(result["slot"]), success, level)
-        file = discord.File(io.BytesIO(image), filename="abaddon_forge.png")
-        embed.set_image(url="attachment://abaddon_forge.png")
+        named_builder = getattr(bot, "v633_build_named_equipment_file", None)
+        if named_builder is not None:
+            file = await named_builder(
+                str(result["item"]),
+                tier,
+                str(result["slot"]),
+                success,
+                level,
+                "forge_result",
+            )
+        else:
+            image = await asyncio.to_thread(build_forge_card_png, tier, str(result["slot"]), success, level)
+            file = discord.File(io.BytesIO(image), filename="abaddon_forge.png")
+        embed.set_image(url=f"attachment://{file.filename}")
         return embed, file
 
     async def share_result(interaction: discord.Interaction, result: Dict[str, Any]) -> None:
