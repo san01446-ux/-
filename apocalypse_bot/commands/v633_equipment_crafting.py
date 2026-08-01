@@ -10,7 +10,12 @@ from typing import Any, Callable, Dict, Mapping, Optional
 
 import discord
 from discord.ext import commands
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
+try:
+    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
+    PIL_AVAILABLE = True
+except ModuleNotFoundError:
+    Image = ImageDraw = ImageEnhance = ImageFilter = None
+    PIL_AVAILABLE = False
 
 from apocalypse_bot.commands import v432_forge_live as forge
 
@@ -153,8 +158,11 @@ def _encode_webp(image: Image.Image) -> bytes:
 async def _equipment_file(item_name: str, tier: str, slot: str, success: bool, level: int, prefix: str) -> discord.File:
     path = _asset_path(EQUIPMENT_ASSETS, item_name)
     if path is not None:
-        image = await asyncio.to_thread(_decorate_named_image, path, tier=tier or "일반", level=level, success=success, discovered=False)
-        return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
+        if PIL_AVAILABLE:
+            image = await asyncio.to_thread(_decorate_named_image, path, tier=tier or "일반", level=level, success=success, discovered=False)
+            return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
+        # Pillow가 설치되지 않은 환경에서도 봇이 중단되지 않도록 원본 장비 이미지를 직접 첨부합니다.
+        return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
     image = await asyncio.to_thread(forge.build_forge_card_png, tier or "일반", slot or "무기", success, max(0, int(level)))
     return discord.File(io.BytesIO(image), filename=_safe_filename(prefix))
 
@@ -164,8 +172,11 @@ async def _treasure_file(treasure_name: str, grade: str, discovered: bool, prefi
     if path is None:
         return None
     tier = GRADE_TO_TIER.get(str(grade), "일반")
-    image = await asyncio.to_thread(_decorate_named_image, path, tier=tier, level={"E":1,"D":4,"C":8,"B":13,"A":18}.get(str(grade), 1), success=True, discovered=discovered)
-    return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
+    if PIL_AVAILABLE:
+        image = await asyncio.to_thread(_decorate_named_image, path, tier=tier, level={"E":1,"D":4,"C":8,"B":13,"A":18}.get(str(grade), 1), success=True, discovered=discovered)
+        return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
+    # Pillow가 없는 경우에도 감정 결과의 실제 보물 이미지를 그대로 표시합니다.
+    return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
 
 
 async def send_equipment_visual(
@@ -266,6 +277,7 @@ def register_v633_equipment_crafting(
     setattr(bot, "v633_edit_relic_visual", edit_relic_visual)
     setattr(bot, "v633_build_named_equipment_file", _equipment_file)
     setattr(bot, "v633_visual_version", VERSION)
+    setattr(bot, "v633_pillow_available", PIL_AVAILABLE)
 
     existing_guide = bot.get_command("강화연출")
     if existing_guide is not None:
