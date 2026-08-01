@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.3.0"
+VERSION = "6.3.1"
 KST = ZoneInfo("Asia/Seoul")
 DIG_DAILY_LIMIT = 50
 DIG_COOLDOWN_SECONDS = 60
@@ -356,7 +356,11 @@ def _dig_result_embed(
         )
     elif treasure is not None:
         embed.add_field(name="🔎 다음 행동", value="`!보물감정`에서 감정사를 선택하세요.", inline=False)
-    embed.set_footer(text=f"ABADDON 굴착 기록 v{VERSION} · 결과를 이모지와 항목별로 표시")
+    embed.add_field(
+        name="💡 TIP",
+        value="미감정 보물은 `!보물감정`에서 감정사를 선택해 확인할 수 있습니다.",
+        inline=False,
+    )
     return embed
 
 
@@ -509,20 +513,15 @@ def register_v610_digging_treasure(
             await _safe_reactions(message, ("⏳", "⛏️", "🪨"))
             return
 
-        asset_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "assets", "game_cards", "digging.png",
-        )
-        asset_filename = "digging.png"
         stage_embed = discord.Embed(
             title="⛏️ 폐허 지반 굴착 중",
             description="콘크리트층과 금속 잔해를 분리합니다.",
             color=discord.Color.dark_teal(),
         )
         stage_embed.add_field(name="진행도", value="`████░░░░░░` **40%**", inline=False)
-        if os.path.isfile(asset_path):
-            stage_embed.set_image(url=f"attachment://{asset_filename}")
-            suspense = await ctx.send(embed=stage_embed, file=discord.File(asset_path, filename=asset_filename))
+        visual_send = getattr(bot, "v631_send_visual", None)
+        if visual_send:
+            suspense = await visual_send(ctx, stage_embed, "activities/digging/success")
         else:
             suspense = await ctx.send(embed=stage_embed)
         await _safe_reactions(suspense, ("⛏️", "🪨"))
@@ -533,9 +532,11 @@ def register_v610_digging_treasure(
             color=discord.Color.orange(),
         )
         scan_embed.add_field(name="진행도", value="`████████░░` **80%**", inline=False)
-        if os.path.isfile(asset_path):
-            scan_embed.set_image(url=f"attachment://{asset_filename}")
-        await _safe_edit(suspense, content=None, embed=scan_embed)
+        visual_edit = getattr(bot, "v631_edit_visual", None)
+        if visual_edit:
+            await visual_edit(suspense, scan_embed, "activities/digging/success")
+        else:
+            await _safe_edit(suspense, content=None, embed=scan_embed)
         await asyncio.sleep(0.7)
 
         profile["attempts"] = attempts + 1
@@ -551,14 +552,20 @@ def register_v610_digging_treasure(
             profile["treasure_count"] = int(profile.get("treasure_count", 0)) + 1
             save_data()
             result_embed = _dig_result_embed(user, profile, cash_reward, remaining, treasure=treasure)
-            if os.path.isfile(asset_path):
-                result_embed.set_image(url=f"attachment://{asset_filename}")
-            await _safe_edit(
-                suspense,
-                content=None,
-                embed=result_embed,
+            result_embed.add_field(
+                name="🎬 현장 반응",
+                value="✨ 잔해 아래에서 평범하지 않은 봉인 신호가 확인됐습니다.",
+                inline=False,
             )
+            visual_edit = getattr(bot, "v631_edit_visual", None)
+            if visual_edit:
+                await visual_edit(suspense, result_embed, "activities/digging/rare")
+            else:
+                await _safe_edit(suspense, content=None, embed=result_embed)
             await _safe_reactions(suspense, ("💥", "📦", "💎", "💰", "❓", "✨", "⛏️"))
+            maybe_encounter = getattr(bot, "v631_maybe_encounter", None)
+            if maybe_encounter:
+                await maybe_encounter(ctx, "digging", user)
             return
 
         result = _ordinary_find(user)
@@ -567,15 +574,23 @@ def register_v610_digging_treasure(
             profile["empty_count"] = int(profile.get("empty_count", 0)) + 1
         save_data()
         result_embed = _dig_result_embed(user, profile, cash_reward, remaining, result=result)
-        if os.path.isfile(asset_path):
-            result_embed.set_image(url=f"attachment://{asset_filename}")
-        await _safe_edit(
-            suspense,
-            content=None,
-            embed=result_embed,
+        is_empty = bool(result.get("empty"))
+        result_embed.add_field(
+            name="🎬 현장 반응",
+            value=("⚠️ 굴착층이 비어 있어 안전하게 장비를 회수했습니다." if is_empty else "✅ 발견물을 분류하고 굴착 기록을 저장했습니다."),
+            inline=False,
         )
+        visual_edit = getattr(bot, "v631_edit_visual", None)
+        asset_kind = "failure" if is_empty else "success"
+        if visual_edit:
+            await visual_edit(suspense, result_embed, f"activities/digging/{asset_kind}")
+        else:
+            await _safe_edit(suspense, content=None, embed=result_embed)
         reactions = tuple(result.get("reactions", ("⛏️", "✅")))
         await _safe_reactions(suspense, tuple(dict.fromkeys((*reactions, "💰"))))
+        maybe_encounter = getattr(bot, "v631_maybe_encounter", None)
+        if maybe_encounter:
+            await maybe_encounter(ctx, "digging", user)
 
     @bot.command(name="보물감정", aliases=["보물감정소", "감정소"])
     async def appraise(ctx: commands.Context, *, 감정사: str = "") -> None:

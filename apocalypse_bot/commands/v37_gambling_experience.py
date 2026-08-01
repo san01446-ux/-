@@ -583,11 +583,6 @@ def register_v37_commands(
         jackpot_chance = min(0.10, 0.03 + (level - 1) * 0.002)
         roll = random.random()
         before = int(user.get("balance", 0))
-        asset_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "assets", "game_cards", "work.png",
-        )
-        asset_filename = "work.png"
         stage_embed = discord.Embed(
             title="🧰 폐허 알바 배정 중",
             description="오늘 맡을 작업장과 위험도를 확인합니다...",
@@ -595,9 +590,9 @@ def register_v37_commands(
         )
         stage_embed.add_field(name="📋 작업 배정", value="직종·위험도 조회", inline=True)
         stage_embed.add_field(name="🦺 안전 점검", value="장비·보상 확인", inline=True)
-        if os.path.isfile(asset_path):
-            stage_embed.set_image(url=f"attachment://{asset_filename}")
-            suspense = await ctx.send(embed=stage_embed, file=discord.File(asset_path, filename=asset_filename))
+        visual_send = getattr(bot, "v631_send_visual", None)
+        if visual_send:
+            suspense = await visual_send(ctx, stage_embed, "activities/work/success")
         else:
             suspense = await ctx.send(embed=stage_embed)
         await asyncio.sleep(0.65)
@@ -612,9 +607,11 @@ def register_v37_commands(
             color=discord.Color.orange(),
         )
         work_stage.add_field(name="진행도", value="`███████░░░` **70%**", inline=False)
-        if os.path.isfile(asset_path):
-            work_stage.set_image(url=f"attachment://{asset_filename}")
-        await _edit_embed(suspense, work_stage)
+        visual_edit = getattr(bot, "v631_edit_visual", None)
+        if visual_edit:
+            await visual_edit(suspense, work_stage, "activities/work/success")
+        else:
+            await _edit_embed(suspense, work_stage)
         await asyncio.sleep(0.65)
 
         bonus_resource = None
@@ -627,10 +624,11 @@ def register_v37_commands(
             work["exp"] = max(0, int(work.get("exp", 0)) + exp_delta)
             event = random.choice(
                 [
-                    "편의점에서 실수로 상품 진열대를 박살 내 버렸습니다! 🔨",
-                    "창고 정리 중 보급 상자를 떨어뜨려 변상하게 됐습니다! 📦",
-                    "배달 도중 감염체를 피해 달아나다 물자를 잃었습니다! 🧟",
-                    "무전 장비를 잘못 연결해 수리비를 물어냈습니다! 📻",
+                    "폐허 발전기의 냉각 장치가 과열되어 긴급 보수비가 발생했습니다. 🔧",
+                    "오염 구역의 지지대가 무너져 회수 장비를 교체했습니다. ⚠️",
+                    "보급 운반 중 약탈자 신호를 피하다 일부 운송 장비를 잃었습니다. 📦",
+                    "낡은 무전 중계기가 역전류를 일으켜 수리 비용을 정산했습니다. 📻",
+                    "방벽 보수용 용접기가 고장 나 작업대 부품을 새로 구입했습니다. ⚙️",
                 ]
             )
             work["total_lost"] = int(work.get("total_lost", 0)) + loss
@@ -662,8 +660,8 @@ def register_v37_commands(
             work["exp"] = int(work.get("exp", 0)) + exp_delta
             event = random.choice(
                 [
-                    "편의점 야간 진열을 무사히 마쳤습니다. 🏪",
-                    "보급 창고에서 물자 분류 작업을 끝냈습니다. 📦",
+                    "폐허 보급소의 야간 재고 정리를 무사히 마쳤습니다. 🏚️",
+                    "거점 보급 창고에서 물자 분류 작업을 끝냈습니다. 📦",
                     "생존자 거점 사이의 배달 임무를 완료했습니다. 🚲",
                     "낡은 무전기를 수리해 작업 수당을 받았습니다. 📻",
                     "방벽 보수 작업을 마치고 일당을 받았습니다. 🧱",
@@ -744,25 +742,36 @@ def register_v37_commands(
             value="레벨이 높을수록 사고 확률은 내려가고 보상·대박 확률은 올라갑니다.",
             inline=False,
         )
-        image_url = WORK_RESULT_IMAGE_URLS.get(work_outcome, "")
-        if image_url:
-            result_embed.set_image(url=image_url)
-        elif os.path.isfile(asset_path):
-            result_embed.set_image(url=f"attachment://{asset_filename}")
         if remaining == 0:
             result_embed.add_field(
                 name="⛏️ 다음 수입 루트",
                 value="오늘 알바를 모두 사용했습니다. 이제 `!땅파기`로 물자와 보물을 찾을 수 있습니다.",
                 inline=False,
             )
-        result_embed.set_footer(text="ABADDON 폐허 아르바이트 · 단계형 작업 연출 · 실패 비용은 잔액 보호")
-        await _edit_embed(suspense, result_embed)
+        result_embed.add_field(
+            name="💡 TIP",
+            value=getattr(bot, "v631_tip", lambda _k: "알바 레벨이 오르면 사고 확률이 감소합니다.")("work"),
+            inline=False,
+        )
+        outcome_asset = {
+            "failure": "activities/work/failure",
+            "success": "activities/work/success",
+            "jackpot": "activities/work/rare",
+        }[work_outcome]
+        visual_edit = getattr(bot, "v631_edit_visual", None)
+        if visual_edit:
+            await visual_edit(suspense, result_embed, outcome_asset)
+        else:
+            await _edit_embed(suspense, result_embed)
         if work_outcome == "failure":
             await _safe_reactions(suspense, ("🔨", "😭", "💸", "❌"))
         elif work_outcome == "jackpot":
             await _safe_reactions(suspense, ("💎", "🎊", "🔥", "💰", "🏆"))
         else:
             await _safe_reactions(suspense, ("💰", "✅", "🧰", "👏"))
+        maybe_encounter = getattr(bot, "v631_maybe_encounter", None)
+        if maybe_encounter:
+            await maybe_encounter(ctx, "work", user)
 
     @bot.hybrid_command(name="코인", aliases=["코인탐색"], description="3분마다 희귀도가 다른 암시장 자산 코인을 탐색합니다. 하루 30회")
     async def coin_draw(ctx: commands.Context) -> None:

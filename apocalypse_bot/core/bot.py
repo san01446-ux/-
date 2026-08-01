@@ -3557,10 +3557,39 @@ async def perform_life_activity(ctx, activity):
     add_season_points(u, 4)
     save_data()
 
-    await ctx.send(
-        f"🌿 **[{activity} 결과]** {result}{rare_text}\n"
-        f"⚡ 스태미나 **-{stamina_cost}** | 현재 **{u['stamina']} / {get_max_stamina(u)}**"
+    if activity not in {"채집", "벌목"}:
+        await ctx.send(
+            f"🌿 **[{activity} 결과]** {result}{rare_text}\n"
+            f"⚡ 스태미나 **-{stamina_cost}** | 현재 **{u['stamina']} / {get_max_stamina(u)}**"
+        )
+        return
+
+    key_map = {"채집": "gathering", "벌목": "woodcutting"}
+    visual_key = key_map[activity]
+    result_embed = discord.Embed(
+        title=f"{ {'채집':'🌿','낚시':'🎣','벌목':'🪓','광산':'⛏️'}[activity] } {activity} 결과",
+        description=result + rare_text,
+        color=discord.Color.gold() if rare_text else discord.Color.green(),
     )
+    result_embed.add_field(name="📦 이번 획득", value=(f"**식량 +{amount:,}**" if name == "식량" else f"**{name} +{amount}**"), inline=True)
+    result_embed.add_field(name="📈 생활 숙련도", value=f"**Lv.{mastery_level}** · {int(u['life_mastery'][activity]) % 20}/20", inline=True)
+    result_embed.add_field(name="⚡ 스태미나", value=f"**-{stamina_cost}** · {u['stamina']}/{get_max_stamina(u)}", inline=True)
+    result_embed.add_field(name="🎬 현장 반응", value=("✨ 평범한 수확물과 다른 희귀 신호가 확인됐습니다." if rare_text else "✅ 확보한 자원을 분류해 기지 보급 목록에 등록했습니다."), inline=False)
+    result_embed.add_field(name="💡 TIP", value=getattr(bot, "v631_tip", lambda _k: "생활 숙련도가 오르면 획득량이 증가합니다.")(visual_key), inline=False)
+    visual_send = getattr(bot, "v631_send_visual", None)
+    asset_kind = "rare" if rare_text else "success"
+    if visual_send and visual_key in {"gathering", "woodcutting"}:
+        result_message = await visual_send(ctx, result_embed, f"activities/{visual_key}/{asset_kind}")
+    else:
+        result_message = await ctx.send(embed=result_embed)
+    for emoji in (("💎", "✨") if rare_text else ("✅", "📦")):
+        try:
+            await result_message.add_reaction(emoji)
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            break
+    maybe_encounter = getattr(bot, "v631_maybe_encounter", None)
+    if maybe_encounter and visual_key in {"gathering", "woodcutting"}:
+        await maybe_encounter(ctx, visual_key, u)
 
 
 @bot.hybrid_command()
@@ -4496,6 +4525,11 @@ from apocalypse_bot.commands.v630_world_boss import register_v630_world_boss
 register_v630_world_boss(
     bot, get_user, check_registered, save_data, world_data, calculate_user_power, add_title,
 )
+
+# V6.3.1: 알바·땅파기·채집·벌목 시네마틱 이미지 풀 + 버튼형 인카운트 12종
+# 인카운트 도감은 prefix 전용이며 신규 최상위 슬래시를 추가하지 않습니다.
+from apocalypse_bot.commands.v631_life_visuals import register_v631_life_visuals
+register_v631_life_visuals(bot, get_user, check_registered, save_data)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
