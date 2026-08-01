@@ -13,22 +13,51 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "6.4.1a"
+VERSION = "6.5.0"
 KST = timezone(timedelta(hours=9))
 
 THEMES: Dict[str, Dict[str, Any]] = {
-    "검은성당": {"emoji":"🕯️","title":"검은 성당","color":0x6C3B73,"tagline":"침묵 속에서 신호를 지키는 생존 성역","briefing":"낮은 조명과 차분한 경보 문구를 사용하는 정통 ABADDON 테마입니다."},
-    "폐허도시": {"emoji":"🏙️","title":"폐허 도시","color":0x7A5943,"tagline":"무너진 도심을 거점으로 삼은 전투 생존 테마","briefing":"작전·탐색·거래 안내를 거칠고 실용적인 문구로 정리합니다."},
-    "격리연구소": {"emoji":"🧪","title":"격리 연구소","color":0x2A7F78,"tagline":"감염 수치와 표본을 추적하는 연구 거점","briefing":"날씨·감염·무전·장비 상태를 계측 보고서처럼 표시합니다."},
-    "황혼전초기지": {"emoji":"🏕️","title":"황혼 전초기지","color":0xB0783C,"tagline":"생활과 기지 성장을 중심으로 한 개척 테마","briefing":"채집·기지·보급선·시장 정보를 한눈에 확인하기 좋습니다."},
-    "종말방송국": {"emoji":"📻","title":"종말 방송국","color":0x425D8C,"tagline":"끊어진 통신망을 다시 잇는 서버 이벤트 테마","briefing":"SOS·날씨·공개 작전·서버 알림을 방송 속보 형식으로 정리합니다."},
-    "방사능항구": {"emoji":"⚓","title":"방사능 항구","color":0x397B72,"tagline":"오염된 부두와 밀수 항로를 지키는 해안 거점","briefing":"밀수품·보급선·자원 시장과 위험 수치를 항만 관제 보고처럼 표시합니다."},
-    "붉은사막": {"emoji":"🏜️","title":"붉은 사막","color":0xA85A42,"tagline":"모래폭풍 속 이동과 자원 확보에 특화된 유목 거점","briefing":"날씨·원정·생활 활동의 위험과 보상을 거친 탐사 기록으로 정리합니다."},
-    "침수지하철": {"emoji":"🚇","title":"침수 지하철","color":0x315F75,"tagline":"물에 잠긴 노선을 따라 생존자를 연결하는 지하 거점","briefing":"이동·무전·스토리·위험구역 정보를 노선 관제판처럼 표시합니다."},
-    "설원벙커": {"emoji":"❄️","title":"설원 벙커","color":0x6A8297,"tagline":"극저온 한파를 버티는 폐쇄형 방어 거점","briefing":"기지 방어·식량·장비 내구도와 체력 상태를 보급 장부 형식으로 정리합니다."},
-    "무너진방벽": {"emoji":"🧱","title":"무너진 방벽","color":0x7C6758,"tagline":"끊어진 방어선을 복구하는 최전선 요새","briefing":"전투·레이드·기지 강화와 공동 목표를 전선 상황판처럼 표시합니다."},
-    "밤의시장": {"emoji":"🌃","title":"밤의 시장","color":0x674C83,"tagline":"희귀 물자와 소문이 오가는 암시장 생존 테마","briefing":"거래·까마귀 상점·우편·보물 감정을 야시장 전광판처럼 정리합니다."},
-    "신호관측소": {"emoji":"📡","title":"신호 관측소","color":0x486D91,"tagline":"날씨와 통신 교란을 감시하는 고지대 관측 거점","briefing":"날씨 변화·SOS·서버 이벤트의 남은 시간을 신호 분석표처럼 표시합니다."},
+    # 아포칼립스 / 생존
+    "검은성당": {"group":"아포칼립스","emoji":"🕯️","title":"검은 성당","color":0x6C3B73,"tagline":"침묵 속에서 신호를 지키는 생존 성역","briefing":"낮은 조명과 차분한 경보 문구를 사용하는 정통 ABADDON 테마입니다."},
+    "폐허도시": {"group":"아포칼립스","emoji":"🏙️","title":"폐허 도시","color":0x7A5943,"tagline":"무너진 도심을 거점으로 삼은 전투 생존 테마","briefing":"작전·탐색·거래 안내를 거칠고 실용적인 문구로 정리합니다."},
+    "격리연구소": {"group":"아포칼립스","emoji":"🧪","title":"격리 연구소","color":0x2A7F78,"tagline":"감염 수치와 표본을 추적하는 연구 거점","briefing":"날씨·감염·무전·장비 상태를 계측 보고서처럼 표시합니다."},
+    "황혼전초기지": {"group":"아포칼립스","emoji":"🏕️","title":"황혼 전초기지","color":0xB0783C,"tagline":"생활과 기지 성장을 중심으로 한 개척 테마","briefing":"채집·기지·보급선·시장 정보를 한눈에 확인하기 좋습니다."},
+    "종말방송국": {"group":"아포칼립스","emoji":"📻","title":"종말 방송국","color":0x425D8C,"tagline":"끊어진 통신망을 다시 잇는 서버 이벤트 테마","briefing":"SOS·날씨·공개 작전·서버 알림을 방송 속보 형식으로 정리합니다."},
+    "방사능항구": {"group":"아포칼립스","emoji":"⚓","title":"방사능 항구","color":0x397B72,"tagline":"오염된 부두와 밀수 항로를 지키는 해안 거점","briefing":"밀수품·보급선·자원 시장과 위험 수치를 항만 관제 보고처럼 표시합니다."},
+    "붉은사막": {"group":"아포칼립스","emoji":"🏜️","title":"붉은 사막","color":0xA85A42,"tagline":"모래폭풍 속 이동과 자원 확보에 특화된 유목 거점","briefing":"날씨·원정·생활 활동의 위험과 보상을 거친 탐사 기록으로 정리합니다."},
+    "침수지하철": {"group":"아포칼립스","emoji":"🚇","title":"침수 지하철","color":0x315F75,"tagline":"물에 잠긴 노선을 따라 생존자를 연결하는 지하 거점","briefing":"이동·무전·스토리·위험구역 정보를 노선 관제판처럼 표시합니다."},
+    "설원벙커": {"group":"아포칼립스","emoji":"❄️","title":"설원 벙커","color":0x6A8297,"tagline":"극저온 한파를 버티는 폐쇄형 방어 거점","briefing":"기지 방어·식량·장비 내구도와 체력 상태를 보급 장부 형식으로 정리합니다."},
+    "무너진방벽": {"group":"아포칼립스","emoji":"🧱","title":"무너진 방벽","color":0x7C6758,"tagline":"끊어진 방어선을 복구하는 최전선 요새","briefing":"전투·레이드·기지 강화와 공동 목표를 전선 상황판처럼 표시합니다."},
+    "밤의시장": {"group":"아포칼립스","emoji":"🌃","title":"밤의 시장","color":0x674C83,"tagline":"희귀 물자와 소문이 오가는 암시장 생존 테마","briefing":"거래·까마귀 상점·우편·보물 감정을 야시장 전광판처럼 정리합니다."},
+    "신호관측소": {"group":"아포칼립스","emoji":"📡","title":"신호 관측소","color":0x486D91,"tagline":"날씨와 통신 교란을 감시하는 고지대 관측 거점","briefing":"날씨 변화·SOS·서버 이벤트의 남은 시간을 신호 분석표처럼 표시합니다."},
+
+    # 깔끔 / 고딕
+    "깔끔고딕": {"group":"깔끔고딕","emoji":"♜","title":"깔끔 고딕","color":0x4B4458,"tagline":"장식을 덜어낸 흑백 고딕 성역","briefing":"검정·회색·은색 중심의 정돈된 문장과 최소한의 장식으로 브리핑합니다."},
+    "순백성당": {"group":"깔끔고딕","emoji":"🤍","title":"순백 성당","color":0xB8B7C8,"tagline":"밝은 석조와 은빛 유리의 깨끗한 성역","briefing":"경고는 선명하게, 일반 안내는 밝고 차분한 문구로 표시합니다."},
+    "은빛도서관": {"group":"깔끔고딕","emoji":"📖","title":"은빛 도서관","color":0x7D8397,"tagline":"차가운 은색과 잉크색 기록실","briefing":"임무·기록·도감 정보를 서고 색인처럼 정갈하게 정리합니다."},
+    "왕실무도회": {"group":"깔끔고딕","emoji":"👑","title":"왕실 무도회","color":0x8B658B,"tagline":"보랏빛 벨벳과 금장 장식의 우아한 성역","briefing":"서버 이벤트와 보상을 초대장·연회 공지처럼 표현합니다."},
+
+    # 화사 / 자연
+    "벚꽃정원": {"group":"화사자연","emoji":"🌸","title":"벚꽃 정원","color":0xE58FA8,"tagline":"분홍 꽃잎이 흐르는 밝은 휴식 거점","briefing":"오늘 할 일·운세·펫·생활 정보를 부드럽고 따뜻한 문구로 안내합니다."},
+    "라벤더문": {"group":"화사자연","emoji":"🪻","title":"라벤더 문","color":0x9C85D8,"tagline":"라벤더빛 밤하늘과 은은한 달빛 테마","briefing":"스토리·보물·펫 정보를 몽환적이지만 읽기 쉬운 색상으로 표시합니다."},
+    "민트온실": {"group":"화사자연","emoji":"🌿","title":"민트 온실","color":0x62BFA7,"tagline":"초록 유리와 맑은 민트빛 생존 정원","briefing":"채집·날씨·회복·기지 생산 정보를 산뜻한 연구 노트처럼 정리합니다."},
+    "해변리조트": {"group":"화사자연","emoji":"🏖️","title":"해변 리조트","color":0x4BAFD1,"tagline":"푸른 바다와 햇빛이 있는 여유로운 서버 테마","briefing":"낚시·지원·이벤트 정보를 밝고 시원한 안내판처럼 표시합니다."},
+    "천공정원": {"group":"화사자연","emoji":"☁️","title":"천공 정원","color":0x79A9E8,"tagline":"구름 위 흰 정원과 푸른 하늘의 테마","briefing":"브리핑·퀘스트·성장 정보를 가볍고 맑은 색으로 정리합니다."},
+    "황금들판": {"group":"화사자연","emoji":"🌾","title":"황금 들판","color":0xD6A84E,"tagline":"햇살과 수확의 온기를 담은 생활 중심 테마","briefing":"생활 보상·기지 생산·시장 변동을 따뜻한 수확 기록처럼 표시합니다."},
+
+    # 모던 / 판타지
+    "코발트시티": {"group":"모던판타지","emoji":"🔷","title":"코발트 시티","color":0x3F6FD1,"tagline":"파란 유리와 정돈된 도시형 대시보드","briefing":"전투·거래·상태 정보를 명확한 블루 패널 스타일로 정리합니다."},
+    "네온아카데미": {"group":"모던판타지","emoji":"💠","title":"네온 아카데미","color":0xB53CDD,"tagline":"보라·청록 네온이 빛나는 마법 공학 학교","briefing":"미니게임·개조·연구 기능을 생동감 있는 실험실 공지처럼 표시합니다."},
+    "별빛극장": {"group":"모던판타지","emoji":"🎭","title":"별빛 극장","color":0x6A5AD7,"tagline":"별과 무대 조명이 흐르는 이야기 중심 테마","briefing":"스토리·원정·시즌 이벤트를 공연 순서표처럼 드라마틱하게 정리합니다."},
+    "아르데코": {"group":"모던판타지","emoji":"◆","title":"아르데코","color":0xB78A3A,"tagline":"검정과 금색의 기하학적 고급 테마","briefing":"거래·장비·보물·패치노트를 간결한 금장 패널로 표시합니다."},
+    "마법학원": {"group":"모던판타지","emoji":"🪄","title":"마법 학원","color":0x596AC8,"tagline":"푸른 마력과 고서가 공존하는 판타지 캠퍼스","briefing":"강화·제작·펫·퀘스트를 수업·연구 과제처럼 즐겁게 안내합니다."},
+    "달빛서재": {"group":"모던판타지","emoji":"🌙","title":"달빛 서재","color":0x5B5E9B,"tagline":"남색 밤과 따뜻한 책등이 어우러진 조용한 테마","briefing":"대화·기억·도감·업데이트 기록을 편안한 독서 기록처럼 정리합니다."},
+}
+THEME_GROUPS: Dict[str, Tuple[str, ...]] = {
+    "아포칼립스": tuple(k for k,v in THEMES.items() if v.get("group") == "아포칼립스"),
+    "깔끔고딕": tuple(k for k,v in THEMES.items() if v.get("group") == "깔끔고딕"),
+    "화사자연": tuple(k for k,v in THEMES.items() if v.get("group") == "화사자연"),
+    "모던판타지": tuple(k for k,v in THEMES.items() if v.get("group") == "모던판타지"),
 }
 DEFAULT_THEME = "검은성당"
 
@@ -36,12 +65,12 @@ STABILITY_GUIDE = {
     "id": "stability_theme",
     "emoji": "🧰",
     "title": "안정화 / 서버 테마",
-    "hint": "통합 점검, 오늘 할 일, 서버 브리핑, 12종 서버 테마",
+    "hint": "통합 점검, 오늘 할 일, 서버 브리핑, 28종 서버 테마",
     "commands": [
         "!안정화상태 — 현재 버전·데이터·명령어·텍스트 우선 정책 확인",
         "!오늘할일 — 출석·운세·퀴즈·생활·전투 추천 체크리스트",
         "!서버브리핑 — 날씨·위험구역·보급선·기지방어를 한 화면에 요약",
-        "!서버테마 — 12종 서버 테마 목록과 현재 설정 확인",
+        "!서버테마 [전체/아포칼립스/깔끔고딕/화사자연/모던판타지] — 28종 테마 확인",
         "!서버테마미리보기 [테마명] — 텍스트형 테마를 적용 전 확인",
         "!서버테마설정 테마명 — 관리자가 서버 브리핑 테마 변경",
         "!데이터백업 — 관리자가 현재 생존 데이터를 수동 백업",
@@ -241,7 +270,7 @@ def register_v641_stabilization(
     async def stabilization_status(ctx: commands.Context) -> None:
         key, theme = _theme(world_data, _guild_id(ctx))
         embed = discord.Embed(
-            title="🧰 ABADDON v6.4.1a 안정화 상태",
+            title="🌍 ABADDON v6.5.0 월드·비주얼 상태",
             description="카지노 이미지만 비활성화하고 생활·장비·보물·제작·펫·기지·갈갈이·월드보스 이미지는 유지합니다.",
             color=int(theme["color"]),
         )
@@ -341,23 +370,36 @@ def register_v641_stabilization(
         embed.add_field(name="☣️ 돌연변이 위험구역", value=f"**{hazard.get('region', '미확인')}** · 보상 ×{float(hazard.get('reward_mult', 1.0)):.2f}", inline=True)
         embed.add_field(name="🎁 보급선", value=supply_text, inline=True)
         embed.add_field(name="🛡️ 기지 방어", value=defense_text, inline=False)
-        embed.set_footer(text=f"테마 키: {key} · 설정: !서버테마설정 테마명 · 12종 선택 가능")
+        embed.set_footer(text=f"테마 키: {key} · 설정: !서버테마설정 테마명 · {len(THEMES)}종 선택 가능")
         await ctx.send(embed=embed)
 
     @bot.command(name="서버테마", aliases=["테마목록"])
-    async def server_theme(ctx: commands.Context) -> None:
+    async def server_theme(ctx: commands.Context, *, 분류: str = "전체") -> None:
         current_key, current = _theme(world_data, _guild_id(ctx))
-        lines = []
-        for key, info in THEMES.items():
-            marker = "✅" if key == current_key else "▫️"
-            lines.append(f"{marker} {info['emoji']} **{info['title']}** — `{key}`\n└ {info['tagline']}")
+        token = str(분류 or "전체").strip().replace(" ", "")
+        aliases = {
+            "전체":"전체", "all":"전체",
+            "아포칼립스":"아포칼립스", "생존":"아포칼립스", "다크":"아포칼립스",
+            "깔끔고딕":"깔끔고딕", "고딕":"깔끔고딕", "깔끔":"깔끔고딕",
+            "화사자연":"화사자연", "화사":"화사자연", "자연":"화사자연", "밝음":"화사자연",
+            "모던판타지":"모던판타지", "모던":"모던판타지", "판타지":"모던판타지",
+        }
+        selected = aliases.get(token.lower(), aliases.get(token, "전체"))
+        groups = THEME_GROUPS if selected == "전체" else {selected: THEME_GROUPS[selected]}
         embed = discord.Embed(
-            title="🎨 ABADDON 서버 테마 12종",
-            description="\n\n".join(lines),
+            title=f"🎨 ABADDON 서버 테마 {len(THEMES)}종" + ("" if selected == "전체" else f" · {selected}"),
+            description=f"현재 테마: {current['emoji']} **{current['title']}** (`{current_key}`)\n분류: `전체` `아포칼립스` `깔끔고딕` `화사자연` `모던판타지`",
             color=int(current["color"]),
         )
-        embed.add_field(name="적용 범위", value="`!서버브리핑`·안정화 안내·향후 서버 리뉴얼 메시지의 색상과 문구", inline=False)
-        embed.add_field(name="관리자 설정", value="`!서버테마설정 테마명` · 위 목록의 키를 그대로 입력", inline=False)
+        group_icons = {"아포칼립스":"☣️", "깔끔고딕":"♜", "화사자연":"🌸", "모던판타지":"🔮"}
+        for group_name, keys in groups.items():
+            rows=[]
+            for key in keys:
+                info=THEMES[key]
+                marker="✅" if key == current_key else "▫️"
+                rows.append(f"{marker} {info['emoji']} **{info['title']}** · `{key}`")
+            embed.add_field(name=f"{group_icons.get(group_name,'🎨')} {group_name} · {len(keys)}종", value="\n".join(rows)[:1024], inline=False)
+        embed.add_field(name="사용법", value="`!서버테마 화사` · `!서버테마미리보기 벚꽃정원` · `!서버테마설정 깔끔고딕`", inline=False)
         await ctx.send(embed=embed)
 
     @bot.command(name="서버테마미리보기", aliases=["테마미리보기"])
@@ -487,7 +529,7 @@ def register_v641_stabilization(
             checks.append(("카지노 이미지 미사용", casino_disabled, "카지노만 이미지 비활성" if casino_disabled else "카지노 이미지 정책 점검 필요"))
 
             fx_source = (modules_dir / "v633_equipment_crafting.py").read_text(encoding="utf-8")
-            checks.append(("강화 이펙트 안전화", "V641A_SAFE_ENHANCEMENT_FX = True" in fx_source, "+0~+4 무효과 · 장비를 가르는 공통 사선 제거"))
+            checks.append(("강화 이펙트 안전화", "V650_SAFE_ENHANCEMENT_FX = True" in fx_source, "+0~+4 원본 픽셀 유지 · 바깥 여백 전용 FX · 공통 사선 0개"))
 
             arcade_source = (modules_dir / "v638_hardcore_arcade.py").read_text(encoding="utf-8")
             checks.append(("버튼 네트워크 재시도", "_safe_interaction_edit" in arcade_source, "Connection reset 1회 재시도·상태 저장 유지"))
@@ -497,12 +539,12 @@ def register_v641_stabilization(
             checks.append(("월드보스 이미지 예외", bool(boss_images), f"{len(boss_images)}개 유지" if boss_images else "월드보스 이미지 없음"))
 
             theme_ok = _guild_state(world_data, _guild_id(ctx)).get("theme") in THEMES
-            checks.append(("서버 테마 상태", theme_ok and len(THEMES) >= 12, f"현재 {_guild_state(world_data, _guild_id(ctx)).get('theme')} · 총 {len(THEMES)}종"))
+            checks.append(("서버 테마 상태", theme_ok and len(THEMES) >= 28, f"현재 {_guild_state(world_data, _guild_id(ctx)).get('theme')} · 총 {len(THEMES)}종"))
 
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v6.4.1a 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v6.5.0 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -516,31 +558,32 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v6.4.1a 명령어·가이드·데이터·이미지 복구·강화 효과·네트워크 재시도를 읽기 전용으로 검사합니다."
+        previous_test.help = "v6.5.0 명령어·가이드·데이터·이미지 복구·강화 효과·네트워크 재시도를 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🧰 ABADDON v6.4.1a — 선택형 이미지 복구·강화 이펙트 수정",
-                description="카지노만 이미지 없이 유지하고 나머지 핵심 콘텐츠 이미지를 복구했습니다. 진행 상태는 이모지 바와 퍼센트로 보강했습니다.",
+                title="🌍 ABADDON v6.5.0 — 월드·비주얼·테마 리뉴얼",
+                description="카지노만 이미지 없이 유지하고 나머지 핵심 이미지는 화면 비율에 맞게 복구했습니다. 기지 화질, 강화 FX, 28종 서버 테마와 홈페이지 반응형 배치를 함께 정리했습니다.",
                 color=discord.Color.dark_teal(),
             )
             embed.add_field(name="🖼️ 이미지 복구", value="생활·장비·보물·제작·펫·기지·갈갈이·월드보스 이미지 복구 · 카지노만 미사용", inline=False)
-            embed.add_field(name="✨ 강화 이펙트", value="+0~+4 무효과 · +5 테두리 · +10 오라 · +15 속성 입자 · +20 초월 효과 · 카드 전체 사선 제거", inline=False)
+            embed.add_field(name="✨ 강화 이펙트", value="+0~+4 원본 유지 · +5 테두리 · +10 외곽 광점 · +15 계열별 모서리 효과 · +20 초월 룬 · 중앙 사선/레이저 제거", inline=False)
             embed.add_field(name="📊 이모지 진행 효과", value="날씨·기지 방어·오늘 할 일·지뢰찾기·장비 강화에 퍼센트와 이모지 게이지 표시", inline=False)
-            embed.add_field(name="🎨 서버 테마", value=f"기존 테마를 줄이지 않고 **{len(THEMES)}종**으로 확장", inline=False)
+            embed.add_field(name="🎨 서버 테마", value=f"기존 생존 테마를 유지하고 깔끔·고딕·화사·모던 계열까지 **{len(THEMES)}종**으로 확장", inline=False)
             embed.add_field(name="🌐 버튼 오류 대응", value="Discord/Render 연결 초기화 시 메시지 편집을 한 번 재시도하고 저장된 게임 상태는 유지", inline=False)
             embed.add_field(name="📚 명령어 드롭다운", value="안정화/서버 테마 카테고리와 최근 추가 기능 전수 검사 유지", inline=False)
-            embed.set_footer(text="최신 버전 v6.4.1a · 향후 이미지 정책 변경은 배포 전 확인")
+            embed.set_footer(text="최신 버전 v6.5.0 · 카지노만 이미지 미사용 · 홈페이지 동시 패치")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v6.4.1a 선택형 이미지 복구·강화 이펙트·서버 테마·버튼 오류 수정 내용을 확인합니다."
+        patch.help = "ABADDON v6.5.0 선택형 이미지 복구·강화 이펙트·서버 테마·버튼 오류 수정 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION
+    bot.v650_version = VERSION
     bot.v641_themes = THEMES
     bot.v641_text_first = False
     bot.v641_selective_visuals = True

@@ -5,7 +5,6 @@ import io
 import json
 import hashlib
 import math
-import math
 import random
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
@@ -21,7 +20,7 @@ except ModuleNotFoundError:
 
 from apocalypse_bot.commands import v432_forge_live as forge
 
-VERSION = "6.3.3"
+VERSION = "6.5.0"
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v633"
 
 
@@ -56,6 +55,7 @@ GRADE_TO_TIER = {
     "A": "전설",
 }
 
+V650_SAFE_ENHANCEMENT_FX = True
 V641A_SAFE_ENHANCEMENT_FX = True
 
 MODE_LABELS = {
@@ -133,130 +133,128 @@ def _unique_accent(item_name: str, base: tuple[int, int, int]) -> tuple[int, int
 
 
 def _draw_equipment_effects(image: Image.Image, *, item_name: str, level: int, tier: str, accent: tuple[int, int, int]) -> Image.Image:
-    """강화 단계가 높을수록 장비 주변만 밝아지는 안전한 후처리.
+    """v6.5.0 강화 외형.
 
-    카드 전체를 가로지르는 사선/레이저는 사용하지 않습니다. +0~+4는 원본 그대로,
-    +5부터 테두리, +10부터 오라, +15부터 속성 입자, +20에서 초월 효과를 표시합니다.
+    +0~+4는 원본 픽셀을 그대로 반환합니다. 이후 효과도 카드 중앙의 장비를 가로지르지 않고
+    바깥 여백·테두리·모서리에만 배치합니다. 몽둥이 같은 근접 장비에는 금속성 금빛 효과만
+    사용하며 초록 레이저나 공통 대각선 오버레이는 절대 그리지 않습니다.
     """
-    level = max(0, int(level))
+    level = max(0, min(20, int(level)))
     if level < 5:
         return image
 
     profile = _effect_profile(item_name)
     phase = 1 if level < 10 else 2 if level < 15 else 3 if level < 20 else 4
-    rng = random.Random(f"v641a-safe-fx:{item_name}:{level}:{tier}")
+    rng = random.Random(f"v650-edge-fx:{item_name}:{level}:{tier}")
     palette = {
-        "electric": (80, 210, 255),
-        "fire": (255, 118, 48),
-        "void": (174, 92, 255),
-        "bio": (108, 220, 132),
-        "defense": (170, 205, 235),
-        "precision": (92, 170, 255),
-        "blade": (235, 196, 118),
-        "rune": (200, 150, 255),
+        "electric": (77, 194, 255),
+        "fire": (255, 112, 42),
+        "void": (172, 87, 255),
+        "bio": (99, 210, 127),
+        "defense": (173, 207, 235),
+        "precision": (94, 165, 255),
+        "blade": (238, 194, 105),
+        "rune": (205, 151, 255),
     }
-    profile_color = palette.get(profile, palette["rune"])
-    # 등급색은 20%만 섞어, 일반 근접 장비가 초록 레이저처럼 보이지 않게 합니다.
-    color = tuple(int(profile_color[i] * 0.8 + accent[i] * 0.2) for i in range(3))
+    base_color = palette.get(profile, palette["rune"])
+    # 등급색은 아주 약하게만 섞어 장비 계열색을 망치지 않습니다.
+    color = tuple(int(base_color[i] * 0.92 + accent[i] * 0.08) for i in range(3))
     width, height = image.size
-    cx, cy = width // 2, int(height * 0.47)
+    result = image.copy()
 
-    glow = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    gdraw = ImageDraw.Draw(glow, "RGBA")
-    rx, ry = int(width * 0.24), int(height * 0.35)
-    for i in range(phase + 1):
-        pad = i * 18
-        alpha = 38 + phase * 14 - i * 5
-        gdraw.ellipse((cx-rx-pad, cy-ry-pad, cx+rx+pad, cy+ry+pad), outline=(*color, max(20, alpha)), width=6)
-    glow = glow.filter(ImageFilter.GaussianBlur(18 + phase * 3))
-    result = Image.alpha_composite(image, glow)
+    # 바깥 프레임 광원: 중앙 피사체와 겹치지 않는 링 마스크.
+    outer = Image.new("RGBA", image.size, (0,0,0,0))
+    od = ImageDraw.Draw(outer, "RGBA")
+    frame_alpha = 72 + phase * 18
+    for idx in range(phase):
+        inset = 15 + idx * 7
+        od.rounded_rectangle(
+            (inset, inset, width-inset-1, height-inset-1),
+            radius=28,
+            outline=(*color, min(190, frame_alpha + idx * 12)),
+            width=2 + idx,
+        )
+    # 네 모서리의 짧은 룬 표식. 대각선은 카드 안쪽으로 길게 뻗지 않습니다.
+    corner_len = 34 + phase * 8
+    for x,y,sx,sy in ((28,28,1,1),(width-28,28,-1,1),(28,height-28,1,-1),(width-28,height-28,-1,-1)):
+        od.line((x, y, x+sx*corner_len, y), fill=(*color, 150), width=3)
+        od.line((x, y, x, y+sy*corner_len), fill=(*color, 150), width=3)
+    blurred = outer.filter(ImageFilter.GaussianBlur(8 + phase*2))
+    result = Image.alpha_composite(result, blurred)
+    result = Image.alpha_composite(result, outer)
 
-    fx = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    fx = Image.new("RGBA", image.size, (0,0,0,0))
     draw = ImageDraw.Draw(fx, "RGBA")
 
-    # +5: 얇은 프레임만. 강화 전 원본과 명확히 구분되되 장비를 가리지 않습니다.
-    for i in range(phase):
-        inset = 18 + i * 9
-        draw.rounded_rectangle(
-            (inset, inset, width-inset, height-inset),
-            radius=26,
-            outline=(*color, 70 + i * 24),
-            width=2 + i,
-        )
+    # 모든 입자는 바깥 안전 구역에만 생성합니다.
+    def edge_point() -> tuple[int,int]:
+        edge = rng.choice(("top","bottom","left","right"))
+        if edge == "top":
+            return rng.randint(70,width-70), rng.randint(34,95)
+        if edge == "bottom":
+            return rng.randint(70,width-70), rng.randint(height-95,height-34)
+        if edge == "left":
+            return rng.randint(34,135), rng.randint(80,height-80)
+        return rng.randint(width-135,width-34), rng.randint(80,height-80)
 
-    # +10: 장비 중심 주변의 짧은 광점. 화면을 가로지르는 선은 금지합니다.
     if phase >= 2:
-        for _ in range(16 + phase * 5):
-            angle = rng.random() * math.tau
-            radius_x = rng.randint(int(rx * 0.75), int(rx * 1.12))
-            radius_y = rng.randint(int(ry * 0.68), int(ry * 1.05))
-            x = cx + int(math.cos(angle) * radius_x)
-            y = cy + int(math.sin(angle) * radius_y)
-            r = rng.randint(1, 4)
-            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*color, rng.randint(90, 205)))
+        for _ in range(12 + phase * 6):
+            x,y = edge_point()
+            r = rng.randint(2,4)
+            draw.ellipse((x-r,y-r,x+r,y+r), fill=(*color,rng.randint(105,205)))
 
-    # +15: 장비 종류별 짧고 국소적인 심볼 효과.
     if phase >= 3:
         if profile == "electric":
-            for _ in range(7):
-                x = rng.randint(cx-rx, cx+rx)
-                y = rng.randint(cy-ry, cy+ry)
-                pts = [(x, y), (x+rng.randint(-14, 14), y+18), (x+rng.randint(-12, 12), y+35)]
-                draw.line(pts, fill=(*color, 170), width=3)
+            for side_x in (72, width-72):
+                for j in range(3):
+                    y = 155 + j*150 + rng.randint(-20,20)
+                    pts=[(side_x,y),(side_x+rng.choice((-14,14)),y+18),(side_x,y+38)]
+                    draw.line(pts, fill=(*color,185), width=3)
         elif profile == "fire":
             for _ in range(18):
-                x = rng.randint(cx-rx, cx+rx)
-                y = rng.randint(cy+ry//4, cy+ry)
-                r = rng.randint(2, 6)
-                draw.ellipse((x-r, y-r*2, x+r, y+r), fill=(*color, rng.randint(90, 190)))
+                x = rng.randint(110,width-110); y = rng.randint(height-105,height-48)
+                r = rng.randint(2,5)
+                draw.ellipse((x-r,y-r*2,x+r,y+r), fill=(*color,rng.randint(110,195)))
         elif profile == "void":
-            for i in range(3):
-                r = 90 + i * 42
-                draw.arc((cx-r, cy-r, cx+r, cy+r), 210+i*15, 510-i*10, fill=(*color, 140+i*18), width=4)
+            for cx,cy in ((92,92),(width-92,92),(92,height-92),(width-92,height-92)):
+                for rad in (34,48):
+                    draw.arc((cx-rad,cy-rad,cx+rad,cy+rad), 25, 315, fill=(*color,165), width=3)
         elif profile == "bio":
-            for _ in range(13):
-                x = rng.randint(cx-rx, cx+rx)
-                y = rng.randint(cy-ry, cy+ry)
-                r = rng.randint(3, 8)
-                draw.ellipse((x-r, y-r, x+r, y+r), outline=(*color, 145), width=2)
+            for _ in range(14):
+                x,y=edge_point(); rx=rng.randint(3,7); ry=rng.randint(6,12)
+                draw.ellipse((x-rx,y-ry,x+rx,y+ry), outline=(*color,165), width=2)
         elif profile == "defense":
-            shield = [(cx, cy-180), (cx+145, cy-85), (cx+120, cy+120), (cx, cy+190), (cx-120, cy+120), (cx-145, cy-85)]
-            draw.line(shield + [shield[0]], fill=(*color, 145), width=5)
+            for cx in (86,width-86):
+                shield=[(cx,270),(cx+28,288),(cx+22,334),(cx,354),(cx-22,334),(cx-28,288)]
+                draw.line(shield+[shield[0]], fill=(*color,170), width=3)
         elif profile == "precision":
-            r = 105
-            draw.ellipse((cx-r, cy-r, cx+r, cy+r), outline=(*color, 145), width=4)
-            for dx, dy in ((0,-145), (145,0), (0,145), (-145,0)):
-                draw.line((cx+dx*0.72, cy+dy*0.72, cx+dx, cy+dy), fill=(*color, 150), width=4)
+            for cx in (82,width-82):
+                cy=height//2; rad=34
+                draw.ellipse((cx-rad,cy-rad,cx+rad,cy+rad), outline=(*color,175), width=3)
+                draw.line((cx-rad-14,cy,cx-rad+8,cy), fill=(*color,175), width=3)
+                draw.line((cx+rad-8,cy,cx+rad+14,cy), fill=(*color,175), width=3)
         elif profile == "blade":
-            # 몽둥이·칼·도끼는 짧은 금속 반짝임만 사용합니다.
-            for _ in range(11):
-                x = rng.randint(cx-rx, cx+rx)
-                y = rng.randint(cy-ry, cy+ry)
-                length = rng.randint(8, 18)
-                draw.line((x-length, y, x+length, y), fill=(*color, 155), width=2)
-                draw.line((x, y-length, x, y+length), fill=(*color, 155), width=2)
+            # 짧은 금속성 별빛만. 장비 위를 가로지르는 선은 없음.
+            for _ in range(12):
+                x,y=edge_point(); ln=rng.randint(5,11)
+                draw.line((x-ln,y,x+ln,y), fill=(*color,180), width=2)
+                draw.line((x,y-ln,x,y+ln), fill=(*color,180), width=2)
         else:
-            for i in range(10):
-                angle = i / 10 * math.tau
-                x = cx + int(math.cos(angle) * 205)
-                y = cy + int(math.sin(angle) * 165)
-                draw.polygon([(x, y-6), (x+5, y), (x, y+6), (x-5, y)], fill=(*color, 155))
+            for _ in range(12):
+                x,y=edge_point()
+                draw.polygon([(x,y-5),(x+4,y),(x,y+5),(x-4,y)], fill=(*color,175))
 
-    # +20: 초월 단계는 외곽 별빛을 추가하되 원본 피사체 위를 덮지 않습니다.
     if phase >= 4:
-        for _ in range(24):
-            edge = rng.choice(("top", "bottom", "left", "right"))
-            if edge in {"top", "bottom"}:
-                x = rng.randint(55, width-55)
-                y = rng.randint(35, 95) if edge == "top" else rng.randint(height-95, height-35)
-            else:
-                x = rng.randint(35, 95) if edge == "left" else rng.randint(width-95, width-35)
-                y = rng.randint(55, height-55)
-            r = rng.randint(2, 5)
-            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*color, rng.randint(140, 230)))
+        gold = (255,215,126)
+        # 최종 단계는 바깥 원형 문양과 별빛을 추가합니다. 중앙 카드에는 선을 긋지 않습니다.
+        for cx,cy in ((90,90),(width-90,90),(90,height-90),(width-90,height-90)):
+            draw.ellipse((cx-48,cy-48,cx+48,cy+48), outline=(*gold,185), width=3)
+            draw.ellipse((cx-32,cy-32,cx+32,cy+32), outline=(*color,170), width=2)
+        for _ in range(26):
+            x,y=edge_point(); r=rng.randint(2,5)
+            draw.ellipse((x-r,y-r,x+r,y+r), fill=(*gold,rng.randint(145,230)))
 
-    return Image.alpha_composite(result, fx.filter(ImageFilter.GaussianBlur(0.45)))
-
+    return Image.alpha_composite(result, fx.filter(ImageFilter.GaussianBlur(0.35)))
 
 def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, discovered: bool = False, item_name: str = "") -> bytes:
     image = Image.open(path).convert("RGBA").resize((1280, 720), Image.Resampling.LANCZOS)
@@ -349,7 +347,7 @@ async def send_equipment_visual(
     if stats_text:
         embed.add_field(name="능력치", value=stats_text[:1024], inline=False)
     embed.set_image(url=f"attachment://{file.filename}")
-    embed.set_footer(text="ABADDON EQUIPMENT VISUALS v6.4.1a · 강화할수록 문양·광원·오라·실루엣이 확장됩니다")
+    embed.set_footer(text="ABADDON EQUIPMENT VISUALS v6.5.0 · 강화할수록 문양·광원·오라·실루엣이 확장됩니다")
     return await ctx.send(embed=embed, file=file)
 
 
@@ -428,7 +426,7 @@ def register_v633_equipment_crafting(
     if existing_guide is not None:
         async def v633_forge_guide(ctx: commands.Context) -> None:
             await ctx.send(
-                "✨ **[ABADDON 장비 외형 진화 v6.4.1a]**\n"
+                "✨ **[ABADDON 장비 외형 진화 v6.5.0]**\n"
                 "강화 단계가 높아질수록 장비 실루엣·룬 문양·광원·오라·에너지 날개가 순서대로 확장됩니다.\n"
                 "외형 변화: **+5 단련 · +7 광휘 · +10 종말 · +12 심연 · +15 아바돈 · +18 경계 · +20 공허 초월**\n"
                 "성공·실패·단계 하락은 서로 다른 균열과 광원으로 표시됩니다.\n"
