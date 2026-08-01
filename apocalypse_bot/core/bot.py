@@ -5187,6 +5187,13 @@ register_v637_dynamic_events(
     ITEM_DB, find_item, get_item_slot, calculate_user_power,
 )
 
+# V6.3.8: 하드코어 생존 아케이드·협동 금고·동의형 고위험 결투·명령어 가이드 정리
+from apocalypse_bot.commands.v638_hardcore_arcade import register_v638_hardcore_arcade
+register_v638_hardcore_arcade(
+    bot, get_user, check_registered, save_data, world_data,
+    ITEM_DB, calculate_user_power, get_pet_power, COMMAND_GUIDE_CATEGORIES,
+)
+
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
