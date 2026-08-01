@@ -74,8 +74,7 @@ def casino_asset(title: str, description: str, delta: int, bet: int) -> Path:
 
 
 def apply_casino_visual(embed: discord.Embed, title: str, description: str, delta: int, bet: int) -> Optional[discord.File]:
-    game, reaction = casino_reaction(title, description, delta, bet)
-    return attach_asset(embed, casino_asset(title, description, delta, bet), f"casino_{game}_{reaction}")
+    return None
 
 
 def base_stage_asset(level: int) -> Path:
