@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "6.3.2"
+VERSION = "6.3.7"
 MENU_TIMEOUT = 300
 STORY3_START_NODE = "eclipse_signal"
 
@@ -87,6 +87,11 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("craft_list", "제작 목록", "제작 가능한 아이템을 확인합니다.", "제작목록"),
             _a("craft", "아이템 제작", "아이템 이름을 입력해 제작합니다.", "제작", "예: 응급 키트", force_modal=True),
             _a("new_gear", "신규 장비 도감", "최신 추가 장비를 티어별로 확인합니다.", "신규장비", "선택: 티어 예) 7", force_modal=False),
+            _a("durability", "무기 내구도", "장착 무기의 내구도와 현재 출력·개조 부품을 확인합니다.", "내구도", "선택: 장비명", force_modal=False),
+            _a("repair_weapon", "무기 수리", "수리 키트와 자원을 사용해 무기 내구도를 복구합니다.", "무기수리", "선택: 장비명", force_modal=False),
+            _a("mod_list", "개조 부품 목록", "제작·장착 가능한 무기 부품 6종을 확인합니다.", "개조목록"),
+            _a("craft_mod", "개조 부품 제작", "부품명을 입력해 개조 부품을 제작합니다.", "개조부품제작", "예: 소음기", force_modal=True),
+            _a("install_mod", "무기 개조", "보유 무기에 제작한 부품을 장착합니다.", "무기개조", "예: 개조소총 소음기", force_modal=True),
             _a("economy_balance", "경제 밸런스 안내", "현재 성장·가격 밸런스를 확인합니다.", "경제밸런스"),
             _a("enhance_rank", "강화 랭킹", "서버 내 강화 기록 랭킹을 확인합니다.", "강화랭킹"),
         ),
@@ -176,7 +181,11 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("base_build", "기지 건설", "기지가 없다면 새로 건설합니다.", "기지건설"),
             _a("base_upgrade", "기지 강화", "재료를 사용해 기지를 강화합니다.", "기지강화"),
             _a("base_collect", "기지 수확", "누적된 기지 생산물을 수확합니다.", "기지수확"),
-            _a("weather", "종말 날씨", "현재 인게임 날씨와 생활·전투 보정을 확인합니다.", "날씨"),
+            _a("weather", "종말 날씨", "서버별 2~5시간 랜덤 주기의 12종 날씨와 생활·전투 보정을 확인합니다.", "날씨"),
+            _a("daily_fortune", "오늘의 운세", "매일 바뀌는 운세·행운 아이템·소폭 보정을 확인합니다.", "오늘의", "운세", force_modal=False),
+            _a("radio_signal", "생존자 무전", "현재 환경 구간의 SOS 신호를 버튼으로 해독합니다.", "무전"),
+            _a("hazard_zone", "돌연변이 구역", "오늘의 고위험·고보상 지역을 확인합니다.", "위험구역"),
+            _a("random_box", "대형 랜덤박스", "식량으로 하루 최대 3개의 대형 보급 상자를 엽니다.", "랜덤박스", "예: 1", force_modal=True),
             _a("base_defense", "기지 방어", "주간 서버 협동 방어전 상태를 확인합니다.", "기지방어"),
             _a("base_defense_attack", "기지 방어 공격", "기지 레벨과 장비 전투력으로 방어전에 참가합니다.", "기지방어공격"),
             _a("resource_market", "자원 시장", "나무·광석·고철의 변동 가격을 확인합니다.", "자원시장"),

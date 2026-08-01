@@ -9,32 +9,65 @@ from typing import Any, Dict, Optional, Tuple
 import discord
 from discord.ext import commands
 
-VERSION = "6.3.6"
+from apocalypse_bot.commands.v637_dynamic_events import (
+    active_fortune_modifiers,
+    consume_weapon_durability,
+    weapon_action_multiplier,
+    weapon_durability_status,
+)
+
+VERSION = "6.3.7"
+KST = timezone(timedelta(hours=9))
+WEATHER_INTERVAL_HOURS = (2, 3, 4, 5)
 
 WEATHER_TABLE = (
     {
-        "id": "clear", "emoji": "☀️", "name": "맑음", "desc": "시야와 이동이 안정적입니다.",
+        "id": "clear", "emoji": "☀️", "name": "맑음", "desc": "시야와 이동이 안정적입니다.", "weight": 16,
         "life_reward": 1.08, "life_fail": 0.00, "rare_bonus": 0.01, "combat": 1.04, "slot_luck": 1.00,
     },
     {
-        "id": "fog", "emoji": "🌫️", "name": "독성 안개", "desc": "시야가 좁아지고 채집 사고 위험이 증가합니다.",
+        "id": "tailwind", "emoji": "🍃", "name": "생존 순풍", "desc": "먼지가 가라앉고 이동 경로가 선명해집니다.", "weight": 10,
+        "life_reward": 1.12, "life_fail": 0.00, "rare_bonus": 0.018, "combat": 1.06, "slot_luck": 1.00,
+    },
+    {
+        "id": "fog", "emoji": "🌫️", "name": "독성 안개", "desc": "시야가 좁아지고 채집 사고 위험이 증가합니다.", "weight": 12,
         "life_reward": 0.95, "life_fail": 0.10, "rare_bonus": 0.00, "combat": 0.92, "slot_luck": 1.00,
     },
     {
-        "id": "rain", "emoji": "🌧️", "name": "산성 폭우", "desc": "야외 활동이 어려워지지만 희귀 잔해가 드러납니다.",
+        "id": "rain", "emoji": "🌧️", "name": "산성 폭우", "desc": "야외 활동이 어려워지지만 희귀 잔해가 드러납니다.", "weight": 10,
         "life_reward": 0.90, "life_fail": 0.14, "rare_bonus": 0.035, "combat": 0.90, "slot_luck": 1.00,
     },
     {
-        "id": "cold", "emoji": "❄️", "name": "극저온 한파", "desc": "스태미나 소모와 전투 부담이 커집니다.",
+        "id": "cold", "emoji": "❄️", "name": "극저온 한파", "desc": "스태미나 소모와 전투 부담이 커집니다.", "weight": 8,
         "life_reward": 0.88, "life_fail": 0.08, "rare_bonus": 0.02, "combat": 0.88, "slot_luck": 1.00,
     },
     {
-        "id": "storm", "emoji": "⚡", "name": "방사능 폭풍", "desc": "전자 장비와 생체 신호가 불안정해집니다.",
+        "id": "storm", "emoji": "⚡", "name": "방사능 폭풍", "desc": "전자 장비와 생체 신호가 불안정해집니다.", "weight": 7,
         "life_reward": 1.12, "life_fail": 0.18, "rare_bonus": 0.05, "combat": 0.86, "slot_luck": 1.02,
     },
     {
-        "id": "blood_moon", "emoji": "🌑", "name": "블러드 문", "desc": "적이 강해지고 카지노의 희귀 결과가 아주 조금 상승합니다.",
+        "id": "blood_moon", "emoji": "🌑", "name": "블러드 문", "desc": "적이 강해지고 카지노의 희귀 결과가 아주 조금 상승합니다.", "weight": 5,
         "life_reward": 1.02, "life_fail": 0.06, "rare_bonus": 0.025, "combat": 0.94, "slot_luck": 1.12,
+    },
+    {
+        "id": "dust", "emoji": "🌪️", "name": "철분 모래폭풍", "desc": "금속성 모래가 장비를 마모시키지만 광물 잔해가 쌓입니다.", "weight": 8,
+        "life_reward": 1.06, "life_fail": 0.12, "rare_bonus": 0.025, "combat": 0.90, "slot_luck": 1.00,
+    },
+    {
+        "id": "ash", "emoji": "🌋", "name": "화산재 낙진", "desc": "검은 재가 하늘을 덮습니다. 호흡과 시야가 불안정합니다.", "weight": 6,
+        "life_reward": 0.94, "life_fail": 0.11, "rare_bonus": 0.04, "combat": 0.89, "slot_luck": 1.00,
+    },
+    {
+        "id": "spore_bloom", "emoji": "🍄", "name": "포자 개화", "desc": "변이 식생이 폭발적으로 번져 생체 재료가 풍부해집니다.", "weight": 6,
+        "life_reward": 1.15, "life_fail": 0.16, "rare_bonus": 0.06, "combat": 0.87, "slot_luck": 1.00,
+    },
+    {
+        "id": "static", "emoji": "📡", "name": "전자기 교란", "desc": "무전과 센서가 흔들리며 기계 잔해가 활성화됩니다.", "weight": 7,
+        "life_reward": 1.03, "life_fail": 0.08, "rare_bonus": 0.03, "combat": 0.91, "slot_luck": 1.01,
+    },
+    {
+        "id": "eclipse", "emoji": "🌘", "name": "검은 일식", "desc": "빛이 사라지고 미확인 신호와 희귀 현상이 늘어납니다.", "weight": 5,
+        "life_reward": 1.05, "life_fail": 0.09, "rare_bonus": 0.045, "combat": 0.93, "slot_luck": 1.07,
     },
 )
 
@@ -47,23 +80,59 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _period_key(now: Optional[datetime] = None) -> int:
-    now = now or _utc_now()
-    return int(now.timestamp() // (6 * 3600))
+def _weighted_weather(rng: random.Random, previous_id: Optional[str] = None) -> Dict[str, Any]:
+    rows = [row for row in WEATHER_TABLE if row["id"] != previous_id] or list(WEATHER_TABLE)
+    total = sum(float(row.get("weight", 1.0)) for row in rows)
+    point = rng.random() * total
+    acc = 0.0
+    for row in rows:
+        acc += float(row.get("weight", 1.0))
+        if point <= acc:
+            return dict(row)
+    return dict(rows[-1])
+
+
+def _daily_weather_schedule(guild_id: int | str | None, day_key: str) -> list[Dict[str, Any]]:
+    digest = hashlib.sha256(f"abaddon-weather-v637:{guild_id or 0}:{day_key}".encode("utf-8")).digest()
+    rng = random.Random(int.from_bytes(digest[:16], "big"))
+    remaining = 24
+    start_hour = 0
+    previous_id: Optional[str] = None
+    schedule: list[Dict[str, Any]] = []
+    index = 0
+    while remaining > 0:
+        valid = [hours for hours in WEATHER_INTERVAL_HOURS if hours <= remaining and (remaining - hours == 0 or remaining - hours >= 2)]
+        duration = rng.choice(valid)
+        weather = _weighted_weather(rng, previous_id)
+        schedule.append({"index": index, "start_hour": start_hour, "end_hour": start_hour + duration, "duration": duration, "weather": weather})
+        previous_id = str(weather["id"])
+        start_hour += duration
+        remaining -= duration
+        index += 1
+    return schedule
 
 
 def get_weather_state(guild_id: int | str | None, now: Optional[datetime] = None) -> Dict[str, Any]:
-    now = now or _utc_now()
-    gid = str(guild_id or 0)
-    period = _period_key(now)
-    digest = hashlib.sha256(f"abaddon-weather:{gid}:{period}".encode("utf-8")).digest()
-    index = int.from_bytes(digest[:4], "big") % len(WEATHER_TABLE)
-    state = dict(WEATHER_TABLE[index])
-    next_at = datetime.fromtimestamp((period + 1) * 6 * 3600, tz=timezone.utc)
-    state["remaining"] = max(0, int((next_at - now).total_seconds()))
-    state["period"] = period
+    now_utc = now or _utc_now()
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    now_kst = now_utc.astimezone(KST)
+    day_key = now_kst.strftime("%Y-%m-%d")
+    schedule = _daily_weather_schedule(guild_id, day_key)
+    current_hour = now_kst.hour + now_kst.minute / 60 + now_kst.second / 3600
+    segment = next((row for row in schedule if row["start_hour"] <= current_hour < row["end_hour"]), schedule[-1])
+    state = dict(segment["weather"])
+    start_at_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(hours=int(segment["start_hour"]))
+    next_at_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(hours=int(segment["end_hour"]))
+    start_at = start_at_kst.astimezone(timezone.utc)
+    next_at = next_at_kst.astimezone(timezone.utc)
+    state["remaining"] = max(0, int((next_at - now_utc).total_seconds()))
+    state["period"] = f"{day_key}:{segment['index']}"
+    state["duration_hours"] = int(segment["duration"])
+    state["starts_at"] = start_at.isoformat()
+    state["next_at"] = next_at.isoformat()
+    state["schedule_count"] = len(schedule)
     return state
-
 
 def weather_life_modifiers(guild_id: int | str | None) -> Tuple[float, float, float, Dict[str, Any]]:
     state = get_weather_state(guild_id)
@@ -77,7 +146,7 @@ def weather_combat_multiplier(guild_id: int | str | None) -> Tuple[float, Dict[s
 
 def weather_slot_weights(guild_id: int | str | None, symbols, weights):
     state = get_weather_state(guild_id)
-    if state["id"] != "blood_moon":
+    if state["id"] not in {"blood_moon", "eclipse"}:
         return list(weights), state
     boosted = []
     for symbol, weight in zip(symbols, weights):
@@ -203,8 +272,10 @@ def register_v636_world_combat(
         embed.add_field(name="생활 획득량", value=f"**×{state['life_reward']:.2f}**", inline=True)
         embed.add_field(name="생활 실패율", value=f"**+{state['life_fail'] * 100:.0f}%p**", inline=True)
         embed.add_field(name="전투 효율", value=f"**×{state['combat']:.2f}**", inline=True)
-        embed.add_field(name="다음 변동", value=f"**{_format_duration(state['remaining'])} 후**", inline=False)
-        embed.set_footer(text="게임 내 환경 시스템이며 실제 지역 기상 정보가 아닙니다.")
+        embed.add_field(name="이번 지속 시간", value=f"**{state['duration_hours']}시간**", inline=True)
+        embed.add_field(name="다음 변동", value=f"**{_format_duration(state['remaining'])} 후**", inline=True)
+        embed.add_field(name="환경 종류", value=f"**총 {len(WEATHER_TABLE)}종**", inline=True)
+        embed.set_footer(text="서버별 2~5시간 랜덤 주기 · 게임 내 환경이며 실제 지역 기상 정보가 아닙니다.")
         await ctx.send(embed=embed)
 
     @bot.command(name="자원시장")
@@ -239,7 +310,8 @@ def register_v636_world_combat(
         user = get_user(ctx.author.id)
         guild_id = ctx.guild.id if ctx.guild else 0
         price = _resource_price(world_data, guild_id, 자원)
-        total = price * 수량
+        fortune = active_fortune_modifiers(user)
+        total = max(1, int(price * 수량 * float(fortune.get("market", 1.0))))
         if int(user.get("balance", 0)) < total:
             await ctx.send(f"⚠️ 식량이 부족합니다. 필요 **{total:,}** · 보유 **{int(user.get('balance', 0)):,}**")
             return
@@ -350,6 +422,7 @@ def register_v636_world_combat(
             damage = int(damage * 1.8)
         damage = min(damage, int(state["hp"]))
         state["hp"] = int(state["hp"]) - damage
+        weapon_state = consume_weapon_durability(user, 1)
         uid = str(ctx.author.id)
         state.setdefault("participants", {})[uid] = int(state.setdefault("participants", {}).get(uid, 0)) + damage
         message = f"🛡️ {ctx.author.mention} · 기지 Lv.{base_level} 방어포격 **{damage:,}**{' 💥' if critical else ''}\n잔여 내구도 **{state['hp']:,} / {state['max_hp']:,}**"
@@ -408,7 +481,20 @@ def register_v636_world_combat(
         )
         embed.add_field(name="생존자", value=f"❤️ {user['hp']} / {hp_max}\n`{bar(user['hp'], hp_max)}`", inline=True)
         embed.add_field(name="적", value=f"💀 {battle['enemy_hp']} / {enemy_max}\n`{bar(battle['enemy_hp'], enemy_max)}`", inline=True)
-        embed.add_field(name="상태", value=f"기술 대기 **{battle.get('skill_cd', 0)}턴**\n방어 **{'활성' if battle.get('guard') else '해제'}**", inline=True)
+        durability = weapon_durability_status(user)
+        durability_line = (
+            f"{durability['emoji']} {durability['name']} **{durability['current']}/{durability['maximum']}**"
+            if durability.get("name") else "➖ 장착 무기 없음"
+        )
+        embed.add_field(
+            name="상태",
+            value=(
+                f"기술 대기 **{battle.get('skill_cd', 0)}턴**\n"
+                f"방어 **{'활성' if battle.get('guard') else '해제'}**\n"
+                f"{durability_line}"
+            ),
+            inline=True,
+        )
         logs = battle.get("log", [])[-5:]
         if logs:
             embed.add_field(name="최근 전투 기록", value="\n".join(logs), inline=False)
@@ -417,7 +503,8 @@ def register_v636_world_combat(
 
     async def finish_victory(user: Dict[str, Any], battle: Dict[str, Any]) -> str:
         diff = battle["difficulty"]
-        reward = int(10_000 * DIFFICULTY_MULT[diff] * random.uniform(0.85, 1.20))
+        fortune = active_fortune_modifiers(user)
+        reward = int(10_000 * DIFFICULTY_MULT[diff] * random.uniform(0.85, 1.20) * float(fortune.get("reward", 1.0)))
         user["balance"] = int(user.get("balance", 0)) + reward
         user.setdefault("stats", {})["tactical_wins"] = int(user.setdefault("stats", {}).get("tactical_wins", 0)) + 1
         user.setdefault("materials", {})["전술 데이터"] = int(user.setdefault("materials", {}).get("전술 데이터", 0)) + (1 if diff in {"약함", "보통"} else 2)
@@ -441,16 +528,22 @@ def register_v636_world_combat(
         finished = False
         if action == "공격":
             crit = random.random() < 0.14
-            damage = int(power * random.uniform(0.30, 0.48) * (1.65 if crit else 1.0))
+            damage = int(power * random.uniform(0.30, 0.48) * (1.65 if crit else 1.0) * weapon_action_multiplier(user, "공격"))
             battle["enemy_hp"] = max(0, int(battle["enemy_hp"]) - damage)
+            durability = consume_weapon_durability(user, 1)
             lines.append(f"{'💥' if crit else '⚔️'} 공격 · 적 HP **-{damage}**")
+            if durability.get("name"):
+                lines.append(f"🔧 {durability['name']} 내구도 **{durability['current']} / {durability['maximum']}**")
         elif action == "기술":
             if int(battle.get("skill_cd", 0)) > 0:
                 return f"⏳ 기술 재사용까지 **{battle['skill_cd']}턴** 남았습니다.", False
-            damage = int(power * random.uniform(0.65, 0.92))
+            damage = int(power * random.uniform(0.65, 0.92) * weapon_action_multiplier(user, "기술"))
             battle["enemy_hp"] = max(0, int(battle["enemy_hp"]) - damage)
             battle["skill_cd"] = 3
+            durability = consume_weapon_durability(user, 2)
             lines.append(f"⚡ 전술 기술 · 적 HP **-{damage}**")
+            if durability.get("name"):
+                lines.append(f"🔧 {durability['name']} 내구도 **{durability['current']} / {durability['maximum']}**")
         elif action == "방어":
             battle["guard"] = True
             lines.append("🛡️ 방어 태세 · 이번 적 피해가 크게 감소합니다.")
@@ -551,14 +644,16 @@ def register_v636_world_combat(
             return
         enemy_name, mult = ENEMIES[difficulty]
         weather_mult, weather = weather_combat_multiplier(ctx.guild.id if ctx.guild else 0)
-        power = max(1, int(calculate_user_power(user)))
+        fortune = active_fortune_modifiers(user)
+        power = max(1, int(calculate_user_power(user) * float(fortune.get("combat", 1.0))))
         enemy_power = max(2, int(power * mult * random.uniform(0.88, 1.12)))
         enemy_hp = max(40, int(enemy_power * 2.4))
         battle = {
             "active": True, "mode": mode, "difficulty": difficulty, "enemy": enemy_name,
             "player_power": power, "enemy_power": enemy_power, "enemy_hp": enemy_hp,
             "enemy_max_hp": enemy_hp, "turn": 1, "skill_cd": 0, "guard": False,
-            "weather_combat": weather_mult, "weather": weather["name"], "log": [f"{weather['emoji']} {weather['name']} 속에서 교전 시작"],
+            "weather_combat": weather_mult, "weather": weather["name"], "fortune_combat": float(fortune.get("combat", 1.0)),
+            "log": [f"{weather['emoji']} {weather['name']} 속에서 교전 시작"],
         }
         user["tactical_battle"] = battle
         save_data()
@@ -601,20 +696,20 @@ def register_v636_world_combat(
     if patch is not None:
         async def patch_notes(ctx: commands.Context):
             embed = discord.Embed(
-                title="🌦️⚔️ ABADDON v6.3.6 — 환경·기지방어·전술전투",
+                title="🌦️⚔️ ABADDON v6.3.7 — 변동 환경·기지방어·전술전투",
                 description="중복 시스템을 피하고 기존 기능을 확장하는 방식으로 추가했습니다.",
                 color=discord.Color.dark_purple(),
             )
-            embed.add_field(name="🌦️ 날씨·재난", value="`!날씨` · 6시간 주기 인게임 환경 · 생활/던전/슬롯 희귀 결과에 소폭 반영", inline=False)
+            embed.add_field(name="🌦️ 날씨·재난", value="`!날씨` · 서버별 2~5시간 랜덤 주기·12종 환경 · 생활/던전/희귀 결과에 소폭 반영", inline=False)
             embed.add_field(name="🛡️ 기지 방어 레이드", value="기존 레이드와 분리된 기지 성장 연계 주간 협동전 · `!기지방어`, `!기지방어공격`", inline=False)
             embed.add_field(name="📊 자원 경제", value="기존 코인 암시장과 분리된 나무/광석/고철 변동 시장 · 식량 거래 및 카지노 칩 교환", inline=False)
             embed.add_field(name="🐾 펫 카지노 시너지", value="일부 펫이 승리 보너스 또는 손실 보호를 제공하며 효과는 작게 제한", inline=False)
             embed.add_field(name="⚔️ 전술 전투", value="RPG·스토리·던전에서 함께 쓰는 버튼형 전투 엔진 · 기존 `!던전`은 빠른 자동전투로 유지", inline=False)
             embed.add_field(name="🖼️ 장비 강화·홈페이지", value="무기 종류별 강화 이펙트와 실제 장비 기반 홈페이지 강화/제작 이미지로 교체", inline=False)
-            embed.set_footer(text="최신 버전 v6.3.6 · !명령어 드롭다운 최신화")
+            embed.set_footer(text="최신 버전 v6.3.7 · 이후 v6.3.7 통합 패치노트로 대체")
             await ctx.send(embed=embed)
         patch.callback = patch_notes
-        patch.help = "ABADDON v6.3.6 환경·기지방어·전술전투 패치 내용을 확인합니다."
+        patch.help = "ABADDON v6.3.7 환경·기지방어·전술전투 기반 패치 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v636_version = VERSION

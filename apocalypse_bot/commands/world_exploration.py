@@ -3,6 +3,10 @@ from datetime import datetime, timezone
 
 from discord.ext import commands
 
+from apocalypse_bot.commands.v637_dynamic_events import (
+    active_fortune_modifiers, consume_weapon_durability, hazard_for_region,
+)
+
 REGIONS = {
     "폐허도심": {"emoji": "🏙️", "level": 1, "stamina": 10, "danger": 1, "desc": "무너진 상가와 골목. 초보 생존자의 첫 탐색지.", "rewards": (250, 650), "materials": ["나무", "고철", "천", "스크랩"]},
     "버려진학교": {"emoji": "🏫", "level": 3, "stamina": 12, "danger": 2, "desc": "교실과 체육관에 감염자가 숨어 있다.", "rewards": (400, 900), "materials": ["천", "가죽", "약초", "볼트"]},
@@ -151,6 +155,9 @@ def register_world_commands(bot, get_user, check_registered, save_data, spend_st
             return
         user = ensure_world_user(get_user(ctx.author.id))
         info = REGIONS[user["region"]]
+        guild_id = ctx.guild.id if ctx.guild else 0
+        hazard = hazard_for_region(guild_id, user["region"])
+        fortune = active_fortune_modifiers(user)
         if not spend_stamina(user, info["stamina"]):
             ctx.command.reset_cooldown(ctx)
             await ctx.send(f"⚡ 스태미나가 부족합니다. 필요 **{info['stamina']}** / 현재 **{user['stamina']}**")
@@ -160,17 +167,20 @@ def register_world_commands(bot, get_user, check_registered, save_data, spend_st
         zname, zdanger, zdesc = zombie
         level = user.get("level", 1)
         success_rate = max(0.25, min(0.92, 0.72 + (level - info["level"]) * 0.025 - info["danger"] * 0.025))
+        if hazard:
+            success_rate = max(0.10, success_rate - float(hazard.get("success_penalty", 0.0)))
         success = random.random() < success_rate
         user["exploration_count"] += 1
 
         if success:
-            reward = random.randint(*info["rewards"])
+            reward_mult = float(fortune.get("life", 1.0)) * (float(hazard.get("reward_mult", 1.0)) if hazard else 1.0)
+            reward = int(random.randint(*info["rewards"]) * reward_mult)
             user["balance"] += reward
             user.setdefault("stats", {}).setdefault("earned", 0)
             user["stats"]["earned"] += reward
             user["zombie_kills"][zname] = user["zombie_kills"].get(zname, 0) + 1
             material = random.choice(info["materials"])
-            amount = random.randint(1, max(2, info["danger"] // 2 + 1))
+            amount = max(1, int(random.randint(1, max(2, info["danger"] // 2 + 1)) * (float(hazard.get("reward_mult", 1.0)) if hazard else 1.0)))
             user.setdefault("materials", {})
             user["materials"][material] = user["materials"].get(material, 0) + amount
             text = (
@@ -180,8 +190,10 @@ def register_world_commands(bot, get_user, check_registered, save_data, spend_st
             )
         else:
             damage = random.randint(5 + info["danger"] * 2, 12 + info["danger"] * 4)
+            if hazard:
+                damage = int(damage * float(hazard.get("damage_mult", 1.0)))
             actual, knocked = apply_damage(user, damage)
-            infection_gain = random.randint(0, max(1, info["danger"] // 2))
+            infection_gain = random.randint(0, max(1, info["danger"] // 2)) + (int(hazard.get("infection_bonus", 0)) if hazard else 0)
             user["infection"] = min(100, user.get("infection", 0) + infection_gain)
             text = (
                 f"💥 **[{user['region']} 탐색 실패]**\n"
@@ -191,6 +203,12 @@ def register_world_commands(bot, get_user, check_registered, save_data, spend_st
             )
             if knocked:
                 text += "\n🚑 쓰러진 뒤 구조되어 간신히 살아남았습니다."
+
+        if hazard:
+            text += (
+                f"\n\n{hazard['emoji']} **돌연변이 구역 활성: {hazard['name']}**"
+                f"\n성공률 **-{float(hazard['success_penalty']) * 100:.0f}%p** · 성공 보상 **×{float(hazard['reward_mult']):.2f}**"
+            )
 
         if random.random() < 0.32:
             ename, edesc, etype = random.choice(EVENTS)
@@ -216,6 +234,9 @@ def register_world_commands(bot, get_user, check_registered, save_data, spend_st
                 user["hp"] = min(get_max_hp(user), user["hp"] + random.randint(8, 18))
                 text += f"\n❤️ HP +**{user['hp'] - before}**"
 
+        weapon_state = consume_weapon_durability(user, 1 if success else 2)
         text += f"\n⚡ 스태미나 -**{info['stamina']}** | 현재 **{user['stamina']} / {get_max_stamina(user)}**"
+        if weapon_state.get("name"):
+            text += f"\n🔧 {weapon_state['name']} 내구도 **{weapon_state['current']} / {weapon_state['maximum']} · {weapon_state['label']}**"
         save_data()
         await ctx.send(text)

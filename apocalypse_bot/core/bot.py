@@ -18,6 +18,11 @@ from apocalypse_bot.commands.v635_visuals import (
 from apocalypse_bot.commands.v636_world_combat import (
     weather_combat_multiplier, weather_life_modifiers,
 )
+from apocalypse_bot.commands.v637_dynamic_events import (
+    active_fortune_modifiers, consume_weapon_durability,
+    equipment_condition_multiplier, equipment_mod_power_bonus,
+    equipment_mod_stat_bonus, weapon_durability_status,
+)
 from apocalypse_bot.commands.status import (
     DUNGEON_STAMINA_COSTS, LIFE_STAMINA_COSTS, apply_damage,
     ensure_vitals, get_max_hp, get_max_stamina, refresh_vitals,
@@ -102,6 +107,8 @@ def default_user():
         "equipment": {"무기": None, "방어구": None, "머리": None, "장갑": None, "신발": None, "반지": None, "목걸이": None},
         "identified_items": [],
         "enhancements": {},
+        "equipment_durability": {},
+        "weapon_mods": {},
         "equipment_options": {},
         "dungeon_v21": {"max_floor": 1, "best_floor": 0, "clears": 0, "hidden_kills": 0},
         "life_mastery": {"채집": 0, "낚시": 0, "벌목": 0, "광산": 0},
@@ -127,7 +134,8 @@ def default_user():
             "craft_count": 0,
             "enhance_success": 0,
             "gambles": 0,
-            "earned": 0
+            "earned": 0,
+            "random_boxes": 0
         },
         "daily_quest": {
             "date": "",
@@ -175,7 +183,11 @@ def default_user():
             "claimed_levels": []
         },
         "black_casino": {},
-        "finance": {}
+        "finance": {},
+        "daily_fortune": {},
+        "radio_event": {},
+        "crow_purchases": {},
+        "random_box_daily": {}
     }
 
 
@@ -210,7 +222,7 @@ def ensure_dungeon_user_state(u):
     ]:
         stats[key] = _safe_int(stats.get(key, 0), 0, 0)
 
-    for key in ["materials", "enhancements", "dungeon_monster_kills"]:
+    for key in ["materials", "enhancements", "equipment_durability", "weapon_mods", "daily_fortune", "radio_event", "crow_purchases", "random_box_daily", "dungeon_monster_kills"]:
         if not isinstance(u.get(key), dict):
             u[key] = {}
 
@@ -281,6 +293,13 @@ def migrate_user(u):
         u["identified_items"] = []
     if not isinstance(u.get("enhancements"), dict):
         u["enhancements"] = {}
+    if not isinstance(u.get("equipment_durability"), dict):
+        u["equipment_durability"] = {}
+    if not isinstance(u.get("weapon_mods"), dict):
+        u["weapon_mods"] = {}
+    for dynamic_key in ["daily_fortune", "radio_event", "crow_purchases", "random_box_daily"]:
+        if not isinstance(u.get(dynamic_key), dict):
+            u[dynamic_key] = {}
     if not isinstance(u.get("equipment_options"), dict):
         u["equipment_options"] = {}
     if not isinstance(u.get("dungeon_v21"), dict):
@@ -582,16 +601,23 @@ def equipment_totals(u):
             continue
         stats = get_item_stats(item_name)
         enhance = u.get("enhancements", {}).get(item_name, 0)
+        condition_mult = equipment_condition_multiplier(u, item_name)
         for key, value in stats.items():
-            totals[key] += value + (enhance if key in ["공격력", "방어력"] else enhance // 5)
+            raw = value + (enhance if key in ["공격력", "방어력"] else enhance // 5)
+            totals[key] += int(raw * condition_mult)
+        for key, value in equipment_mod_stat_bonus(u, item_name).items():
+            if key in totals:
+                totals[key] += int(value)
     return totals
+
 
 def item_power_for_user(u, item_name):
     _, item = find_item(item_name)
     if not item:
         return 0
     enhance = u.get("enhancements", {}).get(item_name, 0)
-    return item["power"] + enhance * max(1, int(item["power"] * 0.08))
+    base = item["power"] + enhance * max(1, int(item["power"] * 0.08))
+    return max(0, int(base * equipment_condition_multiplier(u, item_name)) + equipment_mod_power_bonus(u, item_name))
 
 
 def calculate_user_power(u):
@@ -1616,7 +1642,8 @@ COMMAND_GUIDE_CATEGORIES = [
             "!알바", "!채집", "!낚시", "!벌목", "!광산", "!생활숙련도",
             "!코인 / !코인탐색", "!돈주세요", "!땅파기 / !굴착 / !삽질",
             "!보물감정 / !보물감정소 / !감정소", "!감정사 / !감정사목록", "!보물함",
-            "!인카운트도감 / !조우도감 / !랜덤이벤트도감"
+            "!인카운트도감 / !조우도감 / !랜덤이벤트도감",
+            "!무전 / !무전해독 / !SOS", "!위험구역", "!오늘의 운세 / !오늘의운세", "!랜덤박스 [1~3]"
         ],
     },
     {
@@ -1628,7 +1655,9 @@ COMMAND_GUIDE_CATEGORIES = [
             "!상점 [티어]", "!장비목록 [티어]", "!구매 아이템명", "!신규장비 [티어]",
             "!인벤토리", "!강화 아이템명", "!강화정보 아이템명", "!보호강화 아이템명",
             "!강화기록", "!강화연출", "!장비외형 아이템명", "!강화랭킹", "!장비옵션 아이템명", "!옵션재설정 아이템명",
-            "!세트효과", "!재료", "!제작목록", "!제작 아이템명"
+            "!세트효과", "!재료", "!제작목록", "!제작 아이템명",
+            "!내구도 [장비명]", "!무기수리 [장비명]", "!개조목록", "!개조부품제작 부품명",
+            "!무기개조 장비명 부품명", "!개조해제 장비명 부품명"
         ],
     },
     {
@@ -1653,6 +1682,7 @@ COMMAND_GUIDE_CATEGORIES = [
             "!경매등록 아이템명 시작가", "!입찰 번호 금액", "!경매마감 번호", "!거래기록",
             "!시세", "!매수 일반 10", "!매도 / !코인판매", "!자산", "!암시장기록",
             "!자원시장", "!자원구매 나무 10", "!자원판매 광석 5", "!기지칩교환 고철 10",
+            "!까마귀", "!까마귀구매 번호",
             "!은행", "!입금 금액", "!출금 금액", "!대출 금액", "!상환 금액",
             "!사채", "!사채빌리기 금액", "!사채상환 금액", "!사채추심"
         ],
@@ -1727,7 +1757,8 @@ COMMAND_GUIDE_CATEGORIES = [
             "!기지강화 — 자원 지불·시간형 단계 업그레이드·완료 확인",
             "!기지수확 — 최대 24시간 누적 생산물 수확",
             "!기지방어 / !기지방어공격 — 주간 서버 협동 방어전",
-            "!날씨 — 6시간 주기 인게임 날씨와 효과 확인",
+            "!날씨 — 서버별 2~5시간 랜덤 주기 날씨와 효과 확인",
+            "!위험구역 — 매일 지정되는 고위험·고보상 탐색 지역",
             "!자원시장 / !기지칩교환 — 기지 자원 경제"
         ],
     },
@@ -1750,7 +1781,8 @@ COMMAND_GUIDE_CATEGORIES = [
         "commands": [
             "!서버설정", "!서버세팅 미리보기/실행/상태/취소", "!퀴즈알림설정", "!퀴즈알림상태", "!퀴즈알림해제",
             "!실시간피드상태", "!실시간피드테스트", "!실시간피드 켜기/끄기", "!실시간공지 내용",
-            "!가방조회 @유저", "!식량지급 @유저 금액", "!식량회수 @유저 금액", "!월드보스리셋 보스명", "!월드보스테스트 보스명"
+            "!가방조회 @유저", "!식량지급 @유저 금액", "!식량회수 @유저 금액", "!월드보스리셋 보스명", "!월드보스테스트 보스명",
+            "!테스트 / !테스트 상세 — 최신 패치 읽기 전용 자체 진단"
         ],
     },
 ]
@@ -3115,7 +3147,8 @@ async def 던전(ctx, 난이도: str = None):
     dodge = random.random() < min(0.40, 0.06 + pet_bonus["dodge"])
 
     weather_mult, weather_state = weather_combat_multiplier(ctx.guild.id if ctx.guild else 0)
-    effective_power = int(user_power * (1.7 if crit else 1.0) * weather_mult)
+    fortune = active_fortune_modifiers(u)
+    effective_power = int(user_power * (1.7 if crit else 1.0) * weather_mult * float(fortune.get("combat", 1.0)))
     power_ratio = effective_power / max(monster_power, 1)
 
     # v6.3.5a: 압도적인 전투력 차이에서도 고정 20% 패배가 발생하던 판정을 수정합니다.
@@ -3142,12 +3175,13 @@ async def 던전(ctx, 난이도: str = None):
         f"🚨 {monster['name']} 출현!\n"
         f"내 전투력: **{user_power}** / 적 전투력: **{monster_power}**\n"
         f"🎯 최종 승리 확률: **{victory_chance * 100:.1f}%**\n"
-        f"{weather_state['emoji']} 날씨: **{weather_state['name']}** · 전투 효율 ×{weather_mult:.2f}"
+        f"{weather_state['emoji']} 날씨: **{weather_state['name']}** · 전투 효율 ×{weather_mult:.2f}\n"
+        f"🌟 운세 전투 보정: **×{float(fortune.get('combat', 1.0)):.2f}**"
     )
     await asyncio.sleep(1.5)
 
     if victory:
-        reward = int(d["reward"] * random.uniform(0.85, 1.25) * (1.0 + pet_bonus["reward"]))
+        reward = int(d["reward"] * random.uniform(0.85, 1.25) * (1.0 + pet_bonus["reward"]) * float(fortune.get("reward", 1.0)))
         u["balance"] += reward
         u["stats"]["earned"] += reward
         u["stats"]["dungeon_wins"] += 1
@@ -3202,6 +3236,7 @@ async def 던전(ctx, 난이도: str = None):
         pet_exp = {"약함": 8, "보통": 12, "강함": 18, "지옥": 28}[난이도]
         pet_level_ups = gain_pet_exp(u, pet_exp)
         condition_events = apply_dungeon_conditions(u, 난이도, True)
+        weapon_state = consume_weapon_durability(u, {"약함": 1, "보통": 1, "강함": 2, "지옥": 3}[난이도])
         unlocked = check_achievements(u)
         save_data()
 
@@ -3224,6 +3259,8 @@ async def 던전(ctx, 난이도: str = None):
         if condition_events:
             msg += "\n⚠️ " + " / ".join(condition_events)
         msg += f"\n🦠 감염도 **{u['infection']}%** | {condition_text(u)}"
+        if weapon_state.get("name"):
+            msg += f"\n🔧 {weapon_state['name']} 내구도 **{weapon_state['current']} / {weapon_state['maximum']} · {weapon_state['label']}**"
         if unlocked:
             msg += "\n🏆 업적 달성: " + ", ".join(x[0] for x in unlocked)
         await ctx.send(msg)
@@ -3237,6 +3274,7 @@ async def 던전(ctx, 난이도: str = None):
         pet_exp = {"약함": 3, "보통": 5, "강함": 7, "지옥": 10}[난이도]
         pet_level_ups = gain_pet_exp(u, pet_exp)
         condition_events = apply_dungeon_conditions(u, 난이도, False)
+        weapon_state = consume_weapon_durability(u, {"약함": 2, "보통": 2, "강함": 3, "지옥": 4}[난이도])
         save_data()
 
         knockout_text = (
@@ -3253,6 +3291,7 @@ async def 던전(ctx, 난이도: str = None):
             + (f"\n✨ 펫 경험치 **+{pet_exp}**" + (f" · 레벨 **+{pet_level_ups}**" if pet_level_ups else "") if u.get("pet") else "")
             + ("\n⚠️ " + " / ".join(condition_events) if condition_events else "")
             + f"\n🦠 감염도 **{u['infection']}%** | {condition_text(u)}"
+            + (f"\n🔧 {weapon_state['name']} 내구도 **{weapon_state['current']} / {weapon_state['maximum']} · {weapon_state['label']}**" if weapon_state.get("name") else "")
         )
 
 
@@ -3290,6 +3329,7 @@ async def 레이드공격(ctx):
 
     damage = min(damage, boss["hp"])
     boss["hp"] -= damage
+    weapon_state = consume_weapon_durability(u, 1)
 
     uid = str(ctx.author.id)
     boss["participants"][uid] = boss["participants"].get(uid, 0) + damage
@@ -3299,6 +3339,7 @@ async def 레이드공격(ctx):
         f"⚔️ {ctx.author.mention} 공격!\n"
         f"데미지: **{damage:,}**{' 💥크리티컬' if critical else ''}\n"
         f"보스 HP: **{boss['hp']:,} / {boss['max_hp']:,}**"
+        + (f"\n🔧 {weapon_state['name']} 내구도 **{weapon_state['current']} / {weapon_state['maximum']}**" if weapon_state.get("name") else "")
     )
 
     if boss["hp"] <= 0:
@@ -3941,6 +3982,8 @@ async def perform_life_activity(ctx, activity):
         return
     guild_id = ctx.guild.id if ctx.guild else 0
     weather_reward, weather_fail, weather_rare, weather_state = weather_life_modifiers(guild_id)
+    fortune_mods = active_fortune_modifiers(u)
+    fortune_life = float(fortune_mods.get("life", 1.0))
     if random.random() < weather_fail:
         u.setdefault("life_mastery", {"채집": 0, "낚시": 0, "벌목": 0, "광산": 0})
         u["life_mastery"][activity] = int(u.get("life_mastery", {}).get(activity, 0)) + 1
@@ -3966,7 +4009,7 @@ async def perform_life_activity(ctx, activity):
     mastery_exp = int(u["life_mastery"].get(activity, 0))
     mastery_level = 1 + mastery_exp // 20
     mastery_bonus = min(0.30, (mastery_level - 1) * 0.02)
-    amount = max(1, int(random.randint(minimum, maximum) * exploration_modifier(u) * (1.0 + mastery_bonus) * weather_reward))
+    amount = max(1, int(random.randint(minimum, maximum) * exploration_modifier(u) * (1.0 + mastery_bonus) * weather_reward * fortune_life))
     u["life_mastery"][activity] = mastery_exp + 1
 
     rare_text = ""
@@ -3998,7 +4041,8 @@ async def perform_life_activity(ctx, activity):
     result_embed.add_field(name="📈 생활 숙련도", value=f"**Lv.{mastery_level}** · {int(u['life_mastery'][activity]) % 20}/20", inline=True)
     result_embed.add_field(name="⚡ 스태미나", value=f"**-{stamina_cost}** · {u['stamina']}/{get_max_stamina(u)}", inline=True)
     result_embed.add_field(name="🎬 현장 반응", value=("✨ 평범한 수확물과 다른 희귀 신호가 확인됐습니다." if rare_text else "✅ 확보한 자원을 분류해 기지 보급 목록에 등록했습니다."), inline=False)
-    result_embed.add_field(name="🌦️ 종말 날씨", value=f"{weather_state['emoji']} **{weather_state['name']}** · 획득량 ×{weather_reward:.2f}", inline=False)
+    fortune_text = " · 오늘의 운세 미확인" if not fortune_mods.get("active") else f" · 운세 ×{fortune_life:.2f}"
+    result_embed.add_field(name="🌦️ 종말 날씨", value=f"{weather_state['emoji']} **{weather_state['name']}** · 날씨 ×{weather_reward:.2f}{fortune_text}", inline=False)
     tip_getter = getattr(bot, "v632_tip", None) if stage2_activity else getattr(bot, "v631_tip", None)
     result_embed.add_field(name="💡 TIP", value=(tip_getter(visual_key) if tip_getter else "생활 숙련도가 오르면 획득량이 증가합니다."), inline=False)
     visual_send = getattr(bot, "v632_send_visual", None) if stage2_activity else getattr(bot, "v631_send_visual", None)
@@ -5134,6 +5178,13 @@ register_v636_world_combat(
     bot, get_user, check_registered, save_data, world_data, user_data,
     calculate_user_power, get_max_hp, add_title, add_season_points,
     ITEM_DB, apply_base_reaction_visual,
+)
+
+# V6.3.7: 랜덤 주기 날씨·무전/SOS·무기 내구도/개조·까마귀·돌연변이 구역·운세·자체 테스트
+from apocalypse_bot.commands.v637_dynamic_events import register_v637_dynamic_events
+register_v637_dynamic_events(
+    bot, get_user, check_registered, save_data, world_data,
+    ITEM_DB, find_item, get_item_slot, calculate_user_power,
 )
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록

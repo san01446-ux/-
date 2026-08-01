@@ -9,6 +9,8 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 import discord
 from discord.ext import commands
 
+from apocalypse_bot.commands.v637_dynamic_events import consume_weapon_durability
+
 VERSION = "6.3.0"
 ROOT_KEY = "world_boss_v630"
 DAILY_ATTACK_LIMIT = 10
@@ -508,6 +510,7 @@ def register_v630_world_boss(
         user["stats"]["worldboss_damage"]+=damage
         codex=user.setdefault("worldboss_codex",{}).setdefault(info["name"],{"damage":0,"attacks":0,"kills":0})
         codex["damage"]=int(codex.get("damage",0))+damage; codex["attacks"]=int(codex.get("attacks",0))+1
+        weapon_state=consume_weapon_durability(user, 2 if critical else 1)
 
         new_phase=_phase_for(int(battle["hp"]),maximum); battle["phase"]=new_phase
         counter=random.randint(*info.get("counter",(0,0))) if damage>0 and random.random()<.24 else 0
@@ -525,6 +528,8 @@ def register_v630_world_boss(
         embed.add_field(name="❤️ 남은 HP",value=f"**{int(battle['hp']):,}/{maximum:,}**",inline=True)
         embed.add_field(name="🎫 오늘 남은 공격",value=f"**{remaining}회**",inline=True)
         embed.add_field(name="📊 내 누적 기여",value=f"**{int(row['damage']):,} 피해** · {int(row['attacks'])}회",inline=False)
+        if weapon_state.get("name"):
+            embed.add_field(name="🔧 무기 내구도",value=f"**{weapon_state['current']} / {weapon_state['maximum']} · {weapon_state['label']}**",inline=False)
         if part_text:
             embed.add_field(name="🧩 부위 파괴",value=part_text.strip(),inline=False)
         embed.set_thumbnail(url=str(ctx.author.display_avatar.url))
