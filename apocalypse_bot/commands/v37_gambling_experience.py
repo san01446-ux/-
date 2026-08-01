@@ -9,6 +9,8 @@ from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple
 import discord
 from discord.ext import commands, tasks
 
+from apocalypse_bot.commands.v635_visuals import apply_casino_visual
+
 from apocalypse_bot.commands.v36_gambling_market import (
     KST,
     MARKET_ASSETS,
@@ -420,10 +422,17 @@ def register_v37_commands(
 
         _record_gamble(user, "검은 주파수", 배팅액, delta)
         save_data()
-        await _edit_message(
-            suspense,
-            f"📻 **[ {' | '.join(result)} ]**\n{message}\n{_balance_line(before, int(user['balance']))}",
+        result_text = f"📻 **[ {' | '.join(result)} ]**\n{message}\n{_balance_line(before, int(user['balance']))}"
+        embed = discord.Embed(
+            title="📻 검은 주파수 결과",
+            description=result_text,
+            color=discord.Color.green() if success else discord.Color.red(),
         )
+        visual = apply_casino_visual(embed, "슬롯 검은 주파수", message, delta, 배팅액)
+        try:
+            await suspense.edit(content=None, embed=embed, attachments=[visual] if visual else [])
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            await ctx.send(embed=embed, file=visual) if visual else await ctx.send(embed=embed)
         await _safe_reactions(suspense, ("📡", "🎉") if success else ("💀", "📵"))
 
     @bot.hybrid_command(name="룰렛", description="남은 약실에 따라 위험도가 올라가는 생존 룰렛입니다.")
@@ -513,7 +522,17 @@ def register_v37_commands(
 
             _record_gamble(user, "생존 룰렛", 배팅액, delta)
             save_data()
-            await _edit_message(suspense, f"{text}\n{_balance_line(before, int(user['balance']))}")
+            result_text = f"{text}\n{_balance_line(before, int(user['balance']))}"
+            embed = discord.Embed(
+                title="🔫 생존 룰렛 결과",
+                description=result_text,
+                color=discord.Color.green() if success else discord.Color.red(),
+            )
+            visual = apply_casino_visual(embed, "룰렛 생존 결과", text, delta, 배팅액)
+            try:
+                await suspense.edit(content=None, embed=embed, attachments=[visual] if visual else [])
+            except (discord.Forbidden, discord.HTTPException, AttributeError):
+                await ctx.send(embed=embed, file=visual) if visual else await ctx.send(embed=embed)
             await _safe_reactions(suspense, ("😮", "✅") if success else ("💥", "💀"))
 
     @bot.hybrid_command(name="파산신청", description="식량이 마이너스일 때 1시간마다 빚 탕감을 신청합니다.")

@@ -17,6 +17,7 @@ from apocalypse_bot.commands.v37_gambling_experience import (
     _safe_reactions,
     _signed,
 )
+from apocalypse_bot.commands.v635_visuals import apply_casino_visual
 from apocalypse_bot.commands.v40_black_casino import (
     add_casino_chips,
     apply_loss_shield,
@@ -342,7 +343,7 @@ def _result_embed(
     before: int,
     delta: int,
     bet: int,
-) -> discord.Embed:
+) -> Tuple[discord.Embed, Optional[discord.File]]:
     profile = _ensure_casino_profile(user)
     achievement_note = pending_achievement_text(user)
     embed = discord.Embed(title=title, description=description + achievement_note, color=color)
@@ -370,7 +371,8 @@ def _result_embed(
     )
     embed.set_thumbnail(url=ctx.author.display_avatar.url)
     embed.set_footer(text=f"게임 시작 전 잔액 {before:,} · 인게임 칩 전용 · 현금 환전 불가")
-    return embed
+    visual = apply_casino_visual(embed, title, description, delta, bet)
+    return embed, visual
 
 
 def _casino_lobby_embed(ctx: commands.Context, user: Dict[str, Any], world_data: Dict[str, Any]) -> discord.Embed:
@@ -483,13 +485,13 @@ def register_v39_commands(
         embed = _casino_lobby_embed(ctx, user, world_data)
         asset_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "assets", "game_cards", "casino.png",
+            "assets", "v635", "casino", "lobby.jpg",
         )
         if os.path.isfile(asset_path):
-            embed.set_image(url="attachment://casino.png")
-            await ctx.send(embed=embed, file=discord.File(asset_path, filename="casino.png"))
+            embed.set_image(url="attachment://casino.jpg")
+            await ctx.send(embed=embed, file=discord.File(asset_path, filename="casino.jpg"))
         else:
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, file=visual) if visual else await ctx.send(embed=embed)
 
     async def show_balance(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
@@ -516,7 +518,7 @@ def register_v39_commands(
         embed.add_field(name="VIP / 전 서버 잭팟", value=f"{emoji} **{tier}** · 💎 **{jackpot:,}칩**", inline=True)
         embed.add_field(name="오늘 손실 보호 여유", value=f"**{_remaining_loss_room(profile, user):,} 칩**", inline=False)
         embed.set_thumbnail(url=ctx.author.display_avatar.url)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, file=visual) if visual else await ctx.send(embed=embed)
 
     async def show_history(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
@@ -541,7 +543,7 @@ def register_v39_commands(
             description="\n\n".join(lines),
             color=discord.Color.dark_purple(),
         )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, file=visual) if visual else await ctx.send(embed=embed)
 
     async def show_ranking(ctx: commands.Context) -> None:
         rankings: List[Tuple[str, int, int, int]] = []
@@ -717,7 +719,7 @@ def register_v39_commands(
             save_data()
             _disable_view(self)
             color = discord.Color.green() if delta > 0 else (discord.Color.red() if delta < 0 else discord.Color.light_grey())
-            embed = _result_embed(
+            embed, visual = _result_embed(
                 self.ctx,
                 f"🃏 블랙잭 {result}",
                 (
@@ -732,9 +734,9 @@ def register_v39_commands(
             )
             try:
                 if interaction and not interaction.response.is_done():
-                    await interaction.response.edit_message(embed=embed, view=self)
+                    await interaction.response.edit_message(embed=embed, view=self, attachments=[visual] if visual else [])
                 elif self.message:
-                    await self.message.edit(embed=embed, view=self)
+                    await self.message.edit(embed=embed, view=self, attachments=[visual] if visual else [])
             finally:
                 end_interactive(self.ctx.author.id)
                 self.stop()
@@ -890,7 +892,7 @@ def register_v39_commands(
             save_data()
             _disable_view(self)
             color = discord.Color.green() if delta > 0 else (discord.Color.red() if delta < 0 else discord.Color.light_grey())
-            embed = _result_embed(
+            embed, visual = _result_embed(
                 self.ctx,
                 f"⬆️⬇️ 하이로우 {result}",
                 f"마지막 카드 {_card_text(self.current_card)}\n연속 성공 **{self.streak}회**\n\n{detail}\n\n{dealer_line('하이로우')}",
@@ -902,9 +904,9 @@ def register_v39_commands(
             )
             try:
                 if interaction and not interaction.response.is_done():
-                    await interaction.response.edit_message(embed=embed, view=self)
+                    await interaction.response.edit_message(embed=embed, view=self, attachments=[visual] if visual else [])
                 elif self.message:
-                    await self.message.edit(embed=embed, view=self)
+                    await self.message.edit(embed=embed, view=self, attachments=[visual] if visual else [])
             finally:
                 end_interactive(self.ctx.author.id)
                 self.stop()
@@ -1046,7 +1048,7 @@ def register_v39_commands(
         _record_casino(user, "슬롯머신", int(bet), delta, payout, detail, world_data)
         save_data()
         color = discord.Color.green() if delta > 0 else discord.Color.red()
-        embed = _result_embed(
+        embed, visual = _result_embed(
             ctx,
             "🎰 슬롯 결과",
             f"# [ {' | '.join(reels)} ]\n\n{detail}\n\n{dealer_line('슬롯머신')}",
@@ -1057,7 +1059,7 @@ def register_v39_commands(
             int(bet),
         )
         try:
-            await suspense.edit(content=None, embed=embed)
+            await suspense.edit(content=None, embed=embed, attachments=[visual] if visual else [])
         except (discord.Forbidden, discord.HTTPException, AttributeError):
             await ctx.send(embed=embed)
         await _safe_reactions(
@@ -1123,7 +1125,7 @@ def register_v39_commands(
         _add_positive_earnings(user, delta)
         _record_casino(user, "다이스", int(bet), delta, payout, detail, world_data)
         save_data()
-        embed = _result_embed(
+        embed, visual = _result_embed(
             ctx,
             f"🎲 다이스 결과 {die}",
             detail + f"\n\n{dealer_line('다이스')}",
@@ -1134,7 +1136,7 @@ def register_v39_commands(
             int(bet),
         )
         try:
-            await suspense.edit(content=None, embed=embed)
+            await suspense.edit(content=None, embed=embed, attachments=[visual] if visual else [])
         except (discord.Forbidden, discord.HTTPException, AttributeError):
             await ctx.send(embed=embed)
         await _safe_reactions(suspense, ("🎲", "🎯", "🎉", "💰") if success else ("🎲", "😭", "❌", "📉"))
@@ -1252,9 +1254,9 @@ def register_v39_commands(
         _record_casino(user, "바카라", int(bet), delta, payout, f"{actual} · {detail}", world_data)
         save_data()
         color = discord.Color.green() if delta > 0 else (discord.Color.light_grey() if delta == 0 else discord.Color.red())
-        embed = _result_embed(ctx, f"🎴 바카라 결과: {actual}", result_detail, color, user, before, delta, int(bet))
+        embed, visual = _result_embed(ctx, f"🎴 바카라 결과: {actual}", result_detail, color, user, before, delta, int(bet))
         try:
-            await suspense.edit(content=None, embed=embed)
+            await suspense.edit(content=None, embed=embed, attachments=[visual] if visual else [])
         except (discord.Forbidden, discord.HTTPException, AttributeError):
             await ctx.send(embed=embed)
         await _safe_reactions(

@@ -12,6 +12,9 @@ from apocalypse_bot.commands.conditions import (
     apply_dungeon_conditions, condition_text, ensure_conditions,
     exploration_modifier, refresh_conditions, register_condition_commands,
 )
+from apocalypse_bot.commands.v635_visuals import (
+    apply_base_reaction_visual, apply_base_stage_visual, format_remaining, parse_iso,
+)
 from apocalypse_bot.commands.status import (
     DUNGEON_STAMINA_COSTS, LIFE_STAMINA_COSTS, apply_damage,
     ensure_vitals, get_max_hp, get_max_stamina, refresh_vitals,
@@ -146,7 +149,10 @@ def default_user():
             "level": 1,
             "last_collect": "",
             "storage": 0,
-            "built": False
+            "built": False,
+            "upgrade_target": 0,
+            "upgrade_started_at": "",
+            "upgrade_complete_at": ""
         },
         "resources": {
             "나무": 0,
@@ -1653,8 +1659,11 @@ COMMAND_GUIDE_CATEGORIES = [
         "title": "카지노 / 도박",
         "hint": "블랙잭, 룰렛, 탐색 도박",
         "commands": [
-            "!카지노", "!카지노환전 구매/판매 금액", "!블랙잭", "!하이로우", "!슬롯", "!다이스", "!바카라",
-            "!럭키휠", "!코인플립 앞/뒤 금액", "!올인 앞/뒤", "!카지노미션", "!카지노상점",
+            "!카지노", "!카지노칩", "!카지노환전 구매/판매 금액", "!카지노VIP", "!카지노잭팟",
+            "!카지노미션", "!카지노미션보상 번호", "!카지노업적 [페이지]", "!카지노상점", "!카지노구매 상품 수량",
+            "!카지노기록", "!카지노랭킹", "!카지노딜러", "!카지노시즌랭킹 시즌/전체/오늘 페이지",
+            "!블랙잭 금액", "!하이로우 금액", "!슬롯 금액", "!다이스 홀/짝/1~6 금액",
+            "!바카라 플레이어/뱅커/타이 금액", "!럭키휠", "!코인플립 앞/뒤 금액", "!올인 앞/뒤",
             "!룰렛 배팅액", "!주파수 배팅액", "!탐색 왼쪽/오른쪽 배팅액", "!파산신청", "!도박잔액", "!도박정보"
         ],
     },
@@ -1706,10 +1715,13 @@ COMMAND_GUIDE_CATEGORIES = [
         "id": "base",
         "emoji": "🏕️",
         "title": "기지 / 치료 / 생존",
-        "hint": "기지건설, 자원, 병원, 의약품",
+        "hint": "고난도 기지 건설·시간형 강화·생산 수확·치료",
         "commands": [
             "!의약품", "!약품구매 붕대 1", "!사용 붕대", "!병원", "!자원",
-            "!기지", "!기지건설", "!기지강화", "!기지수확"
+            "!기지 — 현재 단계·생산량·다음 비용·남은 공사 시간",
+            "!기지건설 — Lv.1 야영지 건설",
+            "!기지강화 — 자원 지불·시간형 단계 업그레이드·완료 확인",
+            "!기지수확 — 최대 24시간 누적 생산물 수확"
         ],
     },
     {
@@ -4005,12 +4017,61 @@ async def 자원(ctx):
 # =========================================================
 # 기지 건설 / 강화 / 수확
 # =========================================================
+BASE_BUILD_COST = {"나무": 120, "광석": 80, "고철": 100, "food": 100_000}
+
+# key는 현재 레벨입니다. 상위 기지일수록 자원과 대기 시간이 크게 증가합니다.
 BASE_COSTS = {
-    1: {"나무": 20, "광석": 10, "고철": 10, "food": 6500},
-    2: {"나무": 45, "광석": 30, "고철": 25, "food": 19000},
-    3: {"나무": 80, "광석": 60, "고철": 50, "food": 52000},
-    4: {"나무": 140, "광석": 100, "고철": 90, "food": 120000},
+    1: {"나무": 350, "광석": 250, "고철": 300, "food": 500_000, "seconds": 1_800},
+    2: {"나무": 1_000, "광석": 800, "고철": 900, "food": 2_500_000, "seconds": 7_200},
+    3: {"나무": 3_000, "광석": 2_500, "고철": 2_800, "food": 10_000_000, "seconds": 28_800},
+    4: {"나무": 8_000, "광석": 7_000, "고철": 7_500, "food": 40_000_000, "seconds": 86_400},
 }
+BASE_NAMES = {0: "미건설", 1: "야영지", 2: "임시 거점", 3: "강화 거점", 4: "중형 기지", 5: "요새급 기지"}
+BASE_HOURLY = {0: 0, 1: 320, 2: 750, 3: 1_600, 4: 3_200, 5: 6_500}
+
+
+def _base_cost_text(cost):
+    return (
+        f"나무 **{cost['나무']:,}** · 광석 **{cost['광석']:,}** · "
+        f"고철 **{cost['고철']:,}** · 식량 **{cost['food']:,}**"
+    )
+
+
+def _base_missing(u, cost):
+    missing = []
+    for resource in ("나무", "광석", "고철"):
+        current = int(u.get("resources", {}).get(resource, 0))
+        if current < int(cost[resource]):
+            missing.append(f"{resource} **{int(cost[resource]) - current:,}개**")
+    balance = int(u.get("balance", 0))
+    if balance < int(cost["food"]):
+        missing.append(f"식량 **{int(cost['food']) - balance:,}개**")
+    return missing
+
+
+def _base_upgrade_remaining(base):
+    target = int(base.get("upgrade_target", 0) or 0)
+    complete_at = parse_iso(base.get("upgrade_complete_at"))
+    if target <= 0 or complete_at is None:
+        return 0, 0.0
+    return target, (complete_at - datetime.now()).total_seconds()
+
+
+def _finish_base_upgrade(base):
+    target, remaining = _base_upgrade_remaining(base)
+    if target <= 0 or remaining > 0:
+        return False
+    base["level"] = max(int(base.get("level", 1)), target)
+    base["upgrade_target"] = 0
+    base["upgrade_started_at"] = ""
+    base["upgrade_complete_at"] = ""
+    return True
+
+
+async def _send_base_embed(ctx, embed, file=None):
+    if file:
+        return await ctx.send(embed=embed, file=file)
+    return await ctx.send(embed=embed)
 
 
 @bot.hybrid_command()
@@ -4019,16 +4080,36 @@ async def 기지(ctx):
         return
     u = get_user(ctx.author.id)
     base = u["base"]
-    built = base["level"] > 0 and base.get("built", False)
-    state = "건설 완료" if built else "미건설"
-    hourly = base["level"] * 320 if built else 0
-    await ctx.send(
-        f"🏠 **[{ctx.author.name}의 기지]**\n"
-        f"상태: **{state}**\n"
-        f"레벨: **Lv.{base['level']}**\n"
-        f"시간당 식량 생산량: **{hourly:,}개**\n"
-        f"저장 식량: **{base.get('storage', 0):,}개**"
+    if _finish_base_upgrade(base):
+        save_data()
+    built = bool(base.get("built", False))
+    level = int(base.get("level", 1) if built else 0)
+    target, remaining = _base_upgrade_remaining(base)
+    hourly = BASE_HOURLY.get(level, level * 320) if built else 0
+    embed = discord.Embed(
+        title=f"🏠 {ctx.author.display_name}의 기지 · {BASE_NAMES.get(level, f'Lv.{level}')}",
+        description="상위 단계일수록 요구 자원과 건설 시간이 급격히 증가합니다.",
+        color=discord.Color.dark_gold(),
     )
+    embed.add_field(name="상태", value="**건설 완료**" if built else "**미건설**", inline=True)
+    embed.add_field(name="기지 레벨", value=f"**Lv.{level}/5**", inline=True)
+    embed.add_field(name="시간당 생산", value=f"**{hourly:,} 식량**", inline=True)
+    embed.add_field(name="저장 식량", value=f"**{int(base.get('storage', 0)):,}개**", inline=True)
+    if target > 0 and remaining > 0:
+        embed.add_field(
+            name="🏗️ 업그레이드 진행 중",
+            value=f"목표 **Lv.{target} · {BASE_NAMES.get(target)}**\n남은 시간 **{format_remaining(remaining)}**",
+            inline=False,
+        )
+    elif built and level < 5:
+        cost = BASE_COSTS[level]
+        embed.add_field(
+            name=f"다음 단계 · Lv.{level + 1} {BASE_NAMES[level + 1]}",
+            value=f"{_base_cost_text(cost)}\n건설 시간 **{format_remaining(cost['seconds'])}**",
+            inline=False,
+        )
+    file = apply_base_stage_visual(embed, level)
+    await _send_base_embed(ctx, embed, file)
 
 
 @bot.hybrid_command()
@@ -4038,30 +4119,43 @@ async def 기지건설(ctx):
     u = get_user(ctx.author.id)
     base = u["base"]
     if base.get("built", False):
-        await ctx.send("⚠️ 기지가 이미 건설되어 있습니다.")
+        embed = discord.Embed(title="⚠️ 기지가 이미 건설되어 있습니다", color=discord.Color.orange())
+        file = apply_base_stage_visual(embed, int(base.get("level", 1)))
+        await _send_base_embed(ctx, embed, file)
         return
 
-    cost = {"나무": 10, "광석": 5, "고철": 5, "food": 4500}
-    missing = []
-    for resource in ["나무", "광석", "고철"]:
-        if u["resources"].get(resource, 0) < cost[resource]:
-            missing.append(f"{resource} {cost[resource] - u['resources'].get(resource, 0)}개")
-    if u["balance"] < cost["food"]:
-        missing.append(f"식량 {cost['food'] - u['balance']:,}개")
+    missing = _base_missing(u, BASE_BUILD_COST)
     if missing:
-        await ctx.send("⚠️ 부족한 건설 자원: " + ", ".join(missing))
+        embed = discord.Embed(
+            title="📦 기지 건설 자원 부족",
+            description="부족한 자원: " + " · ".join(missing),
+            color=discord.Color.red(),
+        )
+        embed.add_field(name="총 건설 비용", value=_base_cost_text(BASE_BUILD_COST), inline=False)
+        file = apply_base_reaction_visual(embed, "resource_shortage")
+        await _send_base_embed(ctx, embed, file)
         return
 
-    for resource in ["나무", "광석", "고철"]:
-        u["resources"][resource] -= cost[resource]
-    u["balance"] -= cost["food"]
+    for resource in ("나무", "광석", "고철"):
+        u["resources"][resource] -= int(BASE_BUILD_COST[resource])
+    u["balance"] -= int(BASE_BUILD_COST["food"])
     base["built"] = True
     base["level"] = 1
     base["last_collect"] = datetime.now().isoformat()
+    base["upgrade_target"] = 0
+    base["upgrade_started_at"] = ""
+    base["upgrade_complete_at"] = ""
     add_title(u, "기지 개척자")
     add_season_points(u, 30)
     save_data()
-    await ctx.send("🏠 **기지 건설 완료!** 이제 `!기지수확`으로 식량을 생산할 수 있습니다.")
+    embed = discord.Embed(
+        title="🏠 기지 건설 완료 · Lv.1 야영지",
+        description="첫 거점이 완성됐습니다. `!기지수확`으로 생산 식량을 회수할 수 있습니다.",
+        color=discord.Color.green(),
+    )
+    embed.add_field(name="소모 자원", value=_base_cost_text(BASE_BUILD_COST), inline=False)
+    file = apply_base_reaction_visual(embed, "build_start")
+    await _send_base_embed(ctx, embed, file)
 
 
 @bot.hybrid_command()
@@ -4071,30 +4165,75 @@ async def 기지강화(ctx):
     u = get_user(ctx.author.id)
     base = u["base"]
     if not base.get("built", False):
-        await ctx.send("⚠️ 먼저 `!기지건설`을 해야 합니다.")
-        return
-    if base["level"] >= 5:
-        await ctx.send("⚠️ 기지가 최대 레벨입니다.")
+        embed = discord.Embed(title="⚠️ 먼저 `!기지건설`을 해야 합니다", color=discord.Color.orange())
+        file = apply_base_stage_visual(embed, 0)
+        await _send_base_embed(ctx, embed, file)
         return
 
-    cost = BASE_COSTS[base["level"]]
-    missing = []
-    for resource in ["나무", "광석", "고철"]:
-        if u["resources"].get(resource, 0) < cost[resource]:
-            missing.append(f"{resource} {cost[resource] - u['resources'].get(resource, 0)}개")
-    if u["balance"] < cost["food"]:
-        missing.append(f"식량 {cost['food'] - u['balance']:,}개")
+    if _finish_base_upgrade(base):
+        add_season_points(u, 60)
+        save_data()
+        level = int(base["level"])
+        embed = discord.Embed(
+            title=f"🏗️ 업그레이드 완료 · Lv.{level} {BASE_NAMES[level]}",
+            description="긴 공사가 끝났습니다. 생산량과 기지 외형이 한 단계 성장했습니다.",
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="시간당 생산", value=f"**{BASE_HOURLY[level]:,} 식량**", inline=True)
+        file = apply_base_reaction_visual(embed, "upgrade_success")
+        await _send_base_embed(ctx, embed, file)
+        return
+
+    target, remaining = _base_upgrade_remaining(base)
+    if target > 0 and remaining > 0:
+        embed = discord.Embed(
+            title=f"🏗️ 기지 업그레이드 진행 중 · Lv.{target}",
+            description=f"남은 시간 **{format_remaining(remaining)}**\n완료 후 `!기지강화` 또는 `!기지`를 사용하면 상태가 갱신됩니다.",
+            color=discord.Color.blue(),
+        )
+        file = apply_base_reaction_visual(embed, "upgrade_progress")
+        await _send_base_embed(ctx, embed, file)
+        return
+
+    level = int(base.get("level", 1))
+    if level >= 5:
+        embed = discord.Embed(title="🏰 기지가 최대 단계입니다", description="Lv.5 요새급 기지까지 완성했습니다.", color=discord.Color.gold())
+        file = apply_base_stage_visual(embed, 5)
+        await _send_base_embed(ctx, embed, file)
+        return
+
+    cost = BASE_COSTS[level]
+    missing = _base_missing(u, cost)
     if missing:
-        await ctx.send("⚠️ 부족한 강화 자원: " + ", ".join(missing))
+        embed = discord.Embed(
+            title=f"📦 Lv.{level + 1} 업그레이드 자원 부족",
+            description="부족한 자원: " + " · ".join(missing),
+            color=discord.Color.red(),
+        )
+        embed.add_field(name="필요 자원", value=_base_cost_text(cost), inline=False)
+        embed.add_field(name="필요 시간", value=f"**{format_remaining(cost['seconds'])}**", inline=True)
+        file = apply_base_reaction_visual(embed, "resource_shortage")
+        await _send_base_embed(ctx, embed, file)
         return
 
-    for resource in ["나무", "광석", "고철"]:
-        u["resources"][resource] -= cost[resource]
-    u["balance"] -= cost["food"]
-    base["level"] += 1
-    add_season_points(u, 40)
+    for resource in ("나무", "광석", "고철"):
+        u["resources"][resource] -= int(cost[resource])
+    u["balance"] -= int(cost["food"])
+    now = datetime.now()
+    target = level + 1
+    base["upgrade_target"] = target
+    base["upgrade_started_at"] = now.isoformat()
+    base["upgrade_complete_at"] = (now + timedelta(seconds=int(cost["seconds"]))).isoformat()
     save_data()
-    await ctx.send(f"🏗️ **기지 강화 성공! Lv.{base['level']}**")
+    embed = discord.Embed(
+        title=f"🛠️ 기지 업그레이드 시작 · Lv.{level} → Lv.{target}",
+        description=f"목표 **{BASE_NAMES[target]}**\n완료까지 **{format_remaining(cost['seconds'])}**",
+        color=discord.Color.blurple(),
+    )
+    embed.add_field(name="소모 자원", value=_base_cost_text(cost), inline=False)
+    embed.add_field(name="주의", value="공사 중에는 추가 업그레이드를 시작할 수 없습니다.", inline=False)
+    file = apply_base_reaction_visual(embed, "upgrade_progress")
+    await _send_base_embed(ctx, embed, file)
 
 
 @bot.hybrid_command()
@@ -4104,28 +4243,42 @@ async def 기지수확(ctx):
     u = get_user(ctx.author.id)
     base = u["base"]
     if not base.get("built", False):
-        await ctx.send("⚠️ 먼저 기지를 건설하세요.")
+        embed = discord.Embed(title="⚠️ 먼저 기지를 건설하세요", color=discord.Color.orange())
+        file = apply_base_stage_visual(embed, 0)
+        await _send_base_embed(ctx, embed, file)
         return
 
+    if _finish_base_upgrade(base):
+        save_data()
     now = datetime.now()
-    last_text = base.get("last_collect") or now.isoformat()
-    try:
-        last = datetime.fromisoformat(last_text)
-    except ValueError:
-        last = now
-
-    elapsed_hours = min(24, max(0, (now - last).total_seconds() / 3600))
-    reward = int(elapsed_hours * base["level"] * 320)
+    last = parse_iso(base.get("last_collect")) or now
+    elapsed_hours = min(24.0, max(0.0, (now - last).total_seconds() / 3600.0))
+    level = int(base.get("level", 1))
+    reward = int(elapsed_hours * BASE_HOURLY.get(level, level * 320))
     if reward < 100:
-        await ctx.send("⏳ 아직 수확할 식량이 충분히 쌓이지 않았습니다.")
+        embed = discord.Embed(
+            title="⏳ 아직 생산물이 부족합니다",
+            description=f"누적 시간 **{int(elapsed_hours * 60)}분** · 최소 100 식량 이상 쌓인 뒤 수확할 수 있습니다.",
+            color=discord.Color.orange(),
+        )
+        file = apply_base_reaction_visual(embed, "harvest_empty")
+        await _send_base_embed(ctx, embed, file)
         return
 
     u["balance"] += reward
     u["stats"]["earned"] += reward
     base["last_collect"] = now.isoformat()
-    add_season_points(u, min(20, int(elapsed_hours)))
+    add_season_points(u, min(25, int(elapsed_hours)))
     save_data()
-    await ctx.send(f"🏠 기지 생산 식량 **{reward:,}개** 수확 완료!")
+    embed = discord.Embed(
+        title="📦 기지 생산 수확 완료",
+        description=f"Lv.{level} {BASE_NAMES[level]}에서 식량 **{reward:,}개**를 회수했습니다.",
+        color=discord.Color.green(),
+    )
+    embed.add_field(name="가동 시간", value=f"**{elapsed_hours:.1f}시간**", inline=True)
+    embed.add_field(name="현재 잔액", value=f"**{int(u['balance']):,} 식량**", inline=True)
+    file = apply_base_reaction_visual(embed, "harvest_success")
+    await _send_base_embed(ctx, embed, file)
 
 
 # =========================================================
@@ -4932,6 +5085,10 @@ register_v634_equipment_menu(
     bot, get_user, check_registered, ITEM_DB, TIER_ORDER, TIER_EMOJI, EQUIPMENT_SLOTS,
     find_item, get_item_slot, get_item_stats, equipment_totals,
 )
+
+# V6.3.5: 카지노 결과별 전용 이미지 + 고난도 시간형 기지 업그레이드 + 안내 최신화
+from apocalypse_bot.commands.v635_casino_base import register_v635_casino_base
+register_v635_casino_base(bot)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
