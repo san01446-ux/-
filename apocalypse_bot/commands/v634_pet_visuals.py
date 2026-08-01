@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+ABADDON_TEXT_FIRST_DISABLED = True
+
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
@@ -70,11 +72,8 @@ def pet_asset_path(pet_name: str, stage: int = 0) -> Optional[Path]:
 
 
 def pet_file(pet_name: str, stage: int = 0, prefix: str = "pet") -> Optional[discord.File]:
-    path = pet_asset_path(pet_name, stage)
-    if path is None:
-        return None
-    safe = PET_SLUGS.get(pet_name, "pet")
-    return discord.File(str(path), filename=f"abaddon_v634_{prefix}_{safe}_{_clamp_stage(stage)}.jpg")
+    # v6.4.1 텍스트 우선 정책
+    return None
 
 
 class PetBrowseSelect(discord.ui.Select):
@@ -153,11 +152,8 @@ class PetBrowseView(discord.ui.View):
                 value=f"Lv.{int(record.get('level', 1))} · 친밀도 {int(record.get('friendship', 0))} · 전투력 +{current_power}",
                 inline=False,
             )
-        file = pet_file(pet_name, stage, "browse")
-        if file is not None:
-            embed.set_image(url=f"attachment://{file.filename}")
-        embed.set_footer(text="ABADDON PET VISUALS v6.3.4 · 19종 동료의 귀여운 3단 진화 이미지")
-        return embed, file
+        embed.set_footer(text="ABADDON PET v6.4.1 · 텍스트·이모지 중심 3단 진화 정보")
+        return embed, None
 
 
 async def send_pet_visual(
@@ -192,14 +188,8 @@ async def send_pet_visual(
     embed.add_field(name="레벨 · 친밀도", value=f"**Lv.{int(record.get('level', 1))} · {int(record.get('friendship', 0))}**", inline=True)
     embed.add_field(name="전투력", value=f"**+{current_power}**", inline=True)
     embed.add_field(name=f"고유 능력 · {info.get('skill', '동행')}", value=str(info.get("skill_desc", "함께 생존합니다."))[:1024], inline=False)
-    file = pet_file(pet_name, stage, mode)
-    if file is not None:
-        embed.set_image(url=f"attachment://{file.filename}")
-    embed.set_footer(text="ABADDON PET VISUALS v6.3.4 · 19종 동료 · 성장과 진화에 따라 전용 이미지가 변경됩니다")
-    kwargs = {"embed": embed}
-    if file is not None:
-        kwargs["file"] = file
-    return await ctx.send(**kwargs)
+    embed.set_footer(text="ABADDON PET v6.4.1 · 성장·진화·능력 정보를 텍스트로 표시합니다")
+    return await ctx.send(embed=embed)
 
 
 async def send_pet_shop(ctx: commands.Context) -> Optional[discord.Message]:

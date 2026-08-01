@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+ABADDON_TEXT_FIRST_DISABLED = True
+
 import asyncio
 import io
 import json
@@ -266,28 +268,14 @@ def _encode_webp(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-async def _equipment_file(item_name: str, tier: str, slot: str, success: bool, level: int, prefix: str) -> discord.File:
-    path = _asset_path(EQUIPMENT_ASSETS, item_name)
-    if path is not None:
-        if PIL_AVAILABLE:
-            image = await asyncio.to_thread(_decorate_named_image, path, tier=tier or "일반", level=level, success=success, discovered=False, item_name=item_name)
-            return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
-        # Pillow가 설치되지 않은 환경에서도 봇이 중단되지 않도록 원본 장비 이미지를 직접 첨부합니다.
-        return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
-    image = await asyncio.to_thread(forge.build_forge_card_png, tier or "일반", slot or "무기", success, max(0, int(level)))
-    return discord.File(io.BytesIO(image), filename=_safe_filename(prefix))
+async def _equipment_file(item_name: str, tier: str, slot: str, success: bool, level: int, prefix: str) -> Optional[discord.File]:
+    # v6.4.1 텍스트 우선 정책
+    return None
 
 
 async def _treasure_file(treasure_name: str, grade: str, discovered: bool, prefix: str) -> Optional[discord.File]:
-    path = _asset_path(TREASURE_ASSETS, treasure_name)
-    if path is None:
-        return None
-    tier = GRADE_TO_TIER.get(str(grade), "일반")
-    if PIL_AVAILABLE:
-        image = await asyncio.to_thread(_decorate_named_image, path, tier=tier, level={"E":1,"D":4,"C":8,"B":13,"A":18}.get(str(grade), 1), success=True, discovered=discovered, item_name=treasure_name)
-        return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
-    # Pillow가 없는 경우에도 감정 결과의 실제 보물 이미지를 그대로 표시합니다.
-    return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
+    # v6.4.1 텍스트 우선 정책
+    return None
 
 
 async def send_equipment_visual(
@@ -303,7 +291,6 @@ async def send_equipment_visual(
 ) -> Optional[discord.Message]:
     title, fallback = MODE_LABELS.get(mode, MODE_LABELS["preview"])
     level = max(0, int(level))
-    file = await _equipment_file(item_name, tier, slot, True, level, f"equipment_{mode}")
     embed = discord.Embed(
         title=title,
         description=f"**{forge.forge_display_name(item_name, level)}**\n{description or fallback}",
@@ -311,12 +298,11 @@ async def send_equipment_visual(
     )
     embed.add_field(name="등급 · 슬롯", value=f"**{tier or '일반'} · {slot or '기타'}**", inline=True)
     embed.add_field(name="강화 단계", value=f"**+{level} · {enhancement_stage(level)}**", inline=True)
-    embed.add_field(name="다음 외형 변화", value=f"**{next_visual_stage(level)}**", inline=True)
+    embed.add_field(name="다음 강화 변화", value=f"**{next_visual_stage(level)}**", inline=True)
     if stats_text:
         embed.add_field(name="능력치", value=stats_text[:1024], inline=False)
-    embed.set_image(url=f"attachment://{file.filename}")
-    embed.set_footer(text="ABADDON EQUIPMENT VISUALS v6.3.3 · 강화할수록 문양·광원·오라·실루엣이 확장됩니다")
-    return await ctx.send(embed=embed, file=file)
+    embed.set_footer(text="ABADDON EQUIPMENT v6.4.1 · 이미지 없이 강화 단계와 효과를 표시합니다")
+    return await ctx.send(embed=embed)
 
 
 async def edit_craft_visual(
@@ -328,16 +314,14 @@ async def edit_craft_visual(
     slot: str,
     success: bool,
 ) -> None:
-    file = await _equipment_file(item_name, tier, slot, success, 0 if success else 3, "craft_result")
-    embed.set_image(url=f"attachment://{file.filename}")
     embed.add_field(
-        name="🎬 제작 연출",
-        value=("설계 문양과 결합부가 안정적으로 점등되었습니다." if success else "접합부의 균열과 불안정한 에너지 역류가 확인됐습니다."),
+        name="🎬 제작 결과",
+        value=("✅ 설계 결합이 안정적으로 완료되었습니다." if success else "❌ 접합부 균열과 에너지 역류로 제작에 실패했습니다."),
         inline=False,
     )
-    embed.set_footer(text="ABADDON CRAFTING v6.3.3 · 제작 결과에 따라 성공/실패 외형이 분리됩니다")
+    embed.set_footer(text="ABADDON CRAFTING v6.4.1 · 텍스트 우선 결과")
     try:
-        await message.edit(content=None, embed=embed, attachments=[file])
+        await message.edit(content=None, embed=embed, attachments=[])
     except TypeError:
         await message.edit(content=None, embed=embed)
     except (discord.Forbidden, discord.HTTPException, AttributeError):
@@ -353,22 +337,15 @@ async def edit_relic_visual(
     upgraded: bool,
     discovered: bool = False,
 ) -> None:
-    tier = GRADE_TO_TIER.get(str(grade), "일반")
-    file = await _treasure_file(treasure_name, str(grade), discovered, "relic")
-    if file is None:
-        level = {"E": 1, "D": 4, "C": 8, "B": 13, "A": 18}.get(str(grade), 1)
-        fallback = await asyncio.to_thread(forge.build_forge_card_png, tier, "목걸이", not discovered, level)
-        file = discord.File(io.BytesIO(fallback), filename=_safe_filename("relic"))
-    embed.set_image(url=f"attachment://{file.filename}")
     if discovered:
         embed.add_field(name="🕯️ 봉인 상태", value="감정 전에는 실제 가치와 등급 보정 결과가 공개되지 않습니다.", inline=False)
     elif upgraded:
         embed.add_field(name="🌟 감정 반응", value="감정사의 보정으로 유물 문양과 가치 등급이 상승했습니다.", inline=False)
     else:
         embed.add_field(name="🔎 감정 반응", value=f"**{treasure_name}**의 문양과 보존 상태가 확정됐습니다.", inline=False)
-    embed.set_footer(text="ABADDON RELIC APPRAISAL v6.3.3 · 기존 감정사 확률과 매입 배율은 유지됩니다")
+    embed.set_footer(text="ABADDON RELIC APPRAISAL v6.4.1 · 이미지 없이 실제 보물명과 등급을 표시합니다")
     try:
-        await message.edit(content=None, embed=embed, attachments=[file])
+        await message.edit(content=None, embed=embed, attachments=[])
     except TypeError:
         await message.edit(content=None, embed=embed)
     except (discord.Forbidden, discord.HTTPException, AttributeError):
@@ -394,14 +371,14 @@ def register_v633_equipment_crafting(
     if existing_guide is not None:
         async def v633_forge_guide(ctx: commands.Context) -> None:
             await ctx.send(
-                "✨ **[ABADDON 장비 외형 진화 v6.3.3]**\n"
-                "강화 단계가 높아질수록 장비 실루엣·룬 문양·광원·오라·에너지 날개가 순서대로 확장됩니다.\n"
-                "외형 변화: **+5 단련 · +7 광휘 · +10 종말 · +12 심연 · +15 아바돈 · +18 경계 · +20 공허 초월**\n"
-                "성공·실패·단계 하락은 서로 다른 균열과 광원으로 표시됩니다.\n"
-                "현재 장비 미리보기: `!장비외형 아이템명`"
+                "✨ **[ABADDON 장비 강화 단계 v6.4.1]**\n"
+                "이미지 대신 강화 단계·장비 계열·능력치 변화를 텍스트와 이모지로 표시합니다.\n"
+                "단계 명칭: **+5 단련 · +7 광휘 · +10 종말 · +12 심연 · +15 아바돈 · +18 경계 · +20 공허 초월**\n"
+                "성공·실패·단계 하락과 다음 변화는 결과 임베드에서 바로 확인할 수 있습니다.\n"
+                "현재 장비 정보: `!장비외형 아이템명`"
             )
         existing_guide.callback = v633_forge_guide
-        existing_guide.help = "강화 단계별 장비 외형 변화와 현재 외형 확인법을 안내합니다."
+        existing_guide.help = "강화 단계별 장비 효과와 현재 정보 확인법을 안내합니다."
         existing_guide.description = existing_guide.help
 
     existing_patch_notes = bot.get_command("패치노트")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+ABADDON_TEXT_FIRST_DISABLED = True
+
 import asyncio
 import io
 import json
@@ -834,7 +836,7 @@ def register_v432_forge_live(
                 "published": bool(published),
             }
 
-    async def build_result_embed(result: Dict[str, Any]) -> Tuple[discord.Embed, discord.File]:
+    async def build_result_embed(result: Dict[str, Any]) -> Tuple[discord.Embed, Optional[discord.File]]:
         success = bool(result["success"])
         level = _safe_int(result["to"])
         tier = str(result["tier"])
@@ -869,21 +871,8 @@ def register_v432_forge_live(
         else:
             embed.set_footer(text="강화 표시 이름은 연출용이며 기존 인벤토리 데이터는 그대로 유지됩니다.")
 
-        named_builder = getattr(bot, "v633_build_named_equipment_file", None)
-        if named_builder is not None:
-            file = await named_builder(
-                str(result["item"]),
-                tier,
-                str(result["slot"]),
-                success,
-                level,
-                "forge_result",
-            )
-        else:
-            image = await asyncio.to_thread(build_forge_card_png, tier, str(result["slot"]), success, level)
-            file = discord.File(io.BytesIO(image), filename="abaddon_forge.png")
-        embed.set_image(url=f"attachment://{file.filename}")
-        return embed, file
+        # v6.4.1 텍스트 우선 정책: 강화 결과 이미지는 첨부하지 않습니다.
+        return embed, None
 
     async def share_result(interaction: discord.Interaction, result: Dict[str, Any]) -> None:
         if not result.get("success"):
@@ -940,7 +929,7 @@ def register_v432_forge_live(
             retry_callback=send_result_from_interaction,
             share_callback=share_result,
         )
-        await interaction.followup.send(embed=embed, file=file, view=view)
+        await interaction.followup.send(embed=embed, view=view) if file is None else await interaction.followup.send(embed=embed, file=file, view=view)
 
     async def enhanced_callback(ctx: commands.Context, *, 아이템이름: str) -> None:
         if not await check_registered(ctx):
@@ -962,7 +951,7 @@ def register_v432_forge_live(
             retry_callback=send_result_from_interaction,
             share_callback=share_result,
         )
-        await ctx.send(embed=embed, file=file, view=view)
+        await ctx.send(embed=embed, view=view) if file is None else await ctx.send(embed=embed, file=file, view=view)
 
     existing_enhance = bot.get_command("강화")
     if existing_enhance is None:

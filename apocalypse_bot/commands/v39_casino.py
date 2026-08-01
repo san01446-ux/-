@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+ABADDON_TEXT_FIRST_DISABLED = True
+
 import asyncio
 import math
 import os
@@ -485,15 +487,8 @@ def register_v39_commands(
             return
         user = get_user(ctx.author.id)
         embed = _casino_lobby_embed(ctx, user, world_data)
-        asset_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "assets", "v635", "casino", "lobby.jpg",
-        )
-        if os.path.isfile(asset_path):
-            embed.set_image(url="attachment://casino.jpg")
-            await ctx.send(embed=embed, file=discord.File(asset_path, filename="casino.jpg"))
-        else:
-            await ctx.send(embed=embed, file=visual) if visual else await ctx.send(embed=embed)
+        # v6.4.1 텍스트 우선 정책: 카지노 로비 이미지는 사용하지 않습니다.
+        await ctx.send(embed=embed)
 
     async def show_balance(ctx: commands.Context) -> None:
         if not await check_registered(ctx):

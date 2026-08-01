@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+ABADDON_TEXT_FIRST_DISABLED = True
+
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import discord
@@ -245,19 +247,9 @@ class EquipmentMenuView(discord.ui.View):
         embed.add_field(name="기본 전투력", value=f"**+{int(info.get('power', 0))}**", inline=True)
         embed.add_field(name="보유 · 장착", value=f"**{'보유' if owned else '미보유'} · {'장착 중' if equipped else '미장착'}**", inline=True)
         embed.add_field(name="능력치", value=stat_text[:1024], inline=False)
-        file = None
-        if callable(self.build_visual_file):
-            try:
-                file = await self.build_visual_file(item_name, tier or "일반", slot, True, level, "menu")
-            except Exception:
-                file = None
-        if file is not None:
-            embed.set_image(url=f"attachment://{file.filename}")
-        embed.set_footer(text="장착: !장착 아이템명 · 강화: !강화 아이템명 · 외형: !장비외형 아이템명")
-        kwargs = {"embed": embed, "ephemeral": True}
-        if file is not None:
-            kwargs["file"] = file
-        await interaction.response.send_message(**kwargs)
+        # v6.4.1 텍스트 우선 정책: 장비 상세 이미지를 첨부하지 않습니다.
+        embed.set_footer(text="장착: !장착 아이템명 · 강화: !강화 아이템명 · 외형 정보는 텍스트로 표시")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="이전", emoji="◀️", style=discord.ButtonStyle.secondary, row=2)
     async def previous(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

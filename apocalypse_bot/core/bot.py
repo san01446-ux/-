@@ -5,6 +5,10 @@ import asyncio
 import json
 import os
 import traceback
+import shutil
+import threading
+import difflib
+import uuid
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from apocalypse_bot.game_data.jobs import JOBS
@@ -45,14 +49,27 @@ MAX_MESSAGE_LENGTH = 1900
 # 데이터 로드 / 저장 / 마이그레이션
 # =========================================================
 def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {"users": {}, "world": {}}
+    """주 데이터가 손상되면 최근 정상 백업(.bak)을 우선 복구합니다."""
+    candidates = [DATA_FILE, f"{DATA_FILE}.bak"]
+    raw = None
+    loaded_from = ""
+    for candidate in candidates:
+        if not os.path.exists(candidate):
+            continue
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                value = json.load(f)
+            if isinstance(value, dict):
+                raw = value
+                loaded_from = candidate
+                break
+        except (json.JSONDecodeError, OSError, TypeError) as exc:
+            print(f"[데이터 로드 경고] {candidate}: {type(exc).__name__}: {exc}", flush=True)
 
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-    except (json.JSONDecodeError, OSError):
+    if raw is None:
         return {"users": {}, "world": {}}
+    if loaded_from.endswith(".bak"):
+        print(f"[데이터 자동 복구] 주 파일 대신 백업을 불러왔습니다: {loaded_from}", flush=True)
 
     # 구버전 데이터는 최상위에 유저 ID가 바로 존재함
     if "users" not in raw:
@@ -72,20 +89,48 @@ user_data = data["users"]
 world_data = data["world"]
 
 
+_SAVE_LOCK = threading.Lock()
+_SAVE_COUNT = 0
+
+
 def save_data():
+    """원자적 저장 + 쓰기 검증 + 최근 정상본 백업.
+
+    단일 이벤트 루프에서도 여러 명령이 연달아 저장할 수 있으므로 임시 파일을
+    완전히 기록·검증한 뒤 교체합니다. 기존 정상 파일은 .bak으로 한 단계 보존합니다.
+    """
+    global _SAVE_COUNT
     directory = os.path.dirname(DATA_FILE)
     if directory:
         os.makedirs(directory, exist_ok=True)
 
+    payload = {"users": user_data, "world": world_data}
     temp_file = f"{DATA_FILE}.tmp"
-    with open(temp_file, "w", encoding="utf-8") as f:
-        json.dump(
-            {"users": user_data, "world": world_data},
-            f,
-            ensure_ascii=False,
-            indent=4
-        )
-    os.replace(temp_file, DATA_FILE)
+    backup_file = f"{DATA_FILE}.bak"
+    with _SAVE_LOCK:
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            # 교체 전에 JSON을 다시 읽어 잘린 파일이나 직렬화 오류를 차단합니다.
+            with open(temp_file, "r", encoding="utf-8") as verify:
+                checked = json.load(verify)
+            if not isinstance(checked, dict) or "users" not in checked or "world" not in checked:
+                raise ValueError("저장 검증 실패: users/world 루트가 없습니다.")
+            if os.path.isfile(DATA_FILE):
+                try:
+                    shutil.copy2(DATA_FILE, backup_file)
+                except OSError as backup_exc:
+                    print(f"[데이터 백업 경고] {type(backup_exc).__name__}: {backup_exc}", flush=True)
+            os.replace(temp_file, DATA_FILE)
+            _SAVE_COUNT += 1
+        finally:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except OSError:
+                    pass
 
 
 def default_user():
@@ -1555,36 +1600,53 @@ async def on_message(message):
 
 @bot.event
 async def on_command_error(ctx, error):
-    if hasattr(ctx.command, "on_error"):
+    if ctx.command is not None and hasattr(ctx.command, "on_error"):
         return
 
     if isinstance(error, commands.CommandNotFound):
+        raw = str(getattr(ctx.message, "content", "")).lstrip("!").split(maxsplit=1)[0]
+        candidates = sorted({name for name in bot.all_commands if not str(name).startswith("_")})
+        matches = difflib.get_close_matches(raw, candidates, n=3, cutoff=0.72) if len(raw) >= 2 else []
+        if matches:
+            suggestions = " · ".join(f"`!{name}`" for name in matches)
+            await ctx.send(f"🔎 **`!{raw}`** 명령을 찾지 못했습니다. 비슷한 명령: {suggestions}\n전체 목록: `!명령어`")
+        else:
+            await ctx.send(f"🔎 **`!{raw or '?'}`** 명령을 찾지 못했습니다. `!명령어`에서 카테고리를 선택하거나 `!명령어 검색어`로 찾아보세요.")
         return
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("⚠️ 명령어에 필요한 값이 빠졌습니다. `!명령어`를 확인하세요.")
+        command = ctx.command
+        signature = f"!{command.qualified_name} {command.signature}".strip() if command else "!명령어"
+        help_text = str(getattr(command, "help", "") or getattr(command, "description", "") or "필요한 값을 입력하세요.")
+        await ctx.send(f"⚠️ **필수 입력값이 빠졌습니다.**\n사용법: `{signature}`\n{help_text[:500]}")
         return
     if isinstance(error, commands.BadArgument):
-        await ctx.send("⚠️ 유저, 숫자 또는 입력값 형식이 잘못됐습니다.")
+        command = ctx.command
+        signature = f"!{command.qualified_name} {command.signature}".strip() if command else "!명령어"
+        await ctx.send(f"⚠️ 유저, 숫자 또는 입력값 형식이 잘못됐습니다.\n사용법: `{signature}`")
         return
     if isinstance(error, commands.CommandOnCooldown):
-        remaining = int(error.retry_after)
+        remaining = max(1, int(error.retry_after))
         mins, secs = divmod(remaining, 60)
         await ctx.send(f"⏳ 쿨타임이 남았습니다: **{mins}분 {secs}초**")
         return
 
     original = getattr(error, "original", error)
+    incident_id = uuid.uuid4().hex[:8].upper()
     print(
-        f"[명령어 오류] 명령={getattr(ctx.command, 'qualified_name', None)} "
-        f"유저={getattr(ctx.author, 'id', None)} "
+        f"[명령어 오류:{incident_id}] 명령={getattr(ctx.command, 'qualified_name', None)} "
+        f"유저={getattr(ctx.author, 'id', None)} 길드={getattr(getattr(ctx, 'guild', None), 'id', None)} "
         f"오류={type(original).__name__}: {original}",
         flush=True,
     )
     traceback.print_exception(type(original), original, original.__traceback__)
     try:
-        await ctx.send("❌ 명령어 처리 중 오류가 발생했습니다. 관리자에게 알려주세요.")
+        await ctx.send(
+            "❌ 명령어 처리 중 오류가 발생했습니다. 재화 차감 여부를 확인한 뒤 관리자에게 아래 사건 번호를 알려주세요.\n"
+            f"사건 번호: `{incident_id}` · 명령: `{getattr(ctx.command, 'qualified_name', '알 수 없음')}`"
+        )
     except (discord.NotFound, discord.Forbidden, discord.HTTPException) as notify_exc:
         print(
-            f"[명령어 오류 알림 실패] channel={getattr(getattr(ctx, 'channel', None), 'id', None)} "
+            f"[명령어 오류 알림 실패:{incident_id}] channel={getattr(getattr(ctx, 'channel', None), 'id', None)} "
             f"{type(notify_exc).__name__}: {notify_exc}",
             flush=True,
         )
@@ -5216,6 +5278,13 @@ register_v639_frontier_operations(
 from apocalypse_bot.commands.v640_interactive_arcade import register_v640_interactive_arcade
 register_v640_interactive_arcade(
     bot, get_user, check_registered, save_data, world_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V6.4.1: 전수 안정화·원자적 저장·텍스트 퍼스트·서버 브리핑/테마·명령어 가이드 검수
+from apocalypse_bot.commands.v641_stabilization import register_v641_stabilization
+register_v641_stabilization(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+    data_file=DATA_FILE,
 )
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록

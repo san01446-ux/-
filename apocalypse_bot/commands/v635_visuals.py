@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+ABADDON_TEXT_FIRST_DISABLED = True
+
 import re
 from datetime import datetime
 from pathlib import Path
@@ -18,12 +20,8 @@ def _safe_filename(prefix: str, path: Path) -> str:
 
 
 def attach_asset(embed: discord.Embed, path: Path, prefix: str) -> Optional[discord.File]:
-    if not path.is_file():
-        return None
-    filename = _safe_filename(prefix, path)
-    file = discord.File(str(path), filename=filename)
-    embed.set_image(url=f"attachment://{filename}")
-    return file
+    # v6.4.1 텍스트 우선 정책
+    return None
 
 
 def casino_reaction(title: str, description: str, delta: int, bet: int) -> Tuple[str, str]:

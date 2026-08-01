@@ -378,6 +378,17 @@ def register_v403_server_builder(
     world_data: Dict[str, Any],
     save_data,
 ) -> None:
+    def current_theme(guild_id: int) -> Dict[str, Any]:
+        try:
+            from apocalypse_bot.commands.v641_stabilization import DEFAULT_THEME, THEMES
+            root = world_data.get("v641", {})
+            guilds = root.get("guilds", {}) if isinstance(root, dict) else {}
+            state = guilds.get(str(guild_id), {}) if isinstance(guilds, dict) else {}
+            key = str(state.get("theme", DEFAULT_THEME)) if isinstance(state, dict) else DEFAULT_THEME
+            return dict(THEMES.get(key, THEMES[DEFAULT_THEME]))
+        except Exception:
+            return {"emoji": "🕯️", "title": "검은 성당", "color": 0x6C3B73, "tagline": "ABADDON 기본 생존 성역"}
+
     async def require_admin(ctx: commands.Context) -> bool:
         if ctx.guild is None or not isinstance(ctx.author, discord.Member):
             await ctx.send("❌ 서버 안에서만 사용할 수 있습니다.")
@@ -416,7 +427,7 @@ def register_v403_server_builder(
             return None
         return member
 
-    def setup_help_embed() -> discord.Embed:
+    def setup_help_embed(guild_id: int = 0) -> discord.Embed:
         embed = discord.Embed(
             title="🏗️ ABADDON 서버 자동 세팅",
             description=(
@@ -440,6 +451,12 @@ def register_v403_server_builder(
             value="역할 9개 · 카테고리 6개 · 텍스트 31개 · 음성 5개 · 기본 안내 임베드",
             inline=False,
         )
+        theme = current_theme(guild_id)
+        embed.add_field(
+            name="현재 텍스트 테마",
+            value=f"{theme.get('emoji', '🕯️')} **{theme.get('title', '검은 성당')}** · {theme.get('tagline', '')}\n변경: `!서버테마설정 테마명`",
+            inline=False,
+        )
         embed.set_footer(text="미리보기 승인 유효시간: 10분")
         return embed
 
@@ -452,7 +469,7 @@ def register_v403_server_builder(
     async def server_builder(ctx: commands.Context):
         if not await require_admin(ctx):
             return
-        await ctx.send(embed=setup_help_embed())
+        await ctx.send(embed=setup_help_embed(ctx.guild.id if ctx.guild else 0))
 
     @server_builder.command(name="미리보기", aliases=["preview", "확인"])
     async def server_builder_preview(ctx: commands.Context):

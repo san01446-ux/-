@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+ABADDON_TEXT_FIRST_DISABLED = True
+
 import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -123,11 +125,8 @@ def _discord_file(path: Path) -> discord.File:
 
 
 def _set_image(embed: discord.Embed, path: Optional[Path]) -> Optional[discord.File]:
-    if path is None or not path.is_file():
-        return None
-    file = _discord_file(path)
-    embed.set_image(url=f"attachment://{file.filename}")
-    return file
+    # v6.4.1 텍스트 우선 정책: 월드보스를 제외한 게임 이미지는 첨부하지 않습니다.
+    return None
 
 
 async def send_visual(target: Any, embed: discord.Embed, relative: str, *, view: Optional[discord.ui.View] = None) -> discord.Message:
