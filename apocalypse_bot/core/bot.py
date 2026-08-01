@@ -5280,7 +5280,7 @@ register_v640_interactive_arcade(
     bot, get_user, check_registered, save_data, world_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V6.4.1: 전수 안정화·원자적 저장·텍스트 퍼스트·서버 브리핑/테마·명령어 가이드 검수
+# V6.4.1a: 안정화 유지·카지노만 이미지 미사용·핵심 이미지 복구·강화 FX/버튼 재시도
 from apocalypse_bot.commands.v641_stabilization import register_v641_stabilization
 register_v641_stabilization(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,

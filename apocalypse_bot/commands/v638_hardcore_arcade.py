@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+import aiohttp
 import discord
 from discord.ext import commands
 
@@ -54,6 +55,32 @@ NEW_GUIDE_CATEGORY = {
         "!생물테러준비 / !생물테러수신 켜기/끄기 / !생물테러 @유저",
     ],
 }
+
+
+
+
+async def _safe_interaction_edit(interaction: discord.Interaction, **kwargs: Any) -> Any:
+    """Component edit with one retry for Render/Discord transient connection resets."""
+    transient = (discord.HTTPException, aiohttp.ClientError, ConnectionResetError, OSError)
+    try:
+        if interaction.response.is_done():
+            return await interaction.edit_original_response(**kwargs)
+        return await interaction.response.edit_message(**kwargs)
+    except transient:
+        await asyncio.sleep(0.8)
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+            return await interaction.edit_original_response(**kwargs)
+        except transient:
+            # The game state is already saved. Do not crash the View task because Discord reset the socket.
+            return None
+
+
+def _emoji_progress(current: float, maximum: float, width: int = 10, filled: str = "🟩", empty: str = "⬛") -> str:
+    ratio = 0.0 if maximum <= 0 else max(0.0, min(1.0, float(current) / float(maximum)))
+    count = max(0, min(width, int(round(ratio * width))))
+    return filled * count + empty * (width - count)
 
 
 def _now() -> datetime:
@@ -286,7 +313,7 @@ class CrashView(OwnedView):
             add_casino_chips(self.user, payout)
             self.user.setdefault("stats", {})["crash_cashouts"] = int(self.user.setdefault("stats", {}).get("crash_cashouts", 0)) + 1
             self.save_data()
-            await interaction.response.edit_message(
+            await _safe_interaction_edit(interaction, 
                 embed=self.embed(f"🏁 **{self.multiplier:.2f}×에서 탈출 성공!** 총 **{payout:,}칩**을 회수했습니다."),
                 view=self,
             )
@@ -395,7 +422,7 @@ class FrequencyView(OwnedView):
             else:
                 _add_grave_loot(self.world_data, self.guild_id, chips=max(100, self.bet // 12), source="주파수 가로채기 실패")
             self.save_data()
-            await interaction.response.edit_message(
+            await _safe_interaction_edit(interaction, 
                 embed=self.embed(f"{'✅' if payout else '❌'} **{label}** · 오차 {error:.0f}% · 회수 **{payout:,}칩**"),
                 view=self,
             )
@@ -457,6 +484,8 @@ class MinesView(OwnedView):
         )
         embed.add_field(name="🎮 10초 설명", value="안전 칸을 열면 배당이 오릅니다. 지뢰를 밟기 전에 🏃 버튼으로 현금화하면 표시된 총액을 회수합니다.", inline=False)
         embed.add_field(name="🧨 지뢰 / 안전 통과", value=f"{self.mine_count}개 / {len(self.opened)}칸", inline=True)
+        safe_total = max(1, self.CELL_COUNT - self.mine_count)
+        embed.add_field(name="🧭 횡단 진행", value=f"{_emoji_progress(len(self.opened), safe_total)} **{len(self.opened)}/{safe_total} · {len(self.opened)/safe_total*100:.0f}%**", inline=False)
         embed.add_field(name="💳 시작 전 보유 칩", value=f"{self.starting_balance:,}칩", inline=True)
         embed.add_field(name="💰 현재 보유 칩", value=f"{current_balance:,}칩", inline=True)
         if self.done:
@@ -492,7 +521,7 @@ class MinesView(OwnedView):
                         child.label = "💣"
                 _add_grave_loot(self.world_data, self.guild_id, chips=max(100, self.bet // 10), source="폐허 지뢰 폭발")
                 self.save_data()
-                await interaction.response.edit_message(embed=self.embed("💥 **지뢰가 폭발했습니다.** 현재 회수액은 0칩이며, 배팅액을 전부 잃었습니다."), view=self)
+                await _safe_interaction_edit(interaction, embed=self.embed("💥 **지뢰가 폭발했습니다.** 현재 회수액은 0칩이며, 배팅액을 전부 잃었습니다."), view=self)
                 return
             self.opened.add(button.index)
             button.label = "✨"
@@ -507,9 +536,9 @@ class MinesView(OwnedView):
                 self.result_status = "🏆 모든 안전 칸 통과"
                 self.disable_all()
                 self.save_data()
-                await interaction.response.edit_message(embed=self.embed(f"🏆 모든 안전 칸을 통과했습니다. 총 **{payout:,}칩**, 순이익 **{self.net_result:+,}칩**!"), view=self)
+                await _safe_interaction_edit(interaction, embed=self.embed(f"🏆 모든 안전 칸을 통과했습니다. 총 **{payout:,}칩**, 순이익 **{self.net_result:+,}칩**!"), view=self)
                 return
-            await interaction.response.edit_message(embed=self.embed("✅ 안전 칸입니다. 현금화 총액과 순이익을 따로 확인하세요."), view=self)
+            await _safe_interaction_edit(interaction, embed=self.embed("✅ 안전 칸입니다. 현금화 총액과 순이익을 따로 확인하세요."), view=self)
 
     @discord.ui.button(label="배당금 챙기고 도망치기", emoji="🏃", style=discord.ButtonStyle.primary, row=4)
     async def cashout(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -528,7 +557,7 @@ class MinesView(OwnedView):
             self.result_status = "🏃 현금화 성공"
             self.disable_all()
             self.save_data()
-            await interaction.response.edit_message(embed=self.embed(f"🏃 탈출 성공! 총 **{payout:,}칩** 회수 · 실제 순손익 **{self.net_result:+,}칩**"), view=self)
+            await _safe_interaction_edit(interaction, embed=self.embed(f"🏃 탈출 성공! 총 **{payout:,}칩** 회수 · 실제 순손익 **{self.net_result:+,}칩**"), view=self)
 
 
 class DoorView(OwnedView):
@@ -574,7 +603,7 @@ class DoorView(OwnedView):
                 color = discord.Color.dark_red()
             self.save_data()
             embed = discord.Embed(title="🚪 폐허의 3지선다", description=text, color=color)
-            await interaction.response.edit_message(embed=embed, view=self)
+            await _safe_interaction_edit(interaction, embed=embed, view=self)
 
     @discord.ui.button(label="1번 철문", style=discord.ButtonStyle.secondary)
     async def door1(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -688,7 +717,7 @@ class DuelAcceptView(discord.ui.View):
         embed.add_field(name="전투력 굴림", value=f"{self.challenger.display_name} {left_score:.1f} vs {self.target.display_name} {right_score:.1f}", inline=False)
         embed.add_field(name="승자 회수", value=f"{payout:,}칩", inline=True)
         embed.add_field(name="후유증", value=penalty, inline=False)
-        await interaction.response.edit_message(embed=embed, view=self)
+        await _safe_interaction_edit(interaction, embed=embed, view=self)
 
     @discord.ui.button(label="거절", style=discord.ButtonStyle.secondary)
     async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -698,7 +727,7 @@ class DuelAcceptView(discord.ui.View):
         self.done = True
         for child in self.children:
             child.disabled = True
-        await interaction.response.edit_message(content="결투가 거절됐습니다.", embed=None, view=self)
+        await _safe_interaction_edit(interaction, content="결투가 거절됐습니다.", embed=None, view=self)
 
 
 class HeistView(discord.ui.View):
@@ -741,7 +770,7 @@ class HeistView(discord.ui.View):
                 child.disabled = True
             _add_grave_loot(self.world_data, self.guild_id, chips=max(100, self.lobby["pot"] // 8), source="카지노 금고 경보")
             self.save_data()
-            await interaction.response.edit_message(embed=self.embed("🚨 잘못된 회로를 잘랐습니다. 경보가 울리고 공동 참가비가 전부 압수됐습니다."), view=self)
+            await _safe_interaction_edit(interaction, embed=self.embed("🚨 잘못된 회로를 잘랐습니다. 경보가 울리고 공동 참가비가 전부 압수됐습니다."), view=self)
             return
         self.stage += 1
         if self.stage >= 4:
@@ -755,9 +784,9 @@ class HeistView(discord.ui.View):
                 if user:
                     add_casino_chips(user, share)
             self.save_data()
-            await interaction.response.edit_message(embed=self.embed(f"💎 금고 개방 성공! 총 **{total_payout:,}칩**, 1인당 **{share:,}칩**을 확보했습니다."), view=self)
+            await _safe_interaction_edit(interaction, embed=self.embed(f"💎 금고 개방 성공! 총 **{total_payout:,}칩**, 1인당 **{share:,}칩**을 확보했습니다."), view=self)
             return
-        await interaction.response.edit_message(embed=self.embed(f"✅ 관문 {self.stage}/4 통과. 다음 보안 회로가 열렸습니다."), view=self)
+        await _safe_interaction_edit(interaction, embed=self.embed(f"✅ 관문 {self.stage}/4 통과. 다음 보안 회로가 열렸습니다."), view=self)
 
     @discord.ui.button(label="A 회로", style=discord.ButtonStyle.danger)
     async def a(self, interaction: discord.Interaction, button: discord.ui.Button):

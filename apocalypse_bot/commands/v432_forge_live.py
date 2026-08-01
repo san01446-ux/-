@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-ABADDON_TEXT_FIRST_DISABLED = True
-
 import asyncio
 import io
 import json
@@ -27,6 +25,13 @@ from discord.ext import commands
 V432_VERSION = "4.3.2.1"
 MAX_PUBLIC_EVENTS = 60
 PUBLIC_MILESTONE_LEVELS = {5, 7, 10, 12, 15, 18, 20}
+
+
+def _emoji_progress_bar(value: float, maximum: float, width: int = 10, filled: str = "🟨", empty: str = "⬛") -> str:
+    ratio = 0.0 if maximum <= 0 else max(0.0, min(1.0, float(value) / float(maximum)))
+    count = max(0, min(width, int(round(ratio * width))))
+    return filled * count + empty * (width - count)
+
 
 FORGE_EPITHETS: Tuple[Tuple[int, str], ...] = (
     (20, "공허를 끝낸"),
@@ -836,7 +841,7 @@ def register_v432_forge_live(
                 "published": bool(published),
             }
 
-    async def build_result_embed(result: Dict[str, Any]) -> Tuple[discord.Embed, Optional[discord.File]]:
+    async def build_result_embed(result: Dict[str, Any]) -> Tuple[discord.Embed, discord.File]:
         success = bool(result["success"])
         level = _safe_int(result["to"])
         tier = str(result["tier"])
@@ -857,13 +862,14 @@ def register_v432_forge_live(
         embed.add_field(name="대장장이", value=f"“{result['quote']}”", inline=False)
         embed.add_field(name="사용 식량", value=f"{result['cost']:,}개", inline=True)
         embed.add_field(name="보유 식량", value=f"{result['balance']:,}개", inline=True)
-        embed.add_field(name="성공 확률", value=f"{result['rate']}%", inline=True)
+        embed.add_field(name="성공 확률", value=f"{_emoji_progress_bar(result['rate'], 100, filled='🟩')} **{result['rate']}%**", inline=False)
+        embed.add_field(name="✨ 강화 진행", value=f"{_emoji_progress_bar(level, 20)} **+{level}/+20**", inline=False)
         heat_text = f"연속 실패 {result['heat_after']}회"
         if result["heat_after"]:
             heat_text += f" · 다음 확률 +{min(15, result['heat_after'] * 2)}%"
         else:
             heat_text += " · 열기 초기화"
-        embed.add_field(name="장인의 열기", value=heat_text, inline=False)
+        embed.add_field(name="장인의 열기", value=f"{_emoji_progress_bar(min(result['heat_after'], 8), 8, filled='🔥', empty='▫️')}\n{heat_text}", inline=False)
         if result.get("unlocked"):
             embed.add_field(name="업적 달성", value=", ".join(name for name, _title in result["unlocked"]), inline=False)
         if result.get("published"):
@@ -871,8 +877,21 @@ def register_v432_forge_live(
         else:
             embed.set_footer(text="강화 표시 이름은 연출용이며 기존 인벤토리 데이터는 그대로 유지됩니다.")
 
-        # v6.4.1 텍스트 우선 정책: 강화 결과 이미지는 첨부하지 않습니다.
-        return embed, None
+        named_builder = getattr(bot, "v633_build_named_equipment_file", None)
+        if named_builder is not None:
+            file = await named_builder(
+                str(result["item"]),
+                tier,
+                str(result["slot"]),
+                success,
+                level,
+                "forge_result",
+            )
+        else:
+            image = await asyncio.to_thread(build_forge_card_png, tier, str(result["slot"]), success, level)
+            file = discord.File(io.BytesIO(image), filename="abaddon_forge.png")
+        embed.set_image(url=f"attachment://{file.filename}")
+        return embed, file
 
     async def share_result(interaction: discord.Interaction, result: Dict[str, Any]) -> None:
         if not result.get("success"):
@@ -929,7 +948,7 @@ def register_v432_forge_live(
             retry_callback=send_result_from_interaction,
             share_callback=share_result,
         )
-        await interaction.followup.send(embed=embed, view=view) if file is None else await interaction.followup.send(embed=embed, file=file, view=view)
+        await interaction.followup.send(embed=embed, file=file, view=view)
 
     async def enhanced_callback(ctx: commands.Context, *, 아이템이름: str) -> None:
         if not await check_registered(ctx):
@@ -951,7 +970,7 @@ def register_v432_forge_live(
             retry_callback=send_result_from_interaction,
             share_callback=share_result,
         )
-        await ctx.send(embed=embed, view=view) if file is None else await ctx.send(embed=embed, file=file, view=view)
+        await ctx.send(embed=embed, file=file, view=view)
 
     existing_enhance = bot.get_command("강화")
     if existing_enhance is None:

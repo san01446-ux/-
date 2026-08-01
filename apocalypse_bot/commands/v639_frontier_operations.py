@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-ABADDON_TEXT_FIRST_DISABLED = True
-
 import asyncio
 import copy
 import hashlib
@@ -34,8 +32,12 @@ SCRAP_ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v640" / "sc
 
 
 def _scrap_file(embed: discord.Embed, name: str = "grinder") -> Optional[discord.File]:
-    # v6.4.1 텍스트 우선 정책
-    return None
+    path = SCRAP_ASSET_ROOT / f"{name}.jpg"
+    if not path.is_file():
+        return None
+    filename = f"abaddon_scrap_{name}.jpg"
+    embed.set_image(url=f"attachment://{filename}")
+    return discord.File(str(path), filename=filename)
 
 
 async def _send_scrap_embed(ctx: commands.Context, *, title: str, description: str, image: str = "grinder", fields: Sequence[Tuple[str, str, bool]] = ()) -> None:

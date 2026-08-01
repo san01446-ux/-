@@ -13,35 +13,22 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "6.4.1"
+VERSION = "6.4.1a"
 KST = timezone(timedelta(hours=9))
 
 THEMES: Dict[str, Dict[str, Any]] = {
-    "검은성당": {
-        "emoji": "🕯️", "title": "검은 성당", "color": 0x6C3B73,
-        "tagline": "침묵 속에서 신호를 지키는 생존 성역",
-        "briefing": "낮은 조명과 차분한 경보 문구를 사용하는 정통 ABADDON 테마입니다.",
-    },
-    "폐허도시": {
-        "emoji": "🏙️", "title": "폐허 도시", "color": 0x7A5943,
-        "tagline": "무너진 도심을 거점으로 삼은 전투 생존 테마",
-        "briefing": "작전·탐색·거래 안내를 거칠고 실용적인 문구로 정리합니다.",
-    },
-    "격리연구소": {
-        "emoji": "🧪", "title": "격리 연구소", "color": 0x2A7F78,
-        "tagline": "감염 수치와 표본을 추적하는 연구 거점",
-        "briefing": "날씨·감염·무전·장비 상태를 계측 보고서처럼 표시합니다.",
-    },
-    "황혼전초기지": {
-        "emoji": "🏕️", "title": "황혼 전초기지", "color": 0xB0783C,
-        "tagline": "생활과 기지 성장을 중심으로 한 개척 테마",
-        "briefing": "채집·기지·보급선·시장 정보를 한눈에 확인하기 좋습니다.",
-    },
-    "종말방송국": {
-        "emoji": "📻", "title": "종말 방송국", "color": 0x425D8C,
-        "tagline": "끊어진 통신망을 다시 잇는 서버 이벤트 테마",
-        "briefing": "SOS·날씨·공개 작전·서버 알림을 방송 속보 형식으로 정리합니다.",
-    },
+    "검은성당": {"emoji":"🕯️","title":"검은 성당","color":0x6C3B73,"tagline":"침묵 속에서 신호를 지키는 생존 성역","briefing":"낮은 조명과 차분한 경보 문구를 사용하는 정통 ABADDON 테마입니다."},
+    "폐허도시": {"emoji":"🏙️","title":"폐허 도시","color":0x7A5943,"tagline":"무너진 도심을 거점으로 삼은 전투 생존 테마","briefing":"작전·탐색·거래 안내를 거칠고 실용적인 문구로 정리합니다."},
+    "격리연구소": {"emoji":"🧪","title":"격리 연구소","color":0x2A7F78,"tagline":"감염 수치와 표본을 추적하는 연구 거점","briefing":"날씨·감염·무전·장비 상태를 계측 보고서처럼 표시합니다."},
+    "황혼전초기지": {"emoji":"🏕️","title":"황혼 전초기지","color":0xB0783C,"tagline":"생활과 기지 성장을 중심으로 한 개척 테마","briefing":"채집·기지·보급선·시장 정보를 한눈에 확인하기 좋습니다."},
+    "종말방송국": {"emoji":"📻","title":"종말 방송국","color":0x425D8C,"tagline":"끊어진 통신망을 다시 잇는 서버 이벤트 테마","briefing":"SOS·날씨·공개 작전·서버 알림을 방송 속보 형식으로 정리합니다."},
+    "방사능항구": {"emoji":"⚓","title":"방사능 항구","color":0x397B72,"tagline":"오염된 부두와 밀수 항로를 지키는 해안 거점","briefing":"밀수품·보급선·자원 시장과 위험 수치를 항만 관제 보고처럼 표시합니다."},
+    "붉은사막": {"emoji":"🏜️","title":"붉은 사막","color":0xA85A42,"tagline":"모래폭풍 속 이동과 자원 확보에 특화된 유목 거점","briefing":"날씨·원정·생활 활동의 위험과 보상을 거친 탐사 기록으로 정리합니다."},
+    "침수지하철": {"emoji":"🚇","title":"침수 지하철","color":0x315F75,"tagline":"물에 잠긴 노선을 따라 생존자를 연결하는 지하 거점","briefing":"이동·무전·스토리·위험구역 정보를 노선 관제판처럼 표시합니다."},
+    "설원벙커": {"emoji":"❄️","title":"설원 벙커","color":0x6A8297,"tagline":"극저온 한파를 버티는 폐쇄형 방어 거점","briefing":"기지 방어·식량·장비 내구도와 체력 상태를 보급 장부 형식으로 정리합니다."},
+    "무너진방벽": {"emoji":"🧱","title":"무너진 방벽","color":0x7C6758,"tagline":"끊어진 방어선을 복구하는 최전선 요새","briefing":"전투·레이드·기지 강화와 공동 목표를 전선 상황판처럼 표시합니다."},
+    "밤의시장": {"emoji":"🌃","title":"밤의 시장","color":0x674C83,"tagline":"희귀 물자와 소문이 오가는 암시장 생존 테마","briefing":"거래·까마귀 상점·우편·보물 감정을 야시장 전광판처럼 정리합니다."},
+    "신호관측소": {"emoji":"📡","title":"신호 관측소","color":0x486D91,"tagline":"날씨와 통신 교란을 감시하는 고지대 관측 거점","briefing":"날씨 변화·SOS·서버 이벤트의 남은 시간을 신호 분석표처럼 표시합니다."},
 }
 DEFAULT_THEME = "검은성당"
 
@@ -49,12 +36,12 @@ STABILITY_GUIDE = {
     "id": "stability_theme",
     "emoji": "🧰",
     "title": "안정화 / 서버 테마",
-    "hint": "통합 점검, 오늘 할 일, 서버 브리핑, 텍스트형 테마",
+    "hint": "통합 점검, 오늘 할 일, 서버 브리핑, 12종 서버 테마",
     "commands": [
         "!안정화상태 — 현재 버전·데이터·명령어·텍스트 우선 정책 확인",
         "!오늘할일 — 출석·운세·퀴즈·생활·전투 추천 체크리스트",
         "!서버브리핑 — 날씨·위험구역·보급선·기지방어를 한 화면에 요약",
-        "!서버테마 — 서버 테마 목록과 현재 설정 확인",
+        "!서버테마 — 12종 서버 테마 목록과 현재 설정 확인",
         "!서버테마미리보기 [테마명] — 텍스트형 테마를 적용 전 확인",
         "!서버테마설정 테마명 — 관리자가 서버 브리핑 테마 변경",
         "!데이터백업 — 관리자가 현재 생존 데이터를 수동 백업",
@@ -79,10 +66,10 @@ EXPECTED_RECENT_COMMANDS: Tuple[str, ...] = (
     "안정화상태", "오늘할일", "서버브리핑", "서버테마", "서버테마미리보기", "서버테마설정", "데이터백업",
 )
 
-TEXT_FIRST_MODULES: Tuple[str, ...] = (
+VISUAL_MODULES: Tuple[str, ...] = (
     "v631_life_visuals.py", "v632_life_visuals.py", "v633_equipment_crafting.py",
     "v634_equipment_menu.py", "v634_pet_visuals.py", "v635_visuals.py",
-    "v39_casino.py", "v432_forge_live.py", "v639_frontier_operations.py",
+    "v432_forge_live.py", "v639_frontier_operations.py",
 )
 
 
@@ -116,7 +103,7 @@ def _guild_state(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any]:
         state = {}
         guilds[str(guild_id)] = state
     state.setdefault("theme", DEFAULT_THEME)
-    state.setdefault("text_first", True)
+    state.setdefault("selective_visuals", True)
     return state
 
 
@@ -201,6 +188,14 @@ def _format_seconds(seconds: int) -> str:
     return f"{sec}초"
 
 
+
+
+def _emoji_bar(percent: float, width: int = 10, filled: str = "🟩", empty: str = "⬛") -> str:
+    pct = max(0.0, min(100.0, float(percent)))
+    count = max(0, min(width, int(round(pct / 100 * width))))
+    return filled * count + empty * (width - count)
+
+
 def _backup_data_file(data_file: str, *, keep: int = 5) -> Path:
     source = Path(data_file)
     if not source.is_file():
@@ -246,15 +241,15 @@ def register_v641_stabilization(
     async def stabilization_status(ctx: commands.Context) -> None:
         key, theme = _theme(world_data, _guild_id(ctx))
         embed = discord.Embed(
-            title="🧰 ABADDON v6.4.1 안정화 상태",
-            description="신규 이미지 대신 텍스트·이모지 중심으로 동작하며, **월드보스 이미지만 유지**합니다.",
+            title="🧰 ABADDON v6.4.1a 안정화 상태",
+            description="카지노 이미지만 비활성화하고 생활·장비·보물·제작·펫·기지·갈갈이·월드보스 이미지는 유지합니다.",
             color=int(theme["color"]),
         )
         embed.add_field(name="서버 테마", value=f"{theme['emoji']} **{theme['title']}** (`{key}`)", inline=True)
         embed.add_field(name="명령어", value=f"등록 **{len(list(bot.walk_commands()))}개** · 가이드 **{len(guide)}/25**", inline=True)
         embed.add_field(name="데이터", value=f"생존자 **{len(user_data):,}명** · 원자적 저장/백업 보호", inline=True)
         embed.add_field(name="빠른 진단", value="`!테스트 상세`", inline=False)
-        embed.set_footer(text="이미지 정책: 월드보스 제외 텍스트 우선 · 기존 데이터와 경제 수치는 유지")
+        embed.set_footer(text="이미지 정책: 카지노만 미사용 · 진행 상태는 이모지 바와 퍼센트로 보강")
         await ctx.send(embed=embed)
 
     @bot.command(name="오늘할일", aliases=["오늘뭐하지", "일일체크"])
@@ -289,7 +284,7 @@ def register_v641_stabilization(
             description="\n".join(rows),
             color=discord.Color.dark_teal(),
         )
-        embed.add_field(name="핵심 일일 진행", value=f"**{done}/4 완료**", inline=True)
+        embed.add_field(name="핵심 일일 진행", value=f"{_emoji_bar(done / 4 * 100)} **{done}/4 · {done / 4 * 100:.0f}%**", inline=False)
         embed.add_field(name="안내", value="체크는 보상을 강제로 수령하지 않고 현재 기록만 읽습니다.", inline=False)
         await ctx.send(embed=embed)
 
@@ -308,7 +303,7 @@ def register_v641_stabilization(
         if isinstance(defense, Mapping) and defense:
             hp = int(defense.get("hp", 0) or 0)
             max_hp = max(1, int(defense.get("max_hp", 1) or 1))
-            defense_text = f"{defense.get('name', '미확인 군체')} · {hp:,}/{max_hp:,} ({hp / max_hp * 100:.1f}%)"
+            defense_text = f"{defense.get('name', '미확인 군체')}\n{_emoji_bar(hp / max_hp * 100, filled='🟥')} **{hp:,}/{max_hp:,} · {hp / max_hp * 100:.1f}%**"
         else:
             defense_text = "아직 이번 주 방어전 정보 없음 · `!기지방어`로 확인"
 
@@ -340,13 +335,13 @@ def register_v641_stabilization(
         )
         embed.add_field(
             name=f"{weather.get('emoji', '🌦️')} 현재 날씨 · {weather.get('name', '미확인')}",
-            value=f"{weather.get('desc', '')}\n변경까지 **{_format_seconds(int(weather.get('remaining', 0)))}**",
+            value=(lambda remaining, total: f"{weather.get('desc', '')}\n{_emoji_bar((total-remaining)/max(1,total)*100, filled='🟦')} **경과 {(total-remaining)/max(1,total)*100:.0f}%**\n변경까지 **{_format_seconds(remaining)}**")(int(weather.get('remaining', 0)), int(weather.get('duration_hours', 1))*3600),
             inline=False,
         )
         embed.add_field(name="☣️ 돌연변이 위험구역", value=f"**{hazard.get('region', '미확인')}** · 보상 ×{float(hazard.get('reward_mult', 1.0)):.2f}", inline=True)
         embed.add_field(name="🎁 보급선", value=supply_text, inline=True)
         embed.add_field(name="🛡️ 기지 방어", value=defense_text, inline=False)
-        embed.set_footer(text=f"테마 키: {key} · 설정: !서버테마설정 테마명 · 텍스트 우선 브리핑")
+        embed.set_footer(text=f"테마 키: {key} · 설정: !서버테마설정 테마명 · 12종 선택 가능")
         await ctx.send(embed=embed)
 
     @bot.command(name="서버테마", aliases=["테마목록"])
@@ -357,12 +352,12 @@ def register_v641_stabilization(
             marker = "✅" if key == current_key else "▫️"
             lines.append(f"{marker} {info['emoji']} **{info['title']}** — `{key}`\n└ {info['tagline']}")
         embed = discord.Embed(
-            title="🎨 ABADDON 텍스트형 서버 테마",
+            title="🎨 ABADDON 서버 테마 12종",
             description="\n\n".join(lines),
             color=int(current["color"]),
         )
         embed.add_field(name="적용 범위", value="`!서버브리핑`·안정화 안내·향후 서버 리뉴얼 메시지의 색상과 문구", inline=False)
-        embed.add_field(name="관리자 설정", value="`!서버테마설정 검은성당/폐허도시/격리연구소/황혼전초기지/종말방송국`", inline=False)
+        embed.add_field(name="관리자 설정", value="`!서버테마설정 테마명` · 위 목록의 키를 그대로 입력", inline=False)
         await ctx.send(embed=embed)
 
     @bot.command(name="서버테마미리보기", aliases=["테마미리보기"])
@@ -379,7 +374,7 @@ def register_v641_stabilization(
         )
         embed.add_field(name="📡 속보", value="전자기 교란이 감지되었습니다. 야외 활동 전 `!날씨`를 확인하세요.", inline=False)
         embed.add_field(name="🧭 추천 행동", value="`!서버브리핑` → `!오늘할일` → 원하는 생활/전투 콘텐츠", inline=False)
-        embed.set_footer(text="이미지 없이 색상·이모지·문장 구성만 변경됩니다.")
+        embed.set_footer(text="게임 이미지 정책과 무관하며, 서버 브리핑의 색상·이모지·문장 구성만 변경됩니다.")
         await ctx.send(embed=embed)
 
     @bot.command(name="서버테마설정", aliases=["테마설정"])
@@ -475,30 +470,39 @@ def register_v641_stabilization(
             parent = Path(data_file).expanduser().resolve().parent
             writable = parent.exists() and os.access(parent, os.W_OK)
             checks.append(("영구 저장 경로", writable, f"{parent} · {'쓰기 가능' if writable else '쓰기 불가/미생성'}"))
-
             modules_dir = Path(__file__).resolve().parent
-            policy_failures: List[str] = []
-            for filename in TEXT_FIRST_MODULES:
+            visual_failures: List[str] = []
+            for filename in VISUAL_MODULES:
                 path = modules_dir / filename
                 if not path.is_file():
-                    policy_failures.append(f"{filename}: 없음")
+                    visual_failures.append(f"{filename}: 없음")
                     continue
-                text = path.read_text(encoding="utf-8")
-                if "ABADDON_TEXT_FIRST_DISABLED" not in text:
-                    policy_failures.append(filename)
-            checks.append(("텍스트 우선 연출 정책", not policy_failures, "월드보스 외 게임 이미지 비활성" if not policy_failures else ", ".join(policy_failures)))
+                source = path.read_text(encoding="utf-8")
+                if "ABADDON_TEXT_FIRST_DISABLED" in source:
+                    visual_failures.append(f"{filename}: 비활성 표식 잔존")
+            checks.append(("핵심 이미지 복구", not visual_failures, "생활·장비·보물·제작·펫·기지·갈갈이 이미지 활성" if not visual_failures else ", ".join(visual_failures)))
+
+            casino_module = (modules_dir / "v635_visuals.py").read_text(encoding="utf-8") + (modules_dir / "v39_casino.py").read_text(encoding="utf-8")
+            casino_disabled = "def apply_casino_visual" in casino_module and "return None" in casino_module and "카지노 로비 이미지는 사용하지 않습니다" in casino_module
+            checks.append(("카지노 이미지 미사용", casino_disabled, "카지노만 이미지 비활성" if casino_disabled else "카지노 이미지 정책 점검 필요"))
+
+            fx_source = (modules_dir / "v633_equipment_crafting.py").read_text(encoding="utf-8")
+            checks.append(("강화 이펙트 안전화", "V641A_SAFE_ENHANCEMENT_FX = True" in fx_source, "+0~+4 무효과 · 장비를 가르는 공통 사선 제거"))
+
+            arcade_source = (modules_dir / "v638_hardcore_arcade.py").read_text(encoding="utf-8")
+            checks.append(("버튼 네트워크 재시도", "_safe_interaction_edit" in arcade_source, "Connection reset 1회 재시도·상태 저장 유지"))
 
             world_boss_root = project_root / "apocalypse_bot" / "assets" / "world_boss"
             boss_images = list(world_boss_root.glob("*.png")) + list(world_boss_root.glob("*.jpg")) + list(world_boss_root.glob("*.webp"))
             checks.append(("월드보스 이미지 예외", bool(boss_images), f"{len(boss_images)}개 유지" if boss_images else "월드보스 이미지 없음"))
 
             theme_ok = _guild_state(world_data, _guild_id(ctx)).get("theme") in THEMES
-            checks.append(("서버 테마 상태", theme_ok, str(_guild_state(world_data, _guild_id(ctx)).get("theme"))))
+            checks.append(("서버 테마 상태", theme_ok and len(THEMES) >= 12, f"현재 {_guild_state(world_data, _guild_id(ctx)).get('theme')} · 총 {len(THEMES)}종"))
 
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v6.4.1 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v6.4.1a 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -512,30 +516,32 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v6.4.1 명령어·가이드·데이터·텍스트 우선 정책을 읽기 전용으로 통합 검사합니다."
+        previous_test.help = "v6.4.1a 명령어·가이드·데이터·이미지 복구·강화 효과·네트워크 재시도를 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🧰 ABADDON v6.4.1 — 안정화·텍스트 퍼스트",
-                description="기존 기능을 전수 점검하고 데이터 저장, 명령어 안내, 오류 추적과 서버 브리핑을 정리했습니다.",
+                title="🧰 ABADDON v6.4.1a — 선택형 이미지 복구·강화 이펙트 수정",
+                description="카지노만 이미지 없이 유지하고 나머지 핵심 콘텐츠 이미지를 복구했습니다. 진행 상태는 이모지 바와 퍼센트로 보강했습니다.",
                 color=discord.Color.dark_teal(),
             )
-            embed.add_field(name="🛡️ 안정화", value="원자적 저장 검증·최근 백업·명령/별칭 충돌 검사·가이드 누락 검사·오류 사건 ID", inline=False)
-            embed.add_field(name="📚 명령어 드롭다운", value="신규 **안정화 / 서버 테마** 최상위 카테고리 추가 · v6.3.7~v6.4.1 기능 노출 전수 검사", inline=False)
-            embed.add_field(name="🎨 서버 리뉴얼 테마", value="검은 성당·폐허 도시·격리 연구소·황혼 전초기지·종말 방송국 · 이미지 없이 색상과 문구만 변경", inline=False)
-            embed.add_field(name="📻 접근성", value="`!오늘할일`·`!서버브리핑`·개선된 오류 사용법 안내로 처음 온 생존자도 다음 행동을 확인", inline=False)
-            embed.add_field(name="📝 이미지 정책", value="월드보스 전용 이미지만 유지하고 생활·장비·펫·기지·카지노·재활용은 텍스트·이모지 중심으로 전환", inline=False)
-            embed.set_footer(text="최신 버전 v6.4.1 · 월드 시즌 v6.5.0 전 안정화 기반")
+            embed.add_field(name="🖼️ 이미지 복구", value="생활·장비·보물·제작·펫·기지·갈갈이·월드보스 이미지 복구 · 카지노만 미사용", inline=False)
+            embed.add_field(name="✨ 강화 이펙트", value="+0~+4 무효과 · +5 테두리 · +10 오라 · +15 속성 입자 · +20 초월 효과 · 카드 전체 사선 제거", inline=False)
+            embed.add_field(name="📊 이모지 진행 효과", value="날씨·기지 방어·오늘 할 일·지뢰찾기·장비 강화에 퍼센트와 이모지 게이지 표시", inline=False)
+            embed.add_field(name="🎨 서버 테마", value=f"기존 테마를 줄이지 않고 **{len(THEMES)}종**으로 확장", inline=False)
+            embed.add_field(name="🌐 버튼 오류 대응", value="Discord/Render 연결 초기화 시 메시지 편집을 한 번 재시도하고 저장된 게임 상태는 유지", inline=False)
+            embed.add_field(name="📚 명령어 드롭다운", value="안정화/서버 테마 카테고리와 최근 추가 기능 전수 검사 유지", inline=False)
+            embed.set_footer(text="최신 버전 v6.4.1a · 향후 이미지 정책 변경은 배포 전 확인")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v6.4.1 안정화·텍스트 퍼스트·서버 테마 패치 내용을 확인합니다."
+        patch.help = "ABADDON v6.4.1a 선택형 이미지 복구·강화 이펙트·서버 테마·버튼 오류 수정 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION
     bot.v641_themes = THEMES
-    bot.v641_text_first = True
+    bot.v641_text_first = False
+    bot.v641_selective_visuals = True
     bot.v641_backup_data_file = lambda: _backup_data_file(data_file, keep=5)

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-ABADDON_TEXT_FIRST_DISABLED = True
-
 import asyncio
 import io
 import json
@@ -58,6 +56,8 @@ GRADE_TO_TIER = {
     "A": "전설",
 }
 
+V641A_SAFE_ENHANCEMENT_FX = True
+
 MODE_LABELS = {
     "acquire": ("📦 장비 획득", "새 장비가 인벤토리에 등록되었습니다."),
     "equip": ("⚔️ 장비 장착", "장비가 전투 슬롯에 연결되었습니다."),
@@ -82,6 +82,19 @@ def next_visual_stage(level: int) -> str:
         if level < target:
             return f"+{target} {label}"
     return "최종 단계 도달"
+
+
+
+def _emoji_bar(percent: float, width: int = 10, filled: str = "🟨", empty: str = "⬛") -> str:
+    pct = max(0.0, min(100.0, float(percent)))
+    count = max(0, min(width, int(round(pct / 100 * width))))
+    return filled * count + empty * (width - count)
+
+
+def _enhancement_progress(level: int) -> str:
+    level = max(0, min(20, int(level)))
+    percent = level / 20 * 100
+    return f"{_emoji_bar(percent)} **{level}/20 · {percent:.0f}%**"
 
 
 def _safe_filename(prefix: str) -> str:
@@ -120,111 +133,129 @@ def _unique_accent(item_name: str, base: tuple[int, int, int]) -> tuple[int, int
 
 
 def _draw_equipment_effects(image: Image.Image, *, item_name: str, level: int, tier: str, accent: tuple[int, int, int]) -> Image.Image:
+    """강화 단계가 높을수록 장비 주변만 밝아지는 안전한 후처리.
+
+    카드 전체를 가로지르는 사선/레이저는 사용하지 않습니다. +0~+4는 원본 그대로,
+    +5부터 테두리, +10부터 오라, +15부터 속성 입자, +20에서 초월 효과를 표시합니다.
+    """
     level = max(0, int(level))
     if level < 5:
         return image
-    profile = _effect_profile(item_name)
-    stage = sum(level >= threshold for threshold in (5, 7, 10, 12, 15, 18, 20))
-    rng = random.Random(f"v636:{item_name}:{level}:{tier}")
-    color = _unique_accent(item_name, accent)
-    aura = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(aura, "RGBA")
-    width, height = image.size
 
-    # 모든 장비에 공통으로 적용되는 고유 프레임. 이름 해시로 위치와 색을 달리합니다.
-    for idx in range(stage):
-        inset = 24 + idx * 10
-        alpha = min(220, 45 + idx * 24)
+    profile = _effect_profile(item_name)
+    phase = 1 if level < 10 else 2 if level < 15 else 3 if level < 20 else 4
+    rng = random.Random(f"v641a-safe-fx:{item_name}:{level}:{tier}")
+    palette = {
+        "electric": (80, 210, 255),
+        "fire": (255, 118, 48),
+        "void": (174, 92, 255),
+        "bio": (108, 220, 132),
+        "defense": (170, 205, 235),
+        "precision": (92, 170, 255),
+        "blade": (235, 196, 118),
+        "rune": (200, 150, 255),
+    }
+    profile_color = palette.get(profile, palette["rune"])
+    # 등급색은 20%만 섞어, 일반 근접 장비가 초록 레이저처럼 보이지 않게 합니다.
+    color = tuple(int(profile_color[i] * 0.8 + accent[i] * 0.2) for i in range(3))
+    width, height = image.size
+    cx, cy = width // 2, int(height * 0.47)
+
+    glow = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    gdraw = ImageDraw.Draw(glow, "RGBA")
+    rx, ry = int(width * 0.24), int(height * 0.35)
+    for i in range(phase + 1):
+        pad = i * 18
+        alpha = 38 + phase * 14 - i * 5
+        gdraw.ellipse((cx-rx-pad, cy-ry-pad, cx+rx+pad, cy+ry+pad), outline=(*color, max(20, alpha)), width=6)
+    glow = glow.filter(ImageFilter.GaussianBlur(18 + phase * 3))
+    result = Image.alpha_composite(image, glow)
+
+    fx = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(fx, "RGBA")
+
+    # +5: 얇은 프레임만. 강화 전 원본과 명확히 구분되되 장비를 가리지 않습니다.
+    for i in range(phase):
+        inset = 18 + i * 9
         draw.rounded_rectangle(
-            (inset, inset, width - inset, height - inset),
-            radius=30,
-            outline=(*color, alpha),
-            width=2 + idx // 2,
+            (inset, inset, width-inset, height-inset),
+            radius=26,
+            outline=(*color, 70 + i * 24),
+            width=2 + i,
         )
 
-    density = 12 + stage * 11
-    if profile == "electric":
-        for _ in range(2 + stage // 2):
-            x = rng.randint(180, width - 180)
-            points = [(x, 80)]
-            y = 80
-            while y < height - 90:
-                y += rng.randint(45, 85)
-                x += rng.randint(-70, 70)
-                points.append((x, min(y, height - 90)))
-            draw.line(points, fill=(*color, 105 + stage * 12), width=3 + stage // 2)
-        for _ in range(density):
-            x, y = rng.randint(70, width - 70), rng.randint(55, height - 55)
-            draw.ellipse((x-2, y-2, x+2, y+2), fill=(*color, rng.randint(100, 235)))
-    elif profile == "fire":
-        for _ in range(density + 16):
-            x = rng.randint(90, width - 90)
-            y = rng.randint(140, height - 60)
-            r = rng.randint(2, 7)
-            draw.ellipse((x-r, y-r*2, x+r, y+r), fill=(*color, rng.randint(75, 215)))
-        for idx in range(max(1, stage // 2)):
-            draw.arc((220+idx*25, 90+idx*12, width-220-idx*25, height-80-idx*12), 185, 350, fill=(*color, 90+stage*13), width=5)
-    elif profile == "void":
-        for idx in range(2 + stage // 2):
-            pad = 150 + idx * 35
-            draw.ellipse((pad, 60+idx*12, width-pad, height-60-idx*12), outline=(*color, 80+stage*15), width=4)
-        for _ in range(density):
-            x, y = rng.randint(100, width-100), rng.randint(70, height-70)
-            size = rng.randint(5, 15)
-            draw.polygon([(x, y-size), (x+size//2, y), (x, y+size), (x-size//2, y)], fill=(*color, rng.randint(70, 190)))
-    elif profile == "bio":
-        for _ in range(density + 8):
-            x, y = rng.randint(90, width-90), rng.randint(65, height-65)
-            r = rng.randint(2, 8)
-            draw.ellipse((x-r, y-r, x+r, y+r), outline=(*color, rng.randint(80, 210)), width=2)
-        for _ in range(3 + stage // 2):
-            x0 = rng.randint(160, width-420)
-            points = []
-            for step in range(7):
-                points.append((x0 + step*55, 130 + int(math.sin(step + rng.random()) * 90) + step*45))
-            draw.line(points, fill=(*color, 90+stage*13), width=4)
-    elif profile == "defense":
-        for idx in range(1 + stage // 2):
-            pad = 170 + idx*35
-            pts = [(width//2, 70+idx*10), (width-pad, 180), (width-pad+30, height-170), (width//2, height-65), (pad-30, height-170), (pad, 180)]
-            draw.line(pts + [pts[0]], fill=(*color, 90+stage*15), width=4+idx)
-        for _ in range(max(4, stage*2)):
-            x, y = rng.randint(130, width-130), rng.randint(90, height-90)
-            draw.rectangle((x-10, y-4, x+10, y+4), fill=(*color, rng.randint(70, 175)))
-    elif profile == "precision":
-        cx, cy = width//2 + rng.randint(-80,80), height//2 + rng.randint(-35,35)
-        for idx in range(2 + stage//2):
-            r = 90 + idx*55
-            draw.ellipse((cx-r, cy-r, cx+r, cy+r), outline=(*color, 75+stage*14), width=3)
-        draw.line((cx-230, cy, cx+230, cy), fill=(*color, 120+stage*10), width=3)
-        draw.line((cx, cy-220, cx, cy+220), fill=(*color, 120+stage*10), width=3)
-        for y in range(80, height-70, max(24, 50-stage*3)):
-            draw.line((120, y, width-120, y), fill=(*color, 24+stage*7), width=1)
-    elif profile == "blade":
-        for idx in range(1 + stage//2):
-            offset = idx*32
-            draw.line((160, height-90-offset, width-180, 100+offset), fill=(*color, 80+stage*16), width=5+idx)
-        for _ in range(density):
-            x, y = rng.randint(110, width-110), rng.randint(70, height-70)
-            draw.line((x-8, y+8, x+8, y-8), fill=(*color, rng.randint(70,190)), width=2)
-    else:
-        cx, cy = width//2, height//2
-        for idx in range(2 + stage//2):
-            r = 110 + idx*55
-            draw.arc((cx-r, cy-r, cx+r, cy+r), rng.randint(0,90), rng.randint(210,350), fill=(*color, 80+stage*14), width=4)
-        for idx in range(8 + stage):
-            angle = (idx / (8+stage)) * math.tau
-            x = cx + int(math.cos(angle) * 240)
-            y = cy + int(math.sin(angle) * 220)
-            draw.ellipse((x-4, y-4, x+4, y+4), fill=(*color, 160))
+    # +10: 장비 중심 주변의 짧은 광점. 화면을 가로지르는 선은 금지합니다.
+    if phase >= 2:
+        for _ in range(16 + phase * 5):
+            angle = rng.random() * math.tau
+            radius_x = rng.randint(int(rx * 0.75), int(rx * 1.12))
+            radius_y = rng.randint(int(ry * 0.68), int(ry * 1.05))
+            x = cx + int(math.cos(angle) * radius_x)
+            y = cy + int(math.sin(angle) * radius_y)
+            r = rng.randint(1, 4)
+            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*color, rng.randint(90, 205)))
 
-    # +15 이상은 장비마다 고유한 오라와 별가루가 강해집니다.
-    if level >= 15:
-        for _ in range(18 + stage*7):
-            x, y = rng.randint(65, width-65), rng.randint(55, height-55)
-            r = rng.randint(1, 5)
-            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*color, rng.randint(90, 230)))
-    return Image.alpha_composite(image, aura.filter(ImageFilter.GaussianBlur(1.4)))
+    # +15: 장비 종류별 짧고 국소적인 심볼 효과.
+    if phase >= 3:
+        if profile == "electric":
+            for _ in range(7):
+                x = rng.randint(cx-rx, cx+rx)
+                y = rng.randint(cy-ry, cy+ry)
+                pts = [(x, y), (x+rng.randint(-14, 14), y+18), (x+rng.randint(-12, 12), y+35)]
+                draw.line(pts, fill=(*color, 170), width=3)
+        elif profile == "fire":
+            for _ in range(18):
+                x = rng.randint(cx-rx, cx+rx)
+                y = rng.randint(cy+ry//4, cy+ry)
+                r = rng.randint(2, 6)
+                draw.ellipse((x-r, y-r*2, x+r, y+r), fill=(*color, rng.randint(90, 190)))
+        elif profile == "void":
+            for i in range(3):
+                r = 90 + i * 42
+                draw.arc((cx-r, cy-r, cx+r, cy+r), 210+i*15, 510-i*10, fill=(*color, 140+i*18), width=4)
+        elif profile == "bio":
+            for _ in range(13):
+                x = rng.randint(cx-rx, cx+rx)
+                y = rng.randint(cy-ry, cy+ry)
+                r = rng.randint(3, 8)
+                draw.ellipse((x-r, y-r, x+r, y+r), outline=(*color, 145), width=2)
+        elif profile == "defense":
+            shield = [(cx, cy-180), (cx+145, cy-85), (cx+120, cy+120), (cx, cy+190), (cx-120, cy+120), (cx-145, cy-85)]
+            draw.line(shield + [shield[0]], fill=(*color, 145), width=5)
+        elif profile == "precision":
+            r = 105
+            draw.ellipse((cx-r, cy-r, cx+r, cy+r), outline=(*color, 145), width=4)
+            for dx, dy in ((0,-145), (145,0), (0,145), (-145,0)):
+                draw.line((cx+dx*0.72, cy+dy*0.72, cx+dx, cy+dy), fill=(*color, 150), width=4)
+        elif profile == "blade":
+            # 몽둥이·칼·도끼는 짧은 금속 반짝임만 사용합니다.
+            for _ in range(11):
+                x = rng.randint(cx-rx, cx+rx)
+                y = rng.randint(cy-ry, cy+ry)
+                length = rng.randint(8, 18)
+                draw.line((x-length, y, x+length, y), fill=(*color, 155), width=2)
+                draw.line((x, y-length, x, y+length), fill=(*color, 155), width=2)
+        else:
+            for i in range(10):
+                angle = i / 10 * math.tau
+                x = cx + int(math.cos(angle) * 205)
+                y = cy + int(math.sin(angle) * 165)
+                draw.polygon([(x, y-6), (x+5, y), (x, y+6), (x-5, y)], fill=(*color, 155))
+
+    # +20: 초월 단계는 외곽 별빛을 추가하되 원본 피사체 위를 덮지 않습니다.
+    if phase >= 4:
+        for _ in range(24):
+            edge = rng.choice(("top", "bottom", "left", "right"))
+            if edge in {"top", "bottom"}:
+                x = rng.randint(55, width-55)
+                y = rng.randint(35, 95) if edge == "top" else rng.randint(height-95, height-35)
+            else:
+                x = rng.randint(35, 95) if edge == "left" else rng.randint(width-95, width-35)
+                y = rng.randint(55, height-55)
+            r = rng.randint(2, 5)
+            draw.ellipse((x-r, y-r, x+r, y+r), fill=(*color, rng.randint(140, 230)))
+
+    return Image.alpha_composite(result, fx.filter(ImageFilter.GaussianBlur(0.45)))
 
 
 def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, discovered: bool = False, item_name: str = "") -> bytes:
@@ -268,14 +299,28 @@ def _encode_webp(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-async def _equipment_file(item_name: str, tier: str, slot: str, success: bool, level: int, prefix: str) -> Optional[discord.File]:
-    # v6.4.1 텍스트 우선 정책
-    return None
+async def _equipment_file(item_name: str, tier: str, slot: str, success: bool, level: int, prefix: str) -> discord.File:
+    path = _asset_path(EQUIPMENT_ASSETS, item_name)
+    if path is not None:
+        if PIL_AVAILABLE:
+            image = await asyncio.to_thread(_decorate_named_image, path, tier=tier or "일반", level=level, success=success, discovered=False, item_name=item_name)
+            return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
+        # Pillow가 설치되지 않은 환경에서도 봇이 중단되지 않도록 원본 장비 이미지를 직접 첨부합니다.
+        return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
+    image = await asyncio.to_thread(forge.build_forge_card_png, tier or "일반", slot or "무기", success, max(0, int(level)))
+    return discord.File(io.BytesIO(image), filename=_safe_filename(prefix))
 
 
 async def _treasure_file(treasure_name: str, grade: str, discovered: bool, prefix: str) -> Optional[discord.File]:
-    # v6.4.1 텍스트 우선 정책
-    return None
+    path = _asset_path(TREASURE_ASSETS, treasure_name)
+    if path is None:
+        return None
+    tier = GRADE_TO_TIER.get(str(grade), "일반")
+    if PIL_AVAILABLE:
+        image = await asyncio.to_thread(_decorate_named_image, path, tier=tier, level={"E":1,"D":4,"C":8,"B":13,"A":18}.get(str(grade), 1), success=True, discovered=discovered, item_name=treasure_name)
+        return discord.File(io.BytesIO(image), filename=f"abaddon_v633_{prefix}.webp")
+    # Pillow가 없는 경우에도 감정 결과의 실제 보물 이미지를 그대로 표시합니다.
+    return discord.File(str(path), filename=f"abaddon_v633_{prefix}{path.suffix.lower() or '.webp'}")
 
 
 async def send_equipment_visual(
@@ -291,6 +336,7 @@ async def send_equipment_visual(
 ) -> Optional[discord.Message]:
     title, fallback = MODE_LABELS.get(mode, MODE_LABELS["preview"])
     level = max(0, int(level))
+    file = await _equipment_file(item_name, tier, slot, True, level, f"equipment_{mode}")
     embed = discord.Embed(
         title=title,
         description=f"**{forge.forge_display_name(item_name, level)}**\n{description or fallback}",
@@ -298,11 +344,13 @@ async def send_equipment_visual(
     )
     embed.add_field(name="등급 · 슬롯", value=f"**{tier or '일반'} · {slot or '기타'}**", inline=True)
     embed.add_field(name="강화 단계", value=f"**+{level} · {enhancement_stage(level)}**", inline=True)
-    embed.add_field(name="다음 강화 변화", value=f"**{next_visual_stage(level)}**", inline=True)
+    embed.add_field(name="다음 외형 변화", value=f"**{next_visual_stage(level)}**", inline=True)
+    embed.add_field(name="✨ 강화 진행도", value=_enhancement_progress(level), inline=False)
     if stats_text:
         embed.add_field(name="능력치", value=stats_text[:1024], inline=False)
-    embed.set_footer(text="ABADDON EQUIPMENT v6.4.1 · 이미지 없이 강화 단계와 효과를 표시합니다")
-    return await ctx.send(embed=embed)
+    embed.set_image(url=f"attachment://{file.filename}")
+    embed.set_footer(text="ABADDON EQUIPMENT VISUALS v6.4.1a · 강화할수록 문양·광원·오라·실루엣이 확장됩니다")
+    return await ctx.send(embed=embed, file=file)
 
 
 async def edit_craft_visual(
@@ -314,14 +362,16 @@ async def edit_craft_visual(
     slot: str,
     success: bool,
 ) -> None:
+    file = await _equipment_file(item_name, tier, slot, success, 0 if success else 3, "craft_result")
+    embed.set_image(url=f"attachment://{file.filename}")
     embed.add_field(
-        name="🎬 제작 결과",
-        value=("✅ 설계 결합이 안정적으로 완료되었습니다." if success else "❌ 접합부 균열과 에너지 역류로 제작에 실패했습니다."),
+        name="🎬 제작 연출",
+        value=("설계 문양과 결합부가 안정적으로 점등되었습니다." if success else "접합부의 균열과 불안정한 에너지 역류가 확인됐습니다."),
         inline=False,
     )
-    embed.set_footer(text="ABADDON CRAFTING v6.4.1 · 텍스트 우선 결과")
+    embed.set_footer(text="ABADDON CRAFTING v6.3.3 · 제작 결과에 따라 성공/실패 외형이 분리됩니다")
     try:
-        await message.edit(content=None, embed=embed, attachments=[])
+        await message.edit(content=None, embed=embed, attachments=[file])
     except TypeError:
         await message.edit(content=None, embed=embed)
     except (discord.Forbidden, discord.HTTPException, AttributeError):
@@ -337,15 +387,22 @@ async def edit_relic_visual(
     upgraded: bool,
     discovered: bool = False,
 ) -> None:
+    tier = GRADE_TO_TIER.get(str(grade), "일반")
+    file = await _treasure_file(treasure_name, str(grade), discovered, "relic")
+    if file is None:
+        level = {"E": 1, "D": 4, "C": 8, "B": 13, "A": 18}.get(str(grade), 1)
+        fallback = await asyncio.to_thread(forge.build_forge_card_png, tier, "목걸이", not discovered, level)
+        file = discord.File(io.BytesIO(fallback), filename=_safe_filename("relic"))
+    embed.set_image(url=f"attachment://{file.filename}")
     if discovered:
         embed.add_field(name="🕯️ 봉인 상태", value="감정 전에는 실제 가치와 등급 보정 결과가 공개되지 않습니다.", inline=False)
     elif upgraded:
         embed.add_field(name="🌟 감정 반응", value="감정사의 보정으로 유물 문양과 가치 등급이 상승했습니다.", inline=False)
     else:
         embed.add_field(name="🔎 감정 반응", value=f"**{treasure_name}**의 문양과 보존 상태가 확정됐습니다.", inline=False)
-    embed.set_footer(text="ABADDON RELIC APPRAISAL v6.4.1 · 이미지 없이 실제 보물명과 등급을 표시합니다")
+    embed.set_footer(text="ABADDON RELIC APPRAISAL v6.3.3 · 기존 감정사 확률과 매입 배율은 유지됩니다")
     try:
-        await message.edit(content=None, embed=embed, attachments=[])
+        await message.edit(content=None, embed=embed, attachments=[file])
     except TypeError:
         await message.edit(content=None, embed=embed)
     except (discord.Forbidden, discord.HTTPException, AttributeError):
@@ -371,14 +428,14 @@ def register_v633_equipment_crafting(
     if existing_guide is not None:
         async def v633_forge_guide(ctx: commands.Context) -> None:
             await ctx.send(
-                "✨ **[ABADDON 장비 강화 단계 v6.4.1]**\n"
-                "이미지 대신 강화 단계·장비 계열·능력치 변화를 텍스트와 이모지로 표시합니다.\n"
-                "단계 명칭: **+5 단련 · +7 광휘 · +10 종말 · +12 심연 · +15 아바돈 · +18 경계 · +20 공허 초월**\n"
-                "성공·실패·단계 하락과 다음 변화는 결과 임베드에서 바로 확인할 수 있습니다.\n"
-                "현재 장비 정보: `!장비외형 아이템명`"
+                "✨ **[ABADDON 장비 외형 진화 v6.4.1a]**\n"
+                "강화 단계가 높아질수록 장비 실루엣·룬 문양·광원·오라·에너지 날개가 순서대로 확장됩니다.\n"
+                "외형 변화: **+5 단련 · +7 광휘 · +10 종말 · +12 심연 · +15 아바돈 · +18 경계 · +20 공허 초월**\n"
+                "성공·실패·단계 하락은 서로 다른 균열과 광원으로 표시됩니다.\n"
+                "현재 장비 미리보기: `!장비외형 아이템명`"
             )
         existing_guide.callback = v633_forge_guide
-        existing_guide.help = "강화 단계별 장비 효과와 현재 정보 확인법을 안내합니다."
+        existing_guide.help = "강화 단계별 장비 외형 변화와 현재 외형 확인법을 안내합니다."
         existing_guide.description = existing_guide.help
 
     existing_patch_notes = bot.get_command("패치노트")
