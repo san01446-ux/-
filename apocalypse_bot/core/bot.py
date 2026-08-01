@@ -820,7 +820,7 @@ PET_DB = {
         "bonuses": {"material": 0.12},
     },
     "정찰까마귀": {
-        "emoji": "🐦‍⬛", "rarity": "고급", "price": 12000, "power": 7,
+        "emoji": "🐦‍⬛", "rarity": "고급", "price": 50000, "power": 7,
         "desc": "높은 곳에서 적의 빈틈과 이동 경로를 먼저 찾아냅니다.",
         "skill": "급소 탐지",
         "skill_desc": "던전 전투의 치명타 확률이 증가합니다.",
@@ -828,7 +828,7 @@ PET_DB = {
         "bonuses": {"crit": 0.04},
     },
     "군견제로": {
-        "emoji": "🐕", "rarity": "희귀", "price": 25000, "power": 13,
+        "emoji": "🐕", "rarity": "희귀", "price": 120000, "power": 13,
         "desc": "군부대 출신의 충직한 군견. 전투 중 주인을 끝까지 지킵니다.",
         "skill": "전투 지원",
         "skill_desc": "던전 승리 확률이 소폭 증가합니다.",
@@ -836,7 +836,7 @@ PET_DB = {
         "bonuses": {"victory": 0.04},
     },
     "변이살쾡이": {
-        "emoji": "🐈", "rarity": "영웅", "price": 50000, "power": 22,
+        "emoji": "🐈", "rarity": "영웅", "price": 300000, "power": 22,
         "desc": "소리 없이 움직이며 치명적인 공격을 피하게 돕는 포식자",
         "skill": "그림자 보행",
         "skill_desc": "던전 전투의 회피 확률이 증가합니다.",
@@ -844,7 +844,7 @@ PET_DB = {
         "bonuses": {"dodge": 0.05},
     },
     "미니드론": {
-        "emoji": "🤖", "rarity": "전설", "price": 90000, "power": 34,
+        "emoji": "🤖", "rarity": "전설", "price": 750000, "power": 34,
         "desc": "전투 기록을 분석하고 가치 있는 보급품을 선별하는 소형 드론",
         "skill": "보급 분석",
         "skill_desc": "던전에서 획득하는 식량 보상이 증가합니다.",
@@ -852,7 +852,7 @@ PET_DB = {
         "bonuses": {"reward": 0.08},
     },
     "어린하이드라": {
-        "emoji": "🐍", "rarity": "신화", "price": 200000, "power": 55,
+        "emoji": "🐍", "rarity": "신화", "price": 1800000, "power": 55,
         "desc": "재생 능력을 나누어 주인의 상처를 조금씩 회복시킵니다.",
         "skill": "재생 세포",
         "skill_desc": "던전 승리 후 잃은 HP를 일부 회복합니다.",
@@ -860,12 +860,108 @@ PET_DB = {
         "bonuses": {"heal": 4},
     },
     "공허의새끼용": {
-        "emoji": "🐉", "rarity": "초월", "price": 500000, "power": 90,
+        "emoji": "🐉", "rarity": "초월", "price": 5000000, "power": 90,
         "desc": "공간 에너지를 먹고 자라며 전투와 탐색 전반을 강화하는 희귀 용",
         "skill": "공허 공명",
         "skill_desc": "치명타, 회피, 보상, 재료 발견과 회복을 모두 강화합니다.",
         "evolutions": ["공허의새끼용", "공허의 비룡", "차원룡"],
         "bonuses": {"crit": 0.03, "dodge": 0.03, "reward": 0.05, "material": 0.08, "heal": 3, "victory": 0.02},
+    },
+    '아바돈': {
+        "emoji": '🐶', "rarity": '일반', "price": 6500, "power": 4,
+        "desc": '별빛 목걸이를 찬 복슬복슬한 강아지 동료. 곁에 있는 것만으로도 생존자의 마음을 안정시킵니다.',
+        "skill": '따뜻한 응원',
+        "skill_desc": '던전 승리 후 잃은 HP를 조금 회복합니다.',
+        "evolutions": ['아바돈', '성광 아바돈', '천상의 아바돈'],
+        "bonuses": {'heal': 2},
+    },
+    '다크프': {
+        "emoji": '🐺', "rarity": '고급', "price": 60000, "power": 8,
+        "desc": '검은 털과 붉은 장식을 지닌 장난꾸러기 그림자 늑대. 위험을 먼저 감지합니다.',
+        "skill": '그림자 감각',
+        "skill_desc": '던전 전투의 회피 확률이 증가합니다.',
+        "evolutions": ['다크프', '그림자 다크프', '심연왕 다크프'],
+        "bonuses": {'dodge': 0.035},
+    },
+    '루나냥': {
+        "emoji": '🐱', "rarity": '고급', "price": 70000, "power": 9,
+        "desc": '초승달 장식을 달고 다니는 새하얀 고양이. 어둠 속 작은 빈틈을 찾아냅니다.',
+        "skill": '월광 시야',
+        "skill_desc": '던전 전투의 치명타 확률이 증가합니다.',
+        "evolutions": ['루나냥', '월광 루나냥', '달의 여제 루나냥'],
+        "bonuses": {'crit': 0.035},
+    },
+    '파이어몽': {
+        "emoji": '🐒', "rarity": '희귀', "price": 140000, "power": 14,
+        "desc": '꼬리 끝에 따뜻한 불꽃을 품은 아기 원숭이. 전투가 길어질수록 용기를 북돋습니다.',
+        "skill": '불꽃 응원',
+        "skill_desc": '던전 승리 확률이 소폭 증가합니다.',
+        "evolutions": ['파이어몽', '화염 파이어몽', '태양왕 파이어몽'],
+        "bonuses": {'victory': 0.035},
+    },
+    '스노우씨': {
+        "emoji": '🐰', "rarity": '희귀', "price": 160000, "power": 16,
+        "desc": '눈송이처럼 포근한 흰 토끼. 차가운 기운으로 상처와 피로를 가라앉힙니다.',
+        "skill": '설원의 숨결',
+        "skill_desc": '던전 승리 후 잃은 HP를 회복합니다.',
+        "evolutions": ['스노우씨', '설원 스노우씨', '빙설의 수호자'],
+        "bonuses": {'heal': 4},
+    },
+    '메카로보': {
+        "emoji": '🤖', "rarity": '희귀', "price": 180000, "power": 17,
+        "desc": '토끼 귀 안테나와 푸른 눈을 가진 소형 로봇. 보급품의 가치를 빠르게 분석합니다.',
+        "skill": '정밀 스캔',
+        "skill_desc": '던전에서 획득하는 식량 보상이 증가합니다.',
+        "evolutions": ['메카로보', '강화 메카로보', '오메가 메카로보'],
+        "bonuses": {'reward': 0.05},
+    },
+    '썬더드래곤': {
+        "emoji": '🐲', "rarity": '영웅', "price": 350000, "power": 24,
+        "desc": '번개 날개를 가진 작고 씩씩한 용. 전장의 흐름을 읽고 강한 일격을 돕습니다.',
+        "skill": '뇌광 공명',
+        "skill_desc": '던전의 치명타 확률과 승리 확률을 함께 강화합니다.',
+        "evolutions": ['썬더드래곤', '뇌광 썬더드래곤', '폭풍룡'],
+        "bonuses": {'crit': 0.025, 'victory': 0.02},
+    },
+    '포레스트': {
+        "emoji": '🦌', "rarity": '영웅', "price": 400000, "power": 26,
+        "desc": '새싹 뿔과 잎사귀 꼬리를 가진 숲의 정령. 재료의 기운과 생명력을 감지합니다.',
+        "skill": '숲의 축복',
+        "skill_desc": '추가 재료 발견과 전투 후 회복을 함께 강화합니다.',
+        "evolutions": ['포레스트', '숲의 포레스트', '세계수의 정령'],
+        "bonuses": {'material': 0.08, 'heal': 2},
+    },
+    '미니골렘': {
+        "emoji": '🗿', "rarity": '전설', "price": 850000, "power": 37,
+        "desc": '고대 석판과 푸른 핵으로 움직이는 작은 골렘. 단단한 몸으로 앞길을 지켜줍니다.',
+        "skill": '대지의 방벽',
+        "skill_desc": '던전 승리 확률을 높이고 획득 보상을 조금 증가시킵니다.',
+        "evolutions": ['미니골렘', '강화 미니골렘', '대지의 거신'],
+        "bonuses": {'victory': 0.03, 'reward': 0.03},
+    },
+    '유니콘': {
+        "emoji": '🦄', "rarity": '신화', "price": 2100000, "power": 59,
+        "desc": '무지갯빛 갈기와 별빛 뿔을 지닌 신비로운 동료. 생존자의 행운과 회복을 돕습니다.',
+        "skill": '성휘의 기적',
+        "skill_desc": '던전 보상과 전투 후 회복을 크게 강화합니다.',
+        "evolutions": ['유니콘', '성휘 유니콘', '별무리 유니콘'],
+        "bonuses": {'reward': 0.06, 'heal': 5},
+    },
+    '헤르메스': {
+        "emoji": '🪽', "rarity": '신화', "price": 2400000, "power": 63,
+        "desc": '작은 날개와 얼음빛 장식을 가진 하늘의 전령. 빠른 움직임으로 위험과 보물을 먼저 찾습니다.',
+        "skill": '천공의 전령',
+        "skill_desc": '회피 확률과 식량 보상을 함께 강화합니다.',
+        "evolutions": ['헤르메스', '천공 헤르메스', '신속의 사자'],
+        "bonuses": {'dodge': 0.04, 'reward': 0.05},
+    },
+    '네온문': {
+        "emoji": '🌙', "rarity": '초월', "price": 5500000, "power": 94,
+        "desc": '보랏빛 달 그림자를 두른 검은 고양이. 공허의 기운으로 탐색과 전투 전반을 증폭합니다.',
+        "skill": '네온 월식',
+        "skill_desc": '치명타·회피·보상·재료 발견과 회복을 모두 강화합니다.',
+        "evolutions": ['네온문', '월영 네온문', '공허월의 군주'],
+        "bonuses": {'crit': 0.025, 'dodge': 0.025, 'reward': 0.045, 'material': 0.065, 'heal': 3, 'victory': 0.015},
     },
 }
 
@@ -2558,6 +2654,9 @@ async def _pet_shop_message(ctx):
         )
     lines.append("\n구매: `!펫구매 펫이름` 또는 `/펫 구매`")
     await send_pages(ctx.channel, "\n".join(lines))
+    visual_shop = getattr(bot, "v634_send_pet_shop", None)
+    if visual_shop:
+        await visual_shop(ctx)
 
 
 async def _pet_buy(ctx, pet_name):
@@ -2595,6 +2694,9 @@ async def _pet_buy(ctx, pet_name):
         f"고유 능력: **{info['skill']}** — {info['skill_desc']}"
         f"{equipped_text}"
     )
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual:
+        await visual(ctx, pet_name=pet_name, record=collection[pet_name], mode="buy")
 
 
 async def _pet_list_message(ctx):
@@ -2621,6 +2723,10 @@ async def _pet_list_message(ctx):
         )
     lines.append("\n⭐ = 현재 동행 중 · 장착: `!펫장착 펫이름` 또는 `/펫 장착`")
     await send_pages(ctx.channel, "\n".join(lines))
+    active_name = u.get("pet")
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual and active_name in collection and active_name in PET_DB:
+        await visual(ctx, pet_name=active_name, record=collection[active_name], mode="list", extra="현재 함께 이동 중인 동료입니다.")
 
 
 async def _pet_equip(ctx, pet_name):
@@ -2642,6 +2748,9 @@ async def _pet_equip(ctx, pet_name):
     u["pet_level"] = collection[pet_name]["level"]
     save_data()
     await ctx.send(f"⭐ {PET_DB[pet_name]['emoji']} **{get_pet_display_name(pet_name, collection[pet_name])}**을(를) 동행 펫으로 장착했습니다.")
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual:
+        await visual(ctx, pet_name=pet_name, record=collection[pet_name], mode="equip")
 
 
 async def _pet_info_message(ctx, pet_name=None):
@@ -2675,6 +2784,9 @@ async def _pet_info_message(ctx, pet_name=None):
         f"🍖 먹이: **{format_seconds(feed_left)}** · 🧭 모험: **{format_seconds(adventure_left)}**\n"
         f"설명: {info['desc']}"
     )
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual:
+        await visual(ctx, pet_name=name, record=record, mode="info", extra=active_text)
 
 
 async def _pet_train(ctx):
@@ -2706,6 +2818,9 @@ async def _pet_train(ctx):
         f"🏋️ **[펫 훈련 완료]** {get_pet_display_name(name, record)} Lv.{record['level']} 달성!\n"
         f"전투력 **+{before_power} → +{after_power}** · 친밀도 **+2** · 식량 **-{cost:,}**"
     )
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual:
+        await visual(ctx, pet_name=name, record=record, mode="train", extra=f"훈련으로 전투력이 +{before_power}에서 +{after_power}로 성장했습니다.")
 
 
 async def _pet_feed(ctx):
@@ -2739,6 +2854,9 @@ async def _pet_feed(ctx):
         f"친밀도 **+{friendship_gain}** · 펫 경험치 **+{exp_gain}** · 식량 **-{cost:,}**"
         f"{level_text}"
     )
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual:
+        await visual(ctx, pet_name=name, record=record, mode="feed", extra=f"간식을 먹고 친밀도가 {friendship_gain} 올랐습니다.")
 
 
 async def _pet_adventure(ctx):
@@ -2779,6 +2897,9 @@ async def _pet_adventure(ctx):
         f"✨ 펫 경험치 **+{exp_gain}** · 친밀도 **+{friendship_gain}**"
         f"{level_text}"
     )
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual:
+        await visual(ctx, pet_name=name, record=record, mode="adventure", extra=f"식량 {food:,}개와 {material_name} {material_amount}개를 찾아왔습니다.")
 
 
 async def _pet_evolve(ctx):
@@ -2821,6 +2942,9 @@ async def _pet_evolve(ctx):
         f"{PET_DB[name]['emoji']} **{before_name} → {after_name}**\n"
         f"전투력 **+{before_power} → +{after_power}** · 식량 **-{requirements['cost']:,}개**"
     )
+    visual = getattr(bot, "v634_send_pet_visual", None)
+    if visual:
+        await visual(ctx, pet_name=name, record=record, mode="evolve", extra=f"{before_name}에서 {after_name}(으)로 진화했습니다!")
 
 
 # 기존 최상위 ! 및 / 명령어 호환 유지
@@ -4795,6 +4919,18 @@ register_v633_equipment_crafting(
     find_item,
     get_item_slot,
     get_item_stats,
+)
+
+# V6.3.4: 귀여운 펫 3단 진화 이미지 + !장비 통합 드롭다운/검색/페이지
+from apocalypse_bot.commands.v634_pet_visuals import register_v634_pet_visuals
+register_v634_pet_visuals(
+    bot, get_user, PET_DB, ensure_pet_collection, get_pet_display_name, get_pet_power,
+)
+
+from apocalypse_bot.commands.v634_equipment_menu import register_v634_equipment_menu
+register_v634_equipment_menu(
+    bot, get_user, check_registered, ITEM_DB, TIER_ORDER, TIER_EMOJI, EQUIPMENT_SLOTS,
+    find_item, get_item_slot, get_item_stats, equipment_totals,
 )
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
