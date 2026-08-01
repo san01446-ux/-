@@ -47,6 +47,36 @@ TIP_POOLS: Mapping[str, Sequence[str]] = {
 }
 
 _RECENT_ASSETS: Dict[str, List[str]] = {}
+FIXED_ASSET_MAP: Mapping[str, str] = {
+    "activities/fishing/encounter": "activities/mining/failure/01.jpg",
+    "activities/fishing/encounter_success": "activities/mining/failure/01.jpg",
+    "activities/fishing/encounter_failure": "activities/mining/failure/01.jpg",
+    "activities/fishing/success": "activities/mining/failure/01.jpg",
+    "activities/fishing/failure": "activities/mining/failure/01.jpg",
+    "activities/fishing/rare": "activities/mining/failure/01.jpg",
+    "activities/mining/encounter": "activities/mining/encounter/01.jpg",
+    "activities/mining/encounter_success": "activities/mining/encounter_success/01.jpg",
+    "activities/mining/encounter_failure": "activities/mining/encounter_failure/01.jpg",
+    "activities/mining/success": "activities/mining/success/01.jpg",
+    "activities/mining/failure": "activities/mining/failure/02.jpg",
+    "activities/mining/rare": "activities/mining/rare/01.jpg",
+    "activities/coin/encounter": "activities/coin/encounter/01.jpg",
+    "activities/coin/encounter_success": "activities/coin/encounter_success/01.jpg",
+    "activities/coin/failure": "activities/coin/failure/01.jpg",
+    "activities/coin/success": "activities/coin/success/01.jpg",
+    "activities/coin/rare": "activities/coin/rare/01.jpg",
+    "activities/exploration/encounter": "activities/exploration/encounter/01.jpg",
+    "activities/exploration/encounter_failure": "activities/exploration/encounter_failure/01.jpg",
+    "activities/exploration/failure": "activities/exploration/failure/01.jpg",
+    "activities/exploration/success": "activities/exploration/success/01.jpg",
+    "activities/exploration/rare": "activities/exploration/rare/01.jpg",
+    "activities/support/encounter": "activities/support/encounter/01.jpg",
+    "activities/support/encounter_success": "activities/support/encounter_success/01.jpg",
+    "activities/support/encounter_failure": "activities/support/encounter_failure/01.jpg",
+    "activities/support/success": "activities/support/success/01.jpg",
+    "activities/support/failure": "activities/support/failure/01.jpg",
+    "activities/support/rare": "activities/support/rare/01.jpg",
+}
 
 
 def random_tip(activity: str) -> str:
@@ -61,6 +91,11 @@ def _asset_files(relative: str) -> List[Path]:
 
 
 def pick_asset(relative: str) -> Optional[Path]:
+    fixed = FIXED_ASSET_MAP.get(relative)
+    if fixed:
+        path = ASSET_ROOT / fixed
+        if path.is_file():
+            return path
     files = _asset_files(relative)
     if not files:
         return None

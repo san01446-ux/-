@@ -56,6 +56,32 @@ TIP_POOLS: Mapping[str, Sequence[str]] = {
 }
 
 _RECENT_ASSETS: Dict[str, List[str]] = {}
+FIXED_ASSET_MAP: Mapping[str, str] = {
+    "activities/work/encounter": "activities/work/encounter/02.jpg",
+    "activities/work/encounter_success": "activities/work/success/03.jpg",
+    "activities/work/encounter_failure": "activities/work/failure/01.jpg",
+    "activities/work/success": "activities/work/success/01.jpg",
+    "activities/work/failure": "activities/work/failure/01.jpg",
+    "activities/work/rare": "activities/work/success/02.jpg",
+    "activities/digging/encounter": "activities/digging/encounter/01.jpg",
+    "activities/digging/encounter_success": "activities/digging/encounter_success/01.jpg",
+    "activities/digging/encounter_failure": "activities/digging/failure/01.jpg",
+    "activities/digging/success": "activities/digging/success/01.jpg",
+    "activities/digging/failure": "activities/digging/failure/01.jpg",
+    "activities/digging/rare": "activities/digging/rare/01.jpg",
+    "activities/gathering/encounter": "activities/gathering/success/01.jpg",
+    "activities/gathering/encounter_success": "activities/gathering/success/02.jpg",
+    "activities/gathering/encounter_failure": "activities/gathering/failure/01.jpg",
+    "activities/gathering/success": "activities/gathering/success/03.jpg",
+    "activities/gathering/failure": "activities/gathering/failure/02.jpg",
+    "activities/gathering/rare": "activities/gathering/rare/01.jpg",
+    "activities/woodcutting/encounter": "activities/woodcutting/rare/02.jpg",
+    "activities/woodcutting/encounter_success": "activities/woodcutting/success/03.jpg",
+    "activities/woodcutting/encounter_failure": "activities/woodcutting/rare/01.jpg",
+    "activities/woodcutting/success": "activities/woodcutting/success/01.jpg",
+    "activities/woodcutting/failure": "activities/woodcutting/success/02.jpg",
+    "activities/woodcutting/rare": "activities/woodcutting/rare/01.jpg",
+}
 _ACTIVE_USERS: set[int] = set()
 _ITEM_DB: Mapping[str, Mapping[str, Mapping[str, Any]]] = {}
 
@@ -73,6 +99,11 @@ def _asset_files(relative: str) -> List[Path]:
 
 
 def pick_asset(relative: str) -> Optional[Path]:
+    fixed = FIXED_ASSET_MAP.get(relative)
+    if fixed:
+        path = ASSET_ROOT / fixed
+        if path.is_file():
+            return path
     files = _asset_files(relative)
     if not files:
         return None
