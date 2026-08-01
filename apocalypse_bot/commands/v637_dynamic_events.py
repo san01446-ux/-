@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import discord
 from discord.ext import commands
 
-VERSION = "6.3.7"
+VERSION = "6.3.7a"
 KST = timezone(timedelta(hours=9))
 
 REGION_NAMES: Tuple[str, ...] = (
@@ -955,7 +955,7 @@ def register_v637_dynamic_events(
         passed = sum(1 for _, ok, _ in checks if ok)
         failed = len(checks) - passed
         embed = discord.Embed(
-            title=f"🧪 ABADDON v6.3.7 패치 테스트 · {passed}/{len(checks)} 통과",
+            title=f"🧪 ABADDON v6.3.7a 패치 테스트 · {passed}/{len(checks)} 통과",
             description="재화와 전투 상태를 바꾸지 않는 읽기 전용 진단입니다.",
             color=discord.Color.green() if failed == 0 else discord.Color.orange(),
         )
@@ -971,10 +971,11 @@ def register_v637_dynamic_events(
     if patch is not None:
         async def v637_patch_notes(ctx: commands.Context):
             embed = discord.Embed(
-                title="📻🌦️ ABADDON v6.3.7 — 변동 환경·무전·장비 정비",
-                description="기존 기능과 역할이 겹치지 않도록 중복 검수 후 세계 이벤트와 장비 관리 루프를 확장했습니다.",
+                title="🧯 ABADDON v6.3.7a — 장비 모듈 시작 오류 핫픽스",
+                description="장비 비주얼 모듈에 남아 있던 잘못된 최상위 호출을 제거해 봇 시작 오류를 수정했습니다. v6.3.7 기능은 그대로 유지됩니다.",
                 color=discord.Color.dark_purple(),
             )
+            embed.add_field(name="🧯 시작 오류 수정", value="`v633_equipment_crafting.py`의 잘못된 `ebp(image)` 호출 제거 · `NameError` 재발 방지", inline=False)
             embed.add_field(name="🌦️ 변동 날씨 12종", value="고정 6시간 대신 매일 서버별 **2~5시간 랜덤 주기** · 신규 재난/호재 날씨 추가", inline=False)
             embed.add_field(name="📻 무전·SOS", value="`!무전` · 주파수/좌표/긴급응답 선택형 해독 · 환경 구간마다 새 신호", inline=False)
             embed.add_field(name="🔧 내구도·무기 개조", value="전투와 탐색으로 내구도 소모 · 파손 시 전투 기여 감소 · 수리 키트와 개조 부품 6종", inline=False)
@@ -982,10 +983,10 @@ def register_v637_dynamic_events(
             embed.add_field(name="☣️ 돌연변이 구역", value="매일 한 지역이 고위험·고보상 구역으로 지정 · `!위험구역`", inline=False)
             embed.add_field(name="🌟 오늘의 운세", value="`!오늘의 운세` / `!오늘의운세` · 일일 미세 버프와 첫 확인 보상", inline=False)
             embed.add_field(name="🧪 자체 테스트", value="`!테스트` / `!테스트 상세` · 명령 등록·날씨·장비·전투 후크를 읽기 전용으로 점검", inline=False)
-            embed.set_footer(text="최신 버전 v6.3.7 · !명령어와 공식 홈페이지 동시 최신화")
+            embed.set_footer(text="최신 버전 v6.3.7a · 장비 모듈 시작 오류 핫픽스")
             await ctx.send(embed=embed)
         patch.callback = v637_patch_notes
-        patch.help = "ABADDON v6.3.7 변동 환경·무전·장비 정비 패치 내용을 확인합니다."
+        patch.help = "ABADDON v6.3.7a 장비 모듈 시작 오류 핫픽스를 확인합니다."
         patch.description = patch.help
 
     bot.v637_version = VERSION

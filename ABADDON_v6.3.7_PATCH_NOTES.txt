@@ -1,3 +1,7 @@
+ABADDON v6.3.7a HOTFIX
+- v633_equipment_crafting.py의 잘못된 ebp(image) 최상위 호출 제거
+- 봇 시작 시 NameError 수정
+
 ABADDON v6.3.7 — 변동 세계 이벤트 · 무전 · 장비 정비
 
 [핵심 변경]

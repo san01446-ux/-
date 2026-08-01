@@ -258,7 +258,6 @@ def _decorate_named_image(path: Path, *, tier: str, level: int, success: bool, d
             draw.line(points, fill=(255, 70, 85, 210), width=5)
         image = Image.alpha_composite(image, cracks.filter(ImageFilter.GaussianBlur(0.6)))
     return _encode_webp(image)
-ebp(image)
 
 
 def _encode_webp(image: Image.Image) -> bytes:
