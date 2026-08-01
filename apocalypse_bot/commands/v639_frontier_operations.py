@@ -14,7 +14,7 @@ from discord.ext import commands, tasks
 
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips, set_casino_chips
 
-VERSION = "6.3.9"
+VERSION = "6.4.0a"
 KST = timezone(timedelta(hours=9))
 
 DARKZONE_ENTRY_FOOD = 750_000
@@ -28,6 +28,28 @@ SUPPLY_RARE_BONUS = 0.035
 SCRAP_RESOURCE_MIN = 50
 SCRAP_RESOURCE_MAX = 2_000
 MAIL_LIMIT = 40
+SCRAP_ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v640" / "scrap"
+
+
+def _scrap_file(embed: discord.Embed, name: str = "grinder") -> Optional[discord.File]:
+    path = SCRAP_ASSET_ROOT / f"{name}.jpg"
+    if not path.is_file():
+        return None
+    filename = f"abaddon_scrap_{name}.jpg"
+    embed.set_image(url=f"attachment://{filename}")
+    return discord.File(str(path), filename=filename)
+
+
+async def _send_scrap_embed(ctx: commands.Context, *, title: str, description: str, image: str = "grinder", fields: Sequence[Tuple[str, str, bool]] = ()) -> None:
+    embed = discord.Embed(title=title, description=description, color=discord.Color.dark_green())
+    for field_name, value, inline in fields:
+        embed.add_field(name=field_name, value=value, inline=inline)
+    file = _scrap_file(embed, image)
+    if file is not None:
+        await ctx.send(embed=embed, file=file)
+    else:
+        await ctx.send(embed=embed)
+
 
 FRONTIER_GUIDE = {
     "id": "frontier_ops",
@@ -959,26 +981,40 @@ def register_v639_frontier_operations(
         user["resources"][자원] = owned - 수량
         state = _user_state(user)
         pity = int(state.get("scrap_pity", 0))
+        chips_before = casino_chips(user)
         roll = random.random()
         base = 수량 * {"나무": 95, "광석": 155, "고철": 125}[자원]
+        image_name = "grinder"
         if (roll < 0.0025 or pity >= 79) and 수량 >= 500:
             candidates = _tier_candidates(item_db, ("전설", "신화"))
             item = random.choice(candidates) if candidates else "최상급 장비 교환권"
             user.setdefault("inventory", []).append(item)
             state["scrap_pity"] = 0
-            text = f"💥 분쇄기 과부하 잭팟! **{item}** 획득"
+            result_text = f"💥 분쇄기 과부하 잭팟! **{item}** 획득"
+            image_name = "jackpot"
         elif roll < 0.16:
             chips = int(base * random.uniform(2.1, 3.8))
             add_casino_chips(user, chips)
             state["scrap_pity"] = pity + 1
-            text = f"✨ 정제 칩 덩어리 **{chips:,}칩**"
+            result_text = f"✨ 정제 칩 덩어리 **{chips:,}칩**"
         else:
             chips = int(base * random.uniform(0.45, 1.20))
             add_casino_chips(user, chips)
             state["scrap_pity"] = pity + 1
-            text = f"♻️ 재활용 칩 **{chips:,}칩**"
+            result_text = f"♻️ 재활용 칩 **{chips:,}칩**"
+        chips_after = casino_chips(user)
         save_data()
-        await ctx.send(f"{text} · 다음 최상급 보정 {state.get('scrap_pity',0)}/80")
+        await _send_scrap_embed(
+            ctx,
+            title="♻️ 고철 갈갈이 결과",
+            description=result_text,
+            image=image_name,
+            fields=(
+                ("📦 투입", f"{자원} **{수량:,}개**", True),
+                ("🎰 칩 변화", f"{chips_before:,} → **{chips_after:,}**", True),
+                ("🌟 최상급 보정", f"{state.get('scrap_pity', 0)}/80", True),
+            ),
+        )
 
     @bot.command(name="장비갈갈이", aliases=["장비분쇄"])
     @commands.cooldown(1, 15, commands.BucketType.user)
@@ -1002,13 +1038,26 @@ def register_v639_frontier_operations(
             await ctx.send("안전상 일반·고급·희귀 비장착 장비만 분쇄할 수 있습니다.")
             return
         inventory.remove(장비명)
+        chips_before = casino_chips(user)
         chips = {"일반": 40_000, "고급": 90_000, "희귀": 210_000}[tier]
         chips = int(chips * random.uniform(0.8, 1.45))
         add_casino_chips(user, chips)
         stone_gain = {"일반": 1, "고급": 2, "희귀": 4}[tier]
         user.setdefault("materials", {})["강화석"] = int(user.setdefault("materials", {}).get("강화석", 0)) + stone_gain
+        chips_after = casino_chips(user)
         save_data()
-        await ctx.send(f"♻️ **{장비명}** 분쇄 · {chips:,}칩 · 강화석 +{stone_gain}")
+        await _send_scrap_embed(
+            ctx,
+            title="🔩 장비 갈갈이 결과",
+            description=f"**{장비명}**을 안전하게 분쇄했습니다.",
+            image="grinder",
+            fields=(
+                ("🏷️ 등급", tier, True),
+                ("🎰 획득 칩", f"+{chips:,}", True),
+                ("💎 강화석", f"+{stone_gain}", True),
+                ("💰 현재 칩", f"{chips_before:,} → **{chips_after:,}**", False),
+            ),
+        )
 
     test = bot.get_command("테스트")
     if test is not None:

@@ -12,7 +12,7 @@ from discord.ext import commands
 
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 
-VERSION = "6.4.0"
+VERSION = "6.4.0a"
 KST = timezone(timedelta(hours=9))
 MIN_BET = 10_000
 MAX_BET = 50_000_000
@@ -786,6 +786,9 @@ def register_v640_interactive_arcade(
             checks.append(("선물 실시간 차트", True, "16틱 스파크라인 · 수동/자동/강제 청산"))
             checks.append(("참가형 레이스", True, "참가 버튼 · 방장 시작 · 취소 환불 · 최대 8명"))
             checks.append(("이모지 효과", True, "반응·기억·레이스·시세 이벤트에 이모지 상태 표시"))
+            scrap_assets = Path(__file__).resolve().parents[1] / "assets" / "v640" / "scrap"
+            missing_scrap = [name for name in ("grinder.jpg", "jackpot.jpg") if not (scrap_assets / name).is_file()]
+            checks.append(("갈갈이 이미지 연결", not missing_scrap, "일반·잭팟 이미지 정상" if not missing_scrap else ", ".join(missing_scrap)))
             try:
                 from pathlib import Path
                 source = Path(__file__).with_name("v633_equipment_crafting.py").read_text(encoding="utf-8")
@@ -795,7 +798,7 @@ def register_v640_interactive_arcade(
                 checks.append(("장비 시작 오류 검사", False, type(exc).__name__))
             passed = sum(1 for _, ok, _ in checks if ok)
             failed = len(checks) - passed
-            embed = discord.Embed(title=f"🧪 ABADDON v6.4.0 통합 테스트 · {passed}/{len(checks)}", description="재화와 진행 상태를 변경하지 않는 읽기 전용 검사입니다.", color=discord.Color.green() if failed == 0 else discord.Color.orange())
+            embed = discord.Embed(title=f"🧪 ABADDON v6.4.0a 통합 테스트 · {passed}/{len(checks)}", description="재화와 진행 상태를 변경하지 않는 읽기 전용 검사입니다.", color=discord.Color.green() if failed == 0 else discord.Color.orange())
             detailed = str(모드).lower() in {"상세", "전체", "detail", "full"} or failed
             if detailed:
                 for name, ok, detail in checks:
@@ -805,23 +808,24 @@ def register_v640_interactive_arcade(
             embed.set_footer(text="실제 다중 사용자 버튼·메시지 갱신은 배포 서버에서 마지막 스모크 테스트가 필요합니다.")
             await ctx.send(embed=embed)
         test.callback = v640_test
-        test.help = "v6.4.0 프론티어·미니게임·실시간 거래·명령어 분류를 읽기 전용으로 검사합니다."
+        test.help = "v6.4.0a 프론티어·미니게임·갈갈이 비주얼·명령어 분류를 읽기 전용으로 검사합니다."
         test.description = test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v640_patch_notes(ctx: commands.Context):
-            embed = discord.Embed(title="🕹️ ABADDON v6.4.0 — 인터랙티브 프론티어", description="v6.3.9 프론티어 작전과 함께, 지뢰 손익 표기·실시간 선물 차트·개인 미니게임·참가형 서버 레이스를 추가했습니다.", color=discord.Color.dark_purple())
+            embed = discord.Embed(title="🕹️ ABADDON v6.4.0a — 갈갈이 비주얼 핫픽스", description="v6.3.9 프론티어 작전과 함께, 지뢰 손익 표기·실시간 선물 차트·개인 미니게임·참가형 서버 레이스를 추가했습니다.", color=discord.Color.dark_purple())
             embed.add_field(name="🚧 프론티어 작전", value="다크존·밀수품·보급선 피버·고철 갈갈이·우편·알림", inline=False)
+            embed.add_field(name="♻️ 갈갈이 이미지 핫픽스", value="고철·장비 분쇄 결과에 분쇄기 가동 이미지와 잭팟 이미지를 실제 첨부하고, 홈페이지 카드도 동일 비주얼로 교체", inline=False)
             embed.add_field(name="💣 지뢰찾기 정산 개선", value="시작 전/현재 보유, 현금화 총액, 실제 순이익, 폭발 손실을 분리 표시", inline=False)
             embed.add_field(name="📊 실시간 선물거래", value="롱/숏 버튼 · 16틱 이모지 차트 · 미실현 손익 · 수동/자동/강제 청산", inline=False)
             embed.add_field(name="⚡ 신규 미니게임", value="`!반응속도` · `!기억회로` · `!생존자레이스` · `!미니게임`", inline=False)
             embed.add_field(name="🏁 참가 방식", value="레이스는 참가를 원하는 사람만 버튼으로 입장하고, 방장이 인원을 확정한 뒤 시작", inline=False)
             embed.add_field(name="📚 !명령어 최신화", value="모든 최상위 카테고리를 첫 화면과 드롭다운에 표시하고, 신규 기능을 한 카테고리에만 정렬", inline=False)
-            embed.set_footer(text="최신 버전 v6.4.0 · !테스트 상세 권장")
+            embed.set_footer(text="최신 버전 v6.4.0a · !테스트 상세 권장")
             await ctx.send(embed=embed)
         patch.callback = v640_patch_notes
-        patch.help = "ABADDON v6.4.0 인터랙티브 프론티어 패치 내용을 확인합니다."
+        patch.help = "ABADDON v6.4.0a 갈갈이 비주얼 핫픽스 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v640_interactive_arcade_version = VERSION

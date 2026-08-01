@@ -1,0 +1,21 @@
+{
+  "version": "6.4.0a",
+  "python_compile": true,
+  "scrap_assets": {
+    "grinder.jpg": {
+      "bytes": 69761,
+      "sha256": "07295bbc4416c3f65b1781166756e14ff8b3a2593b42f5c62f34faee648245d0"
+    },
+    "jackpot.jpg": {
+      "bytes": 69701,
+      "sha256": "1d3cb9bc7a117389c343a67c06a94ae3a3e598e91735fab42898330c8f7ab3bc"
+    }
+  },
+  "bot_commands_patched": [
+    "고철갈갈이",
+    "장비갈갈이",
+    "테스트",
+    "패치노트"
+  ],
+  "homepage_card_image": true
+}
