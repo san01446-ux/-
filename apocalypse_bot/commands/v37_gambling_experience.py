@@ -307,12 +307,20 @@ def register_v37_commands(
             return
 
         before = int(user.get("balance", 0))
-        suspense = await ctx.send(
-            f"🚪 **[갈림길 탐색]**\n{direction} 통로에 **{배팅액:,} 식량**을 걸었습니다.\n"
-            "낡은 철문이 천천히 열립니다..."
-        )
+        visual_send = getattr(bot, "v632_send_visual", None)
+        visual_edit = getattr(bot, "v632_edit_visual", None)
+        visual_tip = getattr(bot, "v632_tip", lambda _k: "통로의 출구와 함정을 먼저 확인하세요.")
+        start_embed = discord.Embed(title="🚪 갈림길 탐색", description=f"{direction} 통로에 **{배팅액:,} 식량**을 걸었습니다. 낡은 철문이 천천히 열립니다...", color=discord.Color.dark_teal())
+        start_embed.add_field(name="🧭 선택 통로", value=f"**{direction}**", inline=True)
+        start_embed.add_field(name="💰 배팅", value=f"**{배팅액:,} 식량**", inline=True)
+        start_embed.add_field(name="💡 TIP", value=visual_tip("exploration"), inline=False)
+        suspense = await visual_send(ctx, start_embed, "activities/exploration/encounter") if visual_send else await ctx.send(embed=start_embed)
         await asyncio.sleep(0.8)
-        await _edit_message(suspense, f"👣 **{direction} 통로 안쪽에서 발소리가 들립니다...**\n숨을 죽이고 보급함을 확인하는 중...")
+        scan_embed = discord.Embed(title="👣 통로 내부 탐색 중", description=f"{direction} 통로 안쪽에서 발소리와 금속 마찰음이 들립니다...", color=discord.Color.orange())
+        scan_embed.add_field(name="🔦 진행", value="보급함·매복·와이어 덫 확인", inline=True)
+        scan_embed.add_field(name="💡 TIP", value=visual_tip("exploration"), inline=False)
+        if visual_edit: await visual_edit(suspense, scan_embed, "activities/exploration/encounter")
+        else: await _edit_embed(suspense, scan_embed)
         await asyncio.sleep(0.8)
 
         user.setdefault("stats", {}).setdefault("gambles", 0)
@@ -327,35 +335,26 @@ def register_v37_commands(
             user["balance"] = before + reward
             user["stats"].setdefault("earned", 0)
             user["stats"]["earned"] += reward
-            flavor = random.choice(
-                [
-                    "📦 녹슨 보급함 안에서 쓸 만한 물자를 발견했습니다!",
-                    "🧟 감염체가 다른 통로로 사라진 틈에 보급품을 챙겼습니다!",
-                    "🔦 무너진 벽 뒤에 숨겨진 생존 물자를 찾아냈습니다!",
-                ]
-            )
+            flavor = random.choice(["녹슨 보급함에서 밀봉된 생존 물자를 발견했습니다.","감염체가 이동한 틈에 숨겨진 보급 가방을 회수했습니다.","무너진 벽 뒤의 은닉 장소에서 자원을 찾아냈습니다."])
             title = "✅ 탐색 성공"
         else:
             user["balance"] = before - 배팅액
             reward = -배팅액
-            flavor = random.choice(
-                [
-                    "🩸 매복한 감염체에게 보급 가방을 빼앗겼습니다!",
-                    "💣 낡은 함정이 작동해 배팅 물자를 모두 잃었습니다!",
-                    "🚨 경보가 울리며 암시장 경비대에게 식량을 압수당했습니다!",
-                ]
-            )
+            flavor = random.choice(["매복한 감염체에게 보급 가방을 빼앗겼습니다.","와이어 함정이 작동해 배팅 물자를 모두 잃었습니다.","암시장 경비대의 순찰에 걸려 식량을 압수당했습니다."])
             title = "❌ 탐색 실패"
 
         _record_gamble(user, "갈림길 탐색", 배팅액, reward)
         save_data()
-        await _edit_message(
-            suspense,
-            f"{title}\n{flavor}\n"
-            f"{'획득' if reward >= 0 else '손실'} **{abs(reward):,} 식량**\n"
-            f"{_balance_line(before, int(user['balance']))}",
-        )
+        result_embed = discord.Embed(title=title, description=flavor, color=discord.Color.green() if success else discord.Color.red(), timestamp=_utc_now())
+        result_embed.add_field(name="🎒 결과", value=f"**{'획득' if reward >= 0 else '손실'} {abs(reward):,} 식량**", inline=True)
+        result_embed.add_field(name="💳 잔액 변화", value=_balance_line(before, int(user['balance'])), inline=True)
+        result_embed.add_field(name="💡 TIP", value=visual_tip("exploration"), inline=False)
+        if visual_edit: await visual_edit(suspense, result_embed, f"activities/exploration/{'success' if success else 'failure'}")
+        else: await _edit_embed(suspense, result_embed)
         await _safe_reactions(suspense, ("🎉", "✅") if success else ("💀", "❌"))
+        maybe_encounter = getattr(bot, "v632_maybe_encounter", None)
+        if maybe_encounter:
+            await maybe_encounter(ctx, "exploration", user)
 
     @bot.hybrid_command(name="주파수", description="세 개의 검은 신호 결과에 식량을 배팅합니다.")
     @commands.cooldown(1, 60, commands.BucketType.user)
@@ -792,16 +791,19 @@ def register_v37_commands(
             await ctx.send(f"⏳ 다음 코인 탐색까지 **{_format_seconds(remaining_seconds)}** 남았습니다.")
             return
 
-        suspense = await ctx.send(
-            "🪙 **폐허 코인 스캐너 가동...**\n"
-            "◐ → ◓ → ◑ · 무너진 금고의 신호를 추적합니다."
-        )
+        visual_send = getattr(bot, "v632_send_visual", None)
+        visual_edit = getattr(bot, "v632_edit_visual", None)
+        visual_tip = getattr(bot, "v632_tip", lambda _k: "실물 자산 서명과 위조 신호를 구분하세요.")
+        scan_start = discord.Embed(title="🪙 폐허 코인 스캐너 가동", description="무너진 금고와 폐쇄 서버의 자산 신호를 추적합니다.", color=discord.Color.dark_teal())
+        scan_start.add_field(name="📡 진행", value="◐ → ◓ → ◑ · 자산 신호 탐색", inline=True)
+        scan_start.add_field(name="💡 TIP", value=visual_tip("coin"), inline=False)
+        suspense = await visual_send(ctx, scan_start, "activities/coin/encounter") if visual_send else await ctx.send(embed=scan_start)
         await asyncio.sleep(0.8)
-        await _edit_message(
-            suspense,
-            "🔐 **암호 해독 중...**\n"
-            "◓ → ◑ → ◒ · 자산 서명과 위조 신호를 분리합니다.",
-        )
+        decrypt = discord.Embed(title="🔐 암호 해독 중", description="자산 서명과 위조 신호를 분리합니다.", color=discord.Color.orange())
+        decrypt.add_field(name="📡 진행", value="◓ → ◑ → ◒ · 서명 대조", inline=True)
+        decrypt.add_field(name="💡 TIP", value=visual_tip("coin"), inline=False)
+        if visual_edit: await visual_edit(suspense, decrypt, "activities/coin/encounter")
+        else: await _edit_embed(suspense, decrypt)
         await asyncio.sleep(0.8)
 
         keys = [item[0] for item in COIN_DRAW_WEIGHTS]
@@ -851,8 +853,12 @@ def register_v37_commands(
                     inline=False,
                 )
             embed.set_footer(text="실패 비용은 잔액을 넘지 않으며 60~350 식량 범위에서 계산됩니다")
-            await _edit_embed(suspense, embed)
+            embed.add_field(name="💡 TIP", value=visual_tip("coin"), inline=False)
+            if visual_edit: await visual_edit(suspense, embed, "activities/coin/failure")
+            else: await _edit_embed(suspense, embed)
             await _safe_reactions(suspense, ("❌", "🕳️", "😭", "💸", "🪨"))
+            maybe_encounter = getattr(bot, "v632_maybe_encounter", None)
+            if maybe_encounter: await maybe_encounter(ctx, "coin", user)
             return
 
         asset_key = draw_result
@@ -890,8 +896,11 @@ def register_v37_commands(
                 value="오늘 코인을 모두 사용했습니다. `!알바` 다음에는 `!땅파기`를 이용하세요.",
                 inline=False,
             )
+        embed.add_field(name="💡 TIP", value=visual_tip("coin"), inline=False)
         embed.set_footer(text="ABADDON 암시장 코인 스캐너 · 결과를 항목별 임베드로 표시")
-        await _edit_embed(suspense, embed)
+        asset_kind = "rare" if asset_key in {"혈청", "유물", "코어"} else "success"
+        if visual_edit: await visual_edit(suspense, embed, f"activities/coin/{asset_kind}")
+        else: await _edit_embed(suspense, embed)
         reaction_map = {
             "보급권": ("🪙", "✅", "📦"),
             "군수권": ("🔵", "✨", "🎯", "🪙"),
@@ -900,6 +909,8 @@ def register_v37_commands(
             "코어": ("👑", "💠", "🌌", "🏆", "🎉", "🔥"),
         }
         await _safe_reactions(suspense, reaction_map[asset_key])
+        maybe_encounter = getattr(bot, "v632_maybe_encounter", None)
+        if maybe_encounter: await maybe_encounter(ctx, "coin", user)
 
     # ---------- 암시장 자동 알림 ----------
     def notification_settings() -> Dict[str, Any]:

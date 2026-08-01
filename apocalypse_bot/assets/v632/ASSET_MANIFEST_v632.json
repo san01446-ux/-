@@ -1,0 +1,287 @@
+{
+  "version": "6.3.2",
+  "total_images": 48,
+  "resolution": "1280x720",
+  "groups": {
+    "fishing": {
+      "success": 3,
+      "failure": 2,
+      "rare": 2,
+      "encounter": 2,
+      "encounter_success": 2,
+      "encounter_failure": 1
+    },
+    "mining": {
+      "success": 3,
+      "failure": 2,
+      "rare": 2,
+      "encounter": 2,
+      "encounter_success": 2,
+      "encounter_failure": 1
+    },
+    "coin": {
+      "success": 2,
+      "failure": 1,
+      "rare": 1,
+      "encounter": 1,
+      "encounter_success": 1
+    },
+    "exploration": {
+      "success": 2,
+      "failure": 1,
+      "rare": 1,
+      "encounter": 1,
+      "encounter_failure": 1
+    },
+    "support": {
+      "success": 3,
+      "failure": 2,
+      "rare": 2,
+      "encounter": 2,
+      "encounter_success": 2,
+      "encounter_failure": 1
+    }
+  },
+  "files": [
+    {
+      "path": "activities/coin/encounter/01.jpg",
+      "sha256": "b6fe134215835f460c430940feaf299fe76428d8971bfbb2c2953307cc0698e6",
+      "bytes": 200869
+    },
+    {
+      "path": "activities/coin/encounter_success/01.jpg",
+      "sha256": "f387b9f6e8060a1f8b6f4ecd0436e9c8448b308a66b35b17ca7b3ac04b3337fc",
+      "bytes": 198994
+    },
+    {
+      "path": "activities/coin/failure/01.jpg",
+      "sha256": "4bddc8668bcdf0889e874b705ab1200002117318d73e51f113394f59b0da87e8",
+      "bytes": 176671
+    },
+    {
+      "path": "activities/coin/rare/01.jpg",
+      "sha256": "9060455ae62dbbe56b0212864e9306e68b83b4baacc9134b68d23b34b8bf925b",
+      "bytes": 196452
+    },
+    {
+      "path": "activities/coin/success/01.jpg",
+      "sha256": "371013f68eb63b296570032ba5954b81f1c560e475cb700203deb0cc05247164",
+      "bytes": 215164
+    },
+    {
+      "path": "activities/coin/success/02.jpg",
+      "sha256": "9e86876ada25c11b8a411638e8acb30713c563a4c20c7f7b06c1c75a39952a94",
+      "bytes": 190869
+    },
+    {
+      "path": "activities/exploration/encounter/01.jpg",
+      "sha256": "c9e74c4e101aadbca05bd48b465f5ae6046a98ed5b3e5b9cf75e98eb34d91343",
+      "bytes": 144751
+    },
+    {
+      "path": "activities/exploration/encounter_failure/01.jpg",
+      "sha256": "e21e1e0113e40d24889649ccf56e642c0784c88147df8c19d5c70ac6407efc34",
+      "bytes": 162159
+    },
+    {
+      "path": "activities/exploration/failure/01.jpg",
+      "sha256": "e58e7c759013ec8a62bf088abceca822ac479535120e038721e04bd1d239a250",
+      "bytes": 164216
+    },
+    {
+      "path": "activities/exploration/rare/01.jpg",
+      "sha256": "ac570040ba124efe06406638a8fb64e67a8091b0793b64ac65613d87475f4497",
+      "bytes": 150734
+    },
+    {
+      "path": "activities/exploration/success/01.jpg",
+      "sha256": "691ce93da85c3f8627545e7e5f02f511176aad20b52b7ceb550c2f408ef1c204",
+      "bytes": 156088
+    },
+    {
+      "path": "activities/exploration/success/02.jpg",
+      "sha256": "3f4cfefbf1511f563ee2d67c28a3597fb31633f722afe7a51d8495db4726759d",
+      "bytes": 140700
+    },
+    {
+      "path": "activities/fishing/encounter/01.jpg",
+      "sha256": "9e32bf4c3255625dfaf2cd599657f2dac6a8bae129581a5ef97109724aaad21e",
+      "bytes": 195657
+    },
+    {
+      "path": "activities/fishing/encounter/02.jpg",
+      "sha256": "3114c750511050b4c4ac2313c5103a7fbd0f4b8330bdf32ad45cf14edec348c4",
+      "bytes": 195664
+    },
+    {
+      "path": "activities/fishing/encounter_failure/01.jpg",
+      "sha256": "67125d9b9725f4e22fe88fdab2ae3a42d52cd84d5e9e5200767e080ebbc64dcb",
+      "bytes": 188257
+    },
+    {
+      "path": "activities/fishing/encounter_success/01.jpg",
+      "sha256": "9ed4f506c0d5a63f6f2d278ce465b5d0b9073fd13cd2cdc868f5bb5809bd9e7e",
+      "bytes": 176793
+    },
+    {
+      "path": "activities/fishing/encounter_success/02.jpg",
+      "sha256": "57100b0fe68732186e29d2c832a1a0f88385f2c48891db30c99ddf9a0ff5d9aa",
+      "bytes": 175913
+    },
+    {
+      "path": "activities/fishing/failure/01.jpg",
+      "sha256": "2e5a6da64e240b52885558362e5cf3d2ac29daa3f67ed0220ebb1eb98d801d48",
+      "bytes": 181888
+    },
+    {
+      "path": "activities/fishing/failure/02.jpg",
+      "sha256": "1952c5278c833ae79ce6b3e98cc2f2ef6f40c84d84cc9d405a7dbfe7fb036e2e",
+      "bytes": 201698
+    },
+    {
+      "path": "activities/fishing/rare/01.jpg",
+      "sha256": "944ba26e31ca6b782c579573c8f2e4080838b0a232873cde59d28dc231df725b",
+      "bytes": 206971
+    },
+    {
+      "path": "activities/fishing/rare/02.jpg",
+      "sha256": "2498edbc8d12487acfb25bcdc3dd599c522bbb393f82c723791b7bcda9cf8079",
+      "bytes": 192433
+    },
+    {
+      "path": "activities/fishing/success/01.jpg",
+      "sha256": "6f4bef746c403ff4f257bec63bf78d77baa0265b0ecf36482a1d190066d8b358",
+      "bytes": 197102
+    },
+    {
+      "path": "activities/fishing/success/02.jpg",
+      "sha256": "1356e16a92c3bfcd614d94c321e4f0efd6766ff0d11ef521eee273304e6df50d",
+      "bytes": 245123
+    },
+    {
+      "path": "activities/fishing/success/03.jpg",
+      "sha256": "f34d800c3d30c39067e3412858c5a21be47fdb66d6f84bb355d4b6e3ba1e4f29",
+      "bytes": 223573
+    },
+    {
+      "path": "activities/mining/encounter/01.jpg",
+      "sha256": "48d795cb1a9441e14611a56e3e4c599cfcb51f2adc8c1b51366e00c2a24d0f85",
+      "bytes": 132006
+    },
+    {
+      "path": "activities/mining/encounter/02.jpg",
+      "sha256": "3120b8755300954d26068e027cae3e5a73b6e3b574dd82004fde2cf246919685",
+      "bytes": 147593
+    },
+    {
+      "path": "activities/mining/encounter_failure/01.jpg",
+      "sha256": "6ba60489fea5cc75d1fdadd8f9f8d09d0c5f9aac9cd8820a7b5815931680c805",
+      "bytes": 139579
+    },
+    {
+      "path": "activities/mining/encounter_success/01.jpg",
+      "sha256": "d21373f661f6a3474e7f8ce97b55c63a6aa18383622c02126bfd239e1c531925",
+      "bytes": 122232
+    },
+    {
+      "path": "activities/mining/encounter_success/02.jpg",
+      "sha256": "102ebaddf16c63c86a79467fe3e22f89222aa443f8fcc66b8e7153e9c403c555",
+      "bytes": 126076
+    },
+    {
+      "path": "activities/mining/failure/01.jpg",
+      "sha256": "90acb98a6fbf929cfbe8220eed60e0b044e1cd7368ca88297dafbbe8b97d6cce",
+      "bytes": 142485
+    },
+    {
+      "path": "activities/mining/failure/02.jpg",
+      "sha256": "6d9e66e284e967ba107cb62ad42cda3e1f3585088686c7555b7f6589cc73dc58",
+      "bytes": 140170
+    },
+    {
+      "path": "activities/mining/rare/01.jpg",
+      "sha256": "8691c973111ca25d4587f3a2d180dd1104ab10dd7999c894435cdd36d96090d2",
+      "bytes": 144448
+    },
+    {
+      "path": "activities/mining/rare/02.jpg",
+      "sha256": "ecce45c12b0e03eaaa7828c64c39c1bffc702507839a81cbf3c9211c13a8007a",
+      "bytes": 145105
+    },
+    {
+      "path": "activities/mining/success/01.jpg",
+      "sha256": "9417514e697733a9f515ca5adccf121e34b3c6b8e6966164392658db9fbabb3c",
+      "bytes": 153091
+    },
+    {
+      "path": "activities/mining/success/02.jpg",
+      "sha256": "964821c44a5a8d7ec879d7164ccf63d80b1748e43558d81ec75ba81bd5897690",
+      "bytes": 136494
+    },
+    {
+      "path": "activities/mining/success/03.jpg",
+      "sha256": "a0982f5a4a7139a64ae2a6a1442b20aa6b625dd4c7e22366fcecd9f52bcc8d49",
+      "bytes": 140992
+    },
+    {
+      "path": "activities/support/encounter/01.jpg",
+      "sha256": "5b53340a3fcf214c782b40cdb6be4443e2880d07ce8c5b07fd4834f70cb28e2a",
+      "bytes": 190329
+    },
+    {
+      "path": "activities/support/encounter/02.jpg",
+      "sha256": "08a5be4dc7e373f975dc703b1118c2de3ee60f893a10e023615244cdf418601c",
+      "bytes": 179486
+    },
+    {
+      "path": "activities/support/encounter_failure/01.jpg",
+      "sha256": "a9739b145e1df4fcd9f11dc012f68dc12a4ea3c55601bbf33abe81b01988a92d",
+      "bytes": 172629
+    },
+    {
+      "path": "activities/support/encounter_success/01.jpg",
+      "sha256": "5aa839f0139ff9ebdf2f7aeba007a18a92b2ca6e7242075b2f9973c0d0dc93ae",
+      "bytes": 185660
+    },
+    {
+      "path": "activities/support/encounter_success/02.jpg",
+      "sha256": "f11eed2eb5429230115f0f824ff7260237befb8fb528086cde98c3896a9e7723",
+      "bytes": 194373
+    },
+    {
+      "path": "activities/support/failure/01.jpg",
+      "sha256": "17478aa44e401ddb003e5d1327260db42534b4e8191364c04c755b1ac976866d",
+      "bytes": 170069
+    },
+    {
+      "path": "activities/support/failure/02.jpg",
+      "sha256": "0289e39121acfefd63e3cde008fe71aea6804eef406949527440f1e9ffa67628",
+      "bytes": 186504
+    },
+    {
+      "path": "activities/support/rare/01.jpg",
+      "sha256": "ec46e4c342c1d81fb5885cfdbbf1c24710ff4960e1256c1f7b7546c690952035",
+      "bytes": 181552
+    },
+    {
+      "path": "activities/support/rare/02.jpg",
+      "sha256": "2ea59d4d25d134aae0f39f271453ae49055f3d3c0a5cd28134b50eceb6d23699",
+      "bytes": 182459
+    },
+    {
+      "path": "activities/support/success/01.jpg",
+      "sha256": "3331dc1375ebce108789964655ec155aa96daf0e2e30048095396a05ee646717",
+      "bytes": 199481
+    },
+    {
+      "path": "activities/support/success/02.jpg",
+      "sha256": "0e46c749a0cc3fb08fe1b520e35f37f4233fa5fda57cc72dae9f07f922f46906",
+      "bytes": 189514
+    },
+    {
+      "path": "activities/support/success/03.jpg",
+      "sha256": "e03371c81a28e50ec255dca5941dfcd101a3579e3ca097aa6e9448169c87040f",
+      "bytes": 205051
+    }
+  ]
+}
