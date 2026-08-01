@@ -5,67 +5,52 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
-from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
 
+from apocalypse_bot.commands import v631_life_visuals as stage1
+
 VERSION = "6.3.2"
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v632"
-KST = ZoneInfo("Asia/Seoul")
 ENCOUNTER_CHANCE = 0.10
-ENCOUNTER_DAILY_LIMIT = 8
-ENCOUNTER_REWARD_CAP = 16_000
-
-ACTIVITY_LABELS: Mapping[str, Tuple[str, str]] = {
-    "fishing": ("🎣", "낚시"),
-    "mining": ("⛏️", "광산"),
-    "coin": ("🪙", "코인 탐색"),
-    "exploration": ("🔦", "갈림길 탐색"),
-    "support": ("🎁", "긴급 지원 교섭"),
-}
-ACTIVITY_ALIASES = {"낚시":"fishing","광산":"mining","코인":"coin","코인탐색":"coin","탐색":"exploration","돈주세요":"support"}
+SPECIAL_NEGOTIATION_CHANCE = 0.10
+SPECIAL_NEGOTIATION_MIN = 5_000
+SPECIAL_NEGOTIATION_MAX = 20_000
 
 TIP_POOLS: Mapping[str, Sequence[str]] = {
     "fishing": (
-        "낚시 숙련도는 20회마다 상승하며 물고기와 보급품 획득량을 높입니다.",
-        "수면의 비정상적인 파문은 큰 물고기일 수도, 수변 감염체일 수도 있습니다.",
-        "희귀 어종은 제작 재료나 고대파편 발견으로 이어질 수 있습니다.",
-        "폭우가 시작되면 낚싯줄보다 주변 철수 경로를 먼저 확인하세요.",
+        "낚시와 광산은 서로 다른 사용자별 2분 쿨타임을 사용합니다.",
+        "수면의 비정상적인 파문은 희귀 어종이나 매복 신호일 수 있습니다.",
+        "랜덤 인카운트 성공 시 낮은 확률로 거래 가능한 고가 장비가 나옵니다.",
     ),
     "mining": (
-        "광산 숙련도가 오르면 광석과 고철 획득량이 점차 증가합니다.",
-        "붉은 균열은 고열 구간이므로 곡괭이보다 환기 장치를 먼저 확인하세요.",
-        "푸른 결정맥 주변에는 오래된 기계 장치가 남아 있을 가능성이 큽니다.",
-        "낙석음이 연속으로 들리면 희귀 광맥보다 안전한 통로가 우선입니다.",
+        "광산은 낚시와 쿨타임을 공유하지 않습니다.",
+        "연속 낙석음이 들리면 광맥보다 퇴로 확보가 먼저입니다.",
+        "희귀 거래 장비는 기존 거래소의 `!판매 아이템명 가격`으로 등록할 수 있습니다.",
     ),
     "coin": (
-        "코인 실패 수리비는 현재 잔액을 넘지 않으며 잔액이 없으면 보호됩니다.",
-        "희귀도가 높은 자산일수록 시세 변동이 크므로 보유 현황을 함께 확인하세요.",
-        "위조 신호는 반복 패턴이 짧고 실물 자산 신호는 잡음 속에서도 서명이 유지됩니다.",
-        "오늘 코인 탐색을 모두 사용했다면 알바와 땅파기가 다음 수입 루트입니다.",
+        "코인 탐색은 1분마다 가능하며 하루 30회, KST 자정에 초기화됩니다.",
+        "실패 수리비는 현재 잔액을 넘지 않습니다.",
+        "코인 탐색 인카운트는 기존 암시장 코인 결과를 덮어쓰지 않습니다.",
     ),
     "exploration": (
-        "갈림길 탐색은 성공 시 배팅액 이상의 보상을 얻지만 실패하면 배팅액을 잃습니다.",
-        "발소리보다 먼저 꺼지는 조명은 매복이나 전력 함정의 신호일 수 있습니다.",
-        "보급함을 발견해도 주변 출구와 와이어 덫을 먼저 확인하는 편이 안전합니다.",
-        "왼쪽과 오른쪽 통로의 성공 확률은 같으며 결과는 매번 독립적으로 결정됩니다.",
+        "탐색은 도박 콘텐츠이며 방향과 배팅액을 먼저 정합니다.",
+        "랜덤 인카운트는 기존 배팅 승패가 끝난 뒤 별도로 발생합니다.",
+        "카지노 드롭다운과 기존 44% 성공 판정은 그대로 유지됩니다.",
     ),
     "support": (
-        "긴급 지원 교섭은 정상 지원·빈 배급소·사기 거래로 갈릴 수 있습니다.",
-        "봉인 번호와 무전 호출 부호가 다르면 보증금을 먼저 내지 마세요.",
-        "특별 지원 물자는 드물지만 일반 지원보다 훨씬 큰 식량을 제공합니다.",
-        "실패 손실은 현재 잔액을 넘지 않아 잔액이 음수가 되지 않습니다.",
+        "돈주세요는 1분마다 가능하며 하루 50회, KST 자정에 초기화됩니다.",
+        "특별 교섭은 정상 지원 이후 낮은 확률로 나타나는 선택형 이벤트입니다.",
+        "교섭 성공 시 기본 지원금과 별도로 5,000~20,000 식량을 추가로 받습니다.",
     ),
 }
 
 _RECENT_ASSETS: Dict[str, List[str]] = {}
-_ACTIVE_USERS: set[int] = set()
 
 
 def random_tip(activity: str) -> str:
-    pool = TIP_POOLS.get(activity) or ("현장 상황을 확인한 뒤 안전한 선택을 고르세요.",)
-    return random.choice(tuple(pool))
+    return random.choice(tuple(TIP_POOLS.get(activity) or ("기존 명령 규칙을 유지합니다.",)))
 
 
 def _asset_files(relative: str) -> List[Path]:
@@ -132,138 +117,226 @@ class Encounter:
     title: str
     description: str
     options: Tuple[Tuple[str, str, str], ...]
+    negotiation: bool = False
 
+
+LABELS: Mapping[str, Tuple[str, str]] = {
+    "fishing": ("🎣", "낚시"),
+    "mining": ("⛏️", "광산"),
+    "coin": ("🪙", "코인 탐색"),
+    "exploration": ("🚪", "도박 탐색"),
+    "support": ("🤝", "특별 교섭"),
+}
 
 ENCOUNTERS: Tuple[Encounter, ...] = (
-    Encounter("fish_raider_boat", "fishing", "danger", "수면 위 약탈자 보트", "낚싯줄 끝의 큰 물고기와 함께 엔진을 끈 소형 보트가 접근합니다.", (("줄을 끊고 숨는다","✂️","safe"),("무전으로 경고한다","📻","help"),("물고기를 끝까지 끌어낸다","🎣","risk"))),
-    Encounter("fish_mutant_school", "fishing", "rare", "빛나는 변이 어군", "푸른빛을 내는 어군이 부두 아래를 선회하며 수면에 이상한 문양을 만듭니다.", (("외곽에서 한 마리만 낚는다","🪝","safe"),("표본망을 함께 펼친다","🕸️","help"),("무리 중심에 미끼를 던진다","💠","risk"))),
-    Encounter("fish_flood_cache", "fishing", "common", "침수된 보급 상자", "낚싯줄에 물고기 대신 군용 방수 상자의 손잡이가 걸렸습니다.", (("얕은 곳으로 끌어낸다","🧵","safe"),("동료와 도르래를 건다","⚙️","help"),("잠금 장치를 물속에서 연다","🔐","risk"))),
-    Encounter("mine_gas_fault", "mining", "danger", "폐광 가스 경보", "낡은 경보기와 전등이 동시에 붉게 점멸하기 시작했습니다.", (("즉시 환기한다","🌬️","safe"),("인접 갱도에 경고한다","📢","help"),("광맥만 빠르게 캔다","⛏️","risk"))),
-    Encounter("mine_machine_heart", "mining", "rare", "지하 기계의 심장", "결정맥 뒤에서 오래된 동력핵이 낮은 진동과 청색광을 내뿜습니다.", (("전원을 분리한다","🔌","safe"),("기술 기록을 복구한다","🛠️","help"),("핵을 즉시 추출한다","💎","risk"))),
-    Encounter("mine_survivor_map", "mining", "common", "광부 생존자의 지도", "폐광 감시소에서 살아남은 광부가 안전한 광맥 지도를 들고 나타났습니다.", (("소량 식량으로 교환한다","🤝","safe"),("탈출로를 함께 정비한다","🧱","help"),("표시되지 않은 금지 갱도를 묻는다","🗺️","risk"))),
-    Encounter("coin_broker", "coin", "common", "신호를 가로챈 데이터 브로커", "스캐너 주파수에 익명의 브로커가 접속해 자산 서명 일부를 판매하겠다고 제안합니다.", (("소액 정보만 산다","🪙","safe"),("서명을 함께 검증한다","🔍","help"),("암호 지갑 전체를 연다","💻","risk"))),
-    Encounter("coin_black_node", "coin", "rare", "검은 노드의 숨은 지갑", "폐쇄된 서버 노드에서 정상 시장에 기록되지 않은 고액 지갑 신호가 감지됩니다.", (("읽기 전용으로 확인한다","👁️","safe"),("백업 키를 복원한다","🔑","help"),("즉시 자산을 이전한다","⚡","risk"))),
-    Encounter("explore_tripwire", "exploration", "danger", "붉은 와이어가 걸린 통로", "보급함 앞 바닥에서 매우 얇은 와이어와 벽면 폭약 흔적을 발견했습니다.", (("표시하고 우회한다","🚩","safe"),("함정을 해체한다","✂️","help"),("보급함만 끌어온다","🪝","risk"))),
-    Encounter("explore_lost_scout", "exploration", "common", "길을 잃은 정찰병", "부상당한 정찰병이 반대편 통로의 매복 위치를 알고 있다고 말합니다.", (("응급처치만 한다","🩹","safe"),("거점까지 호위한다","🛡️","help"),("숨은 보급고 위치를 요구한다","📍","risk"))),
-    Encounter("support_quartermaster", "support", "common", "임시 보급 담당자", "임시 배급소 담당자가 신원과 최근 활동 기록을 확인해 추가 지원 여부를 판단합니다.", (("정상 배급을 신청한다","📋","safe"),("봉사 기록을 제시한다","🧰","help"),("긴급 물자까지 요청한다","🚨","risk"))),
-    Encounter("support_night_market", "support", "danger", "암시장 지원 중개인", "밤 시장의 중개인이 큰 지원 상자를 보여주며 선불 운송료를 요구합니다.", (("봉인 번호만 확인한다","🔎","safe"),("제3자 보증을 요청한다","🤝","help"),("즉시 운송료를 낸다","💸","risk"))),
+    Encounter("fishing_mutant_school", "fishing", "danger", "돌연변이 어군", "수면 아래 거대한 그림자들이 낚싯줄을 따라 원을 그립니다.", (("줄을 짧게 감는다", "🎣", "safe"), ("미끼를 바꿔 유인한다", "🪱", "help"), ("대형 개체를 노린다", "🦈", "risk"))),
+    Encounter("fishing_waterproof_cache", "fishing", "rare", "방수 보급함", "낚싯바늘이 물고기 대신 잠긴 방수 상자에 걸렸습니다.", (("매듭부터 보강한다", "🪢", "safe"), ("부표를 달아 함께 끌어낸다", "🛟", "help"), ("한 번에 끌어올린다", "💪", "risk"))),
+    Encounter("fishing_raider_boat", "fishing", "common", "버려진 약탈자 보트", "갈대 사이에서 작은 보트와 봉인된 물자통을 발견했습니다.", (("주변부터 확인한다", "🔭", "safe"), ("보트 엔진을 점검한다", "🔧", "help"), ("물자통을 즉시 연다", "📦", "risk"))),
+    Encounter("mining_resonant_vein", "mining", "rare", "공명하는 광맥", "곡괭이를 댈 때마다 푸른 광석이 낮은 진동음을 냅니다.", (("외곽만 채굴한다", "⛏️", "safe"), ("지지대를 설치한다", "🧱", "help"), ("핵심 광맥을 깨뜨린다", "💎", "risk"))),
+    Encounter("mining_machine_vault", "mining", "common", "폐쇄된 기계 금고", "광산 관리실 아래에서 전력이 남은 부품 금고를 찾았습니다.", (("회로를 차단한다", "🔌", "safe"), ("정비 모드로 연다", "🛠️", "help"), ("잠금핀을 폭파한다", "💥", "risk"))),
+    Encounter("mining_cave_stalker", "mining", "danger", "갱도 추적자", "어둠 속 발톱 자국이 새 광맥까지 이어지고 있습니다.", (("소음을 줄여 우회한다", "🤫", "safe"), ("조명탄으로 몰아낸다", "🔥", "help"), ("둥지까지 추적한다", "⚔️", "risk"))),
+    Encounter("coin_ghost_wallet", "coin", "rare", "유령 지갑 신호", "폐서버에서 소유자가 사라진 고가 자산 서명이 감지됩니다.", (("읽기 전용으로 복구한다", "🔎", "safe"), ("분산 노드로 검증한다", "🖥️", "help"), ("즉시 지갑을 해제한다", "🔓", "risk"))),
+    Encounter("coin_broker_offer", "coin", "common", "데이터 브로커의 제안", "익명 브로커가 희귀 자산 위치와 교환 조건을 전송했습니다.", (("소액 정보만 산다", "🪙", "safe"), ("서명을 상호 검증한다", "🤝", "help"), ("전체 좌표를 구매한다", "📡", "risk"))),
+    Encounter("coin_traceback", "coin", "danger", "역추적 신호", "스캐너 뒤편에서 정체불명의 접속이 역으로 따라붙었습니다.", (("연결을 즉시 끊는다", "✂️", "safe"), ("가짜 경로로 유도한다", "🛰️", "help"), ("공격 노드를 역해킹한다", "⚡", "risk"))),
+    Encounter("explore_hidden_chamber", "exploration", "rare", "숨겨진 도박방", "배팅 통로 뒤쪽에서 오래된 승자 전용 보관실을 발견했습니다.", (("입구만 조사한다", "🔍", "safe"), ("기록 장치를 복구한다", "📼", "help"), ("금고를 강제로 연다", "🔨", "risk"))),
+    Encounter("explore_wounded_runner", "exploration", "common", "부상당한 운반책", "도박 통로에서 물자 가방을 든 운반책이 도움을 요청합니다.", (("응급 처치만 한다", "🩹", "safe"), ("안전 구역까지 호위한다", "🤝", "help"), ("추격자의 물자를 노린다", "🎯", "risk"))),
+    Encounter("explore_double_trap", "exploration", "danger", "이중 와이어 덫", "첫 번째 함정 뒤에 더 정교한 압력판이 숨겨져 있습니다.", (("되돌아간다", "↩️", "safe"), ("표식하며 해체한다", "🧰", "help"), ("도약해 통과한다", "🏃", "risk"))),
+    Encounter("support_special_negotiation", "support", "rare", "긴급 특별 교섭", "보급 담당자가 추가 배급 심사를 열었습니다. 기본 지원금은 이미 확보된 상태입니다.", (("정식 활동 기록을 제출한다", "📋", "safe"), ("보급 중개인을 설득한다", "🤝", "help"), ("최대 배급을 강하게 요청한다", "📢", "risk")), True),
 )
 
 
-def _kst_date() -> str:
-    return datetime.now(KST).strftime("%Y-%m-%d")
+def _profile(user: Dict[str, Any]) -> Dict[str, Any]:
+    return stage1._ensure_profile(user)
 
 
-def _ensure_profile(user: Dict[str, Any]) -> Dict[str, Any]:
-    profile = user.setdefault("life_encounters_v632", {})
-    defaults = {"date":_kst_date(),"daily_count":0,"daily_reward":0,"total":0,"seen":[],"recent":[],"choices":{},"last_at":""}
-    for key,value in defaults.items():
-        profile.setdefault(key, value.copy() if isinstance(value,(dict,list)) else value)
-    if profile.get("date") != _kst_date():
-        profile["date"]=_kst_date(); profile["daily_count"]=0; profile["daily_reward"]=0
-    return profile
+def _resource(activity: str) -> str:
+    return {"fishing": "물고기", "mining": "광석", "coin": "고철", "exploration": "고철"}.get(activity, "고철")
 
 
-def _apply_outcome(user: Dict[str, Any], profile: Dict[str, Any], encounter: Encounter, mode: str) -> Tuple[str, int]:
-    chance={"safe":0.82,"help":0.72,"risk":0.54}.get(mode,0.65)
-    if encounter.rarity=="rare": chance-=0.05
-    elif encounter.rarity=="danger": chance-=0.08
-    success=random.random()<max(0.25,min(0.93,chance))
+def _apply(user: Dict[str, Any], profile: Dict[str, Any], encounter: Encounter, mode: str) -> Tuple[str, int]:
+    chance = {"safe": 0.84, "help": 0.72, "risk": 0.54}.get(mode, 0.65)
+    if encounter.rarity == "danger": chance -= 0.08
+    if encounter.rarity == "rare": chance -= 0.04
+    success = random.random() < max(0.25, min(0.93, chance))
+    if encounter.negotiation:
+        if not success:
+            return "교섭이 결렬됐습니다. 기본 지원금은 그대로 유지되며 추가 손실은 없습니다.", 0
+        room = max(0, stage1.ENCOUNTER_REWARD_CAP - int(profile.get("daily_reward", 0)))
+        if room < SPECIAL_NEGOTIATION_MIN:
+            return "오늘 인카운트 보상 상한에 도달해 추가 배급은 다음 날 다시 심사됩니다.", 0
+        reward = random.randint(SPECIAL_NEGOTIATION_MIN, min(SPECIAL_NEGOTIATION_MAX, room))
+        user["balance"] = int(user.get("balance", 0)) + reward
+        user.setdefault("stats", {}).setdefault("earned", 0)
+        user["stats"]["earned"] = int(user["stats"].get("earned", 0)) + reward
+        profile["daily_reward"] = int(profile.get("daily_reward", 0)) + reward
+        valuable = stage1._try_valuable_item(user, profile)
+        return f"특별 교섭에 성공했습니다. 💰 추가 식량 +{reward:,}{valuable}", reward
+
     if success:
-        room=max(0,ENCOUNTER_REWARD_CAP-int(profile.get("daily_reward",0)))
-        reward=min(room,random.randint(180,650 if mode=="safe" else 1000 if mode=="help" else 1700))
-        user["balance"]=int(user.get("balance",0))+reward
-        user.setdefault("stats",{}).setdefault("earned",0); user["stats"]["earned"]=int(user["stats"].get("earned",0))+reward
-        resource={"fishing":"물고기","mining":"광석","coin":"고철","exploration":"고철","support":None}[encounter.activity]
-        resource_text=""
-        if resource:
-            amount=random.randint(1,3 if mode=="safe" else 5 if mode=="help" else 8)
-            user.setdefault("resources",{}); user["resources"][resource]=int(user["resources"].get(resource,0))+amount
-            resource_text=f" · 📦 {resource} +{amount}"
-        rare=""
-        if encounter.rarity=="rare" and random.random()<0.24:
-            user.setdefault("materials",{}); user["materials"]["고대파편"]=int(user["materials"].get("고대파편",0))+1
-            rare=" · 🧩 고대파편 +1"
-        profile["daily_reward"]=int(profile.get("daily_reward",0))+reward
-        return f"선택이 성공했습니다. 💰 식량 +{reward:,}{resource_text}{rare}", reward
-    balance=max(0,int(user.get("balance",0)))
-    loss_max=280 if mode=="safe" else 550 if mode=="help" else 1000
-    loss=min(balance,random.randint(50,loss_max)); user["balance"]=balance-loss
-    hp_loss=random.randint(0,3 if mode=="safe" else 6 if mode=="help" else 10)
-    if hp_loss and isinstance(user.get("hp"),int): user["hp"]=max(1,int(user["hp"])-hp_loss)
-    hp_text=f" · ❤️ HP -{hp_loss}" if hp_loss else ""
-    return f"현장 변수를 피하지 못해 철수했습니다. 💸 식량 -{loss:,}{hp_text}", -loss
+        room = max(0, stage1.ENCOUNTER_REWARD_CAP - int(profile.get("daily_reward", 0)))
+        reward = min(room, random.randint(250, 750 if mode == "safe" else 1_250 if mode == "help" else 2_100))
+        resource = _resource(encounter.activity)
+        amount = random.randint(1, 3 if mode == "safe" else 5 if mode == "help" else 8)
+        user["balance"] = int(user.get("balance", 0)) + reward
+        user.setdefault("stats", {}).setdefault("earned", 0)
+        user["stats"]["earned"] = int(user["stats"].get("earned", 0)) + reward
+        user.setdefault("resources", {})
+        user["resources"][resource] = int(user["resources"].get(resource, 0)) + amount
+        profile["daily_reward"] = int(profile.get("daily_reward", 0)) + reward
+        valuable = stage1._try_valuable_item(user, profile)
+        return f"선택 성공! 💰 식량 +{reward:,} · 📦 {resource} +{amount}{valuable}", reward
+
+    balance = max(0, int(user.get("balance", 0)))
+    loss_max = 250 if mode == "safe" else 500 if mode == "help" else 900
+    loss = min(balance, random.randint(40, loss_max))
+    user["balance"] = balance - loss
+    return f"현장 변수를 피하지 못하고 철수했습니다. 💸 식량 -{loss:,}", -loss
 
 
 class EncounterView(discord.ui.View):
-    def __init__(self, *, owner_id: int, encounter: Encounter, user: Dict[str, Any], save_data: Callable[[], None]) -> None:
-        super().__init__(timeout=150); self.owner_id=int(owner_id); self.encounter=encounter; self.user=user; self.save_data=save_data; self.resolved=False; self.message:Optional[discord.Message]=None
-        for label,emoji,mode in encounter.options:
-            style=discord.ButtonStyle.danger if mode=="risk" else discord.ButtonStyle.success if mode=="help" else discord.ButtonStyle.primary
-            button=discord.ui.Button(label=label,emoji=emoji,style=style)
-            async def callback(interaction:discord.Interaction,*,selected_mode:str=mode,selected_label:str=label)->None:
-                await self._resolve(interaction,selected_mode,selected_label)
-            button.callback=callback; self.add_item(button)
+    def __init__(self, owner_id: int, encounter: Encounter, user: Dict[str, Any], save_data: Callable[[], None]):
+        super().__init__(timeout=150)
+        self.owner_id = int(owner_id)
+        self.encounter = encounter
+        self.user = user
+        self.save_data = save_data
+        self.resolved = False
+        self.message: Optional[discord.Message] = None
+        for label, emoji, mode in encounter.options:
+            style = discord.ButtonStyle.danger if mode == "risk" else discord.ButtonStyle.success if mode == "help" else discord.ButtonStyle.primary
+            button = discord.ui.Button(label=label, emoji=emoji, style=style)
+            async def callback(interaction: discord.Interaction, *, selected_mode: str = mode, selected_label: str = label) -> None:
+                await self.resolve(interaction, selected_mode, selected_label)
+            button.callback = callback
+            self.add_item(button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if int(interaction.user.id)!=self.owner_id:
-            await interaction.response.send_message("이 상황은 발견한 생존자만 선택할 수 있습니다.",ephemeral=True); return False
+        if int(interaction.user.id) != self.owner_id:
+            await interaction.response.send_message("이 인카운트는 발견한 생존자만 선택할 수 있습니다.", ephemeral=True)
+            return False
         return True
 
-    async def _resolve(self, interaction: discord.Interaction, mode: str, label: str) -> None:
+    async def resolve(self, interaction: discord.Interaction, mode: str, label: str) -> None:
         if self.resolved:
-            await interaction.response.send_message("이미 선택이 끝난 상황입니다.",ephemeral=True); return
-        self.resolved=True; profile=_ensure_profile(self.user); text,delta=_apply_outcome(self.user,profile,self.encounter,mode)
-        profile["choices"][self.encounter.encounter_id]=int(profile["choices"].get(self.encounter.encounter_id,0))+1; profile["last_at"]=datetime.now(timezone.utc).isoformat(); self.save_data()
-        for item in self.children: item.disabled=True
-        emoji,label_text=ACTIVITY_LABELS[self.encounter.activity]
-        embed=discord.Embed(title=f"{emoji} 상황 결과 · {self.encounter.title}",description=f"선택: **{label}**\n\n{text}",color=discord.Color.green() if delta>0 else discord.Color.red(),timestamp=datetime.now(timezone.utc))
-        embed.add_field(name="💳 현재 잔액",value=f"**{int(self.user.get('balance',0)):,} 식량**",inline=True); embed.add_field(name="🎬 활동",value=label_text,inline=True); embed.add_field(name="💡 TIP",value=random_tip(self.encounter.activity),inline=False)
-        suffix="encounter_success" if delta>0 else "encounter_failure"
-        relative=f"activities/{self.encounter.activity}/{suffix}"
-        # 6장 그룹은 반대 결과 폴더가 없을 수 있으므로 일반 결과로 폴백합니다.
-        if not _asset_files(relative): relative=f"activities/{self.encounter.activity}/{'success' if delta>0 else 'failure'}"
-        file=_set_image(embed,pick_asset(relative)); kwargs:Dict[str,Any]={"embed":embed,"view":self}
-        if file is not None: kwargs["attachments"]=[file]
-        try: await interaction.response.edit_message(**kwargs)
-        except (discord.HTTPException,TypeError):
-            if not interaction.response.is_done(): await interaction.response.edit_message(embed=embed,view=self)
-            else: await interaction.followup.send(embed=embed,ephemeral=True)
-        _ACTIVE_USERS.discard(self.owner_id)
+            await interaction.response.send_message("이미 처리된 인카운트입니다.", ephemeral=True)
+            return
+        self.resolved = True
+        profile = _profile(self.user)
+        text, delta = _apply(self.user, profile, self.encounter, mode)
+        profile.setdefault("choices", {})[self.encounter.encounter_id] = int(profile.setdefault("choices", {}).get(self.encounter.encounter_id, 0)) + 1
+        profile["last_at"] = datetime.now(timezone.utc).isoformat()
+        self.save_data()
+        for item in self.children: item.disabled = True
+        emoji, label_text = LABELS[self.encounter.activity]
+        color = discord.Color.green() if delta > 0 else discord.Color.orange() if delta == 0 else discord.Color.red()
+        embed = discord.Embed(title=f"{emoji} 인카운트 결과 · {self.encounter.title}", description=f"선택: **{label}**\n\n{text}", color=color, timestamp=datetime.now(timezone.utc))
+        embed.add_field(name="💳 현재 잔액", value=f"**{int(self.user.get('balance', 0)):,} 식량**", inline=True)
+        embed.add_field(name="📚 도감", value=f"`!인카운트도감` · {label_text}", inline=True)
+        embed.add_field(name="💡 TIP", value=random_tip(self.encounter.activity), inline=False)
+        relative = f"activities/{self.encounter.activity}/encounter_success" if delta > 0 else f"activities/{self.encounter.activity}/encounter_failure"
+        # coin/exploration have fewer encounter-result images; fall back to existing result folders.
+        if not _asset_files(relative):
+            relative = f"activities/{self.encounter.activity}/{'success' if delta > 0 else 'failure'}"
+        file = _set_image(embed, pick_asset(relative))
+        kwargs: Dict[str, Any] = {"embed": embed, "view": self}
+        if file is not None: kwargs["attachments"] = [file]
+        try:
+            await interaction.response.edit_message(**kwargs)
+        except (discord.HTTPException, TypeError):
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+        stage1._ACTIVE_USERS.discard(self.owner_id)
 
     async def on_timeout(self) -> None:
-        for item in self.children: item.disabled=True
-        _ACTIVE_USERS.discard(self.owner_id)
+        for item in self.children: item.disabled = True
+        stage1._ACTIVE_USERS.discard(self.owner_id)
         if self.message is not None:
             try: await self.message.edit(view=self)
-            except (discord.Forbidden,discord.HTTPException,AttributeError): pass
+            except (discord.Forbidden, discord.HTTPException, AttributeError): pass
+
+
+async def _send_encounter(ctx: commands.Context, activity: str, user: Dict[str, Any], save_data: Callable[[], None], encounter: Encounter) -> Optional[discord.Message]:
+    uid = int(ctx.author.id)
+    if uid in stage1._ACTIVE_USERS: return None
+    profile = _profile(user)
+    if int(profile.get("daily_count", 0)) >= stage1.ENCOUNTER_DAILY_LIMIT: return None
+    profile["daily_count"] = int(profile.get("daily_count", 0)) + 1
+    profile["total"] = int(profile.get("total", 0)) + 1
+    profile.setdefault("seen", [])
+    if encounter.encounter_id not in profile["seen"]: profile["seen"].append(encounter.encounter_id)
+    profile.setdefault("recent", []).append(encounter.encounter_id)
+    del profile["recent"][:-5]
+    save_data()
+    stage1._ACTIVE_USERS.add(uid)
+    emoji, label = LABELS[activity]
+    rarity = {"common": "일반", "rare": "희귀", "danger": "위험"}[encounter.rarity]
+    embed = discord.Embed(title=f"{emoji} 랜덤 인카운트 · {encounter.title}", description=f"**{label} 도중 예상치 못한 상황이 발생했습니다.**\n\n{encounter.description}", color=discord.Color.gold() if encounter.rarity == "rare" else discord.Color.red() if encounter.rarity == "danger" else discord.Color.blurple(), timestamp=datetime.now(timezone.utc))
+    embed.add_field(name="희귀도", value=f"**{rarity}**", inline=True)
+    embed.add_field(name="오늘 남은 조우", value=f"**{stage1.ENCOUNTER_DAILY_LIMIT - int(profile['daily_count'])}회**", inline=True)
+    embed.add_field(name="선택 제한", value="**150초**", inline=True)
+    if encounter.negotiation:
+        embed.add_field(name="자동 판정", value=f"성공 시 **추가 {SPECIAL_NEGOTIATION_MIN:,}~{SPECIAL_NEGOTIATION_MAX:,} 식량** · 실패해도 기본 지원 유지", inline=False)
+    embed.add_field(name="💡 TIP", value=random_tip(activity), inline=False)
+    view = EncounterView(uid, encounter, user, save_data)
+    try:
+        message = await send_visual(ctx, embed, f"activities/{activity}/encounter", view=view)
+    except Exception:
+        stage1._ACTIVE_USERS.discard(uid)
+        raise
+    view.message = message
+    return message
 
 
 async def maybe_encounter(ctx: commands.Context, activity: str, user: Dict[str, Any], save_data: Callable[[], None]) -> Optional[discord.Message]:
-    activity=ACTIVITY_ALIASES.get(activity,activity)
-    if activity not in ACTIVITY_LABELS or int(ctx.author.id) in _ACTIVE_USERS: return None
-    profile=_ensure_profile(user)
-    if int(profile.get("daily_count",0))>=ENCOUNTER_DAILY_LIMIT or random.random()>=ENCOUNTER_CHANCE: return None
-    candidates=[e for e in ENCOUNTERS if e.activity==activity]; recent=list(profile.get("recent",[]))[-2:]
-    candidates=[e for e in candidates if e.encounter_id not in recent] or candidates
-    weights=[5 if e.rarity=="common" else 3 if e.rarity=="danger" else 2 for e in candidates]
-    encounter=random.choices(candidates,weights=weights,k=1)[0]
-    profile["daily_count"]=int(profile.get("daily_count",0))+1; profile["total"]=int(profile.get("total",0))+1
-    if encounter.encounter_id not in profile["seen"]: profile["seen"].append(encounter.encounter_id)
-    profile["recent"].append(encounter.encounter_id); del profile["recent"][:-5]; save_data(); _ACTIVE_USERS.add(int(ctx.author.id))
-    emoji,label=ACTIVITY_LABELS[activity]; rarity={"common":"일반","rare":"희귀","danger":"위험"}[encounter.rarity]
-    embed=discord.Embed(title=f"{emoji} 랜덤 상황 · {encounter.title}",description=f"**{label} 도중 예상치 못한 상황이 발생했습니다.**\n\n{encounter.description}",color=discord.Color.gold() if encounter.rarity=="rare" else discord.Color.red() if encounter.rarity=="danger" else discord.Color.blurple(),timestamp=datetime.now(timezone.utc))
-    embed.add_field(name="희귀도",value=f"**{rarity}**",inline=True); embed.add_field(name="오늘 남은 조우",value=f"**{ENCOUNTER_DAILY_LIMIT-int(profile['daily_count'])}회**",inline=True); embed.add_field(name="선택 제한",value="**150초**",inline=True); embed.add_field(name="💡 TIP",value=random_tip(activity),inline=False)
-    view=EncounterView(owner_id=ctx.author.id,encounter=encounter,user=user,save_data=save_data)
-    try: message=await send_visual(ctx,embed,f"activities/{activity}/encounter",view=view)
-    except Exception:
-        _ACTIVE_USERS.discard(int(ctx.author.id)); raise
-    view.message=message; return message
+    if activity not in {"fishing", "mining", "coin", "exploration"}: return None
+    profile = _profile(user)
+    if int(profile.get("daily_count", 0)) >= stage1.ENCOUNTER_DAILY_LIMIT or random.random() >= ENCOUNTER_CHANCE: return None
+    candidates = [e for e in ENCOUNTERS if e.activity == activity and not e.negotiation]
+    recent = set(profile.get("recent", [])[-2:])
+    choices = [e for e in candidates if e.encounter_id not in recent] or candidates
+    weights = [5 if e.rarity == "common" else 3 if e.rarity == "danger" else 2 for e in choices]
+    return await _send_encounter(ctx, activity, user, save_data, random.choices(choices, weights=weights, k=1)[0])
 
 
-def register_v632_life_visuals(bot: commands.Bot, get_user: Callable[[int], Dict[str, Any]], check_registered: Callable[..., Any], save_data: Callable[[], None]) -> None:
-    setattr(bot,"v632_send_visual",send_visual)
-    setattr(bot,"v632_edit_visual",edit_visual)
-    setattr(bot,"v632_tip",random_tip)
-    setattr(bot,"v632_maybe_encounter",lambda ctx,activity,user: maybe_encounter(ctx,activity,user,save_data))
-    setattr(bot,"v632_visual_version",VERSION)
+async def maybe_special_negotiation(ctx: commands.Context, user: Dict[str, Any], save_data: Callable[[], None]) -> Optional[discord.Message]:
+    profile = _profile(user)
+    if int(profile.get("daily_count", 0)) >= stage1.ENCOUNTER_DAILY_LIMIT: return None
+    if stage1.ENCOUNTER_REWARD_CAP - int(profile.get("daily_reward", 0)) < SPECIAL_NEGOTIATION_MIN: return None
+    if random.random() >= SPECIAL_NEGOTIATION_CHANCE: return None
+    encounter = next(e for e in ENCOUNTERS if e.encounter_id == "support_special_negotiation")
+    return await _send_encounter(ctx, "support", user, save_data, encounter)
+
+
+def register_v632_life_visuals(bot: commands.Bot, get_user: Callable[[int], Dict[str, Any]], check_registered: Callable[..., Any], save_data: Callable[[], None], item_db: Mapping[str, Mapping[str, Mapping[str, Any]]]) -> None:
+    # Replace stage1 codex with a combined stage1+stage2 view; no new top-level command is added.
+    bot.remove_command("인카운트도감")
+
+    @bot.command(name="인카운트도감", aliases=["조우도감", "랜덤이벤트도감"])
+    async def encounter_codex(ctx: commands.Context) -> None:
+        if not await check_registered(ctx): return
+        user = get_user(ctx.author.id)
+        profile = _profile(user)
+        seen = set(profile.get("seen", []))
+        lines: List[str] = []
+        combined = list(stage1.ENCOUNTERS) + list(ENCOUNTERS)
+        label_map = dict(stage1.ACTIVITY_LABELS)
+        label_map.update(LABELS)
+        for activity, (emoji, label) in label_map.items():
+            entries = [e for e in combined if e.activity == activity]
+            found = [e.title for e in entries if e.encounter_id in seen]
+            lines.append(f"{emoji} **{label}** {len(found)}/{len(entries)}\n└ " + (", ".join(found) if found else "아직 발견하지 못함"))
+        embed = discord.Embed(title=f"📚 {ctx.author.display_name}의 인카운트 도감", description="\n\n".join(lines), color=discord.Color.dark_teal())
+        embed.add_field(name="누적 조우", value=f"**{int(profile.get('total', 0))}회**", inline=True)
+        embed.add_field(name="오늘 조우", value=f"**{int(profile.get('daily_count', 0))}/{stage1.ENCOUNTER_DAILY_LIMIT}회**", inline=True)
+        embed.add_field(name="오늘 조우 수익", value=f"**{int(profile.get('daily_reward', 0)):,}/{stage1.ENCOUNTER_REWARD_CAP:,} 식량**", inline=False)
+        embed.add_field(name="희귀 거래 장비", value=f"**{int(profile.get('daily_item_drops', 0))}/{stage1.VALUABLE_ITEM_DAILY_LIMIT}개**", inline=True)
+        await send_visual(ctx, embed, "activities/mining/encounter")
+
+    setattr(bot, "v632_send_visual", send_visual)
+    setattr(bot, "v632_edit_visual", edit_visual)
+    setattr(bot, "v632_tip", random_tip)
+    setattr(bot, "v632_maybe_encounter", lambda ctx, activity, user: maybe_encounter(ctx, activity, user, save_data))
+    setattr(bot, "v632_maybe_special_negotiation", lambda ctx, user: maybe_special_negotiation(ctx, user, save_data))
+    setattr(bot, "v632_visual_version", VERSION)

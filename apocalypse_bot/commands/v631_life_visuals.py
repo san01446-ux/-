@@ -14,8 +14,10 @@ VERSION = "6.3.1"
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v631"
 KST = ZoneInfo("Asia/Seoul")
 ENCOUNTER_CHANCE = 0.10
-ENCOUNTER_DAILY_LIMIT = 8
-ENCOUNTER_REWARD_CAP = 16_000
+ENCOUNTER_DAILY_LIMIT = 12
+ENCOUNTER_REWARD_CAP = 40_000
+VALUABLE_ITEM_CHANCE = 0.03
+VALUABLE_ITEM_DAILY_LIMIT = 1
 
 ACTIVITY_LABELS: Mapping[str, Tuple[str, str]] = {
     "work": ("🧰", "폐허 알바"),
@@ -55,6 +57,7 @@ TIP_POOLS: Mapping[str, Sequence[str]] = {
 
 _RECENT_ASSETS: Dict[str, List[str]] = {}
 _ACTIVE_USERS: set[int] = set()
+_ITEM_DB: Mapping[str, Mapping[str, Mapping[str, Any]]] = {}
 
 
 def random_tip(activity: str) -> str:
@@ -158,15 +161,46 @@ def _kst_date() -> str:
 
 def _ensure_profile(user: Dict[str, Any]) -> Dict[str, Any]:
     profile = user.setdefault("life_encounters_v631", {})
-    defaults = {"date": _kst_date(), "daily_count": 0, "daily_reward": 0, "total": 0, "seen": [], "recent": [], "choices": {}, "last_at": ""}
+    defaults = {"date": _kst_date(), "daily_count": 0, "daily_reward": 0, "daily_item_drops": 0, "total": 0, "seen": [], "recent": [], "choices": {}, "last_at": ""}
     for key, value in defaults.items():
         profile.setdefault(key, value.copy() if isinstance(value, (dict, list)) else value)
     if profile.get("date") != _kst_date():
         profile["date"] = _kst_date()
         profile["daily_count"] = 0
         profile["daily_reward"] = 0
+        profile["daily_item_drops"] = 0
     return profile
 
+
+
+def _try_valuable_item(user: Dict[str, Any], profile: Dict[str, Any]) -> str:
+    """Very rare, once-per-day tradeable equipment reward from existing ITEM_DB."""
+    if not _ITEM_DB or int(profile.get("daily_item_drops", 0)) >= VALUABLE_ITEM_DAILY_LIMIT:
+        return ""
+    if random.random() >= VALUABLE_ITEM_CHANCE:
+        return ""
+    inventory = set(user.get("inventory", []))
+    equipped = {x for x in user.get("equipment", {}).values() if x}
+    tier = random.choices(("영웅", "전설"), weights=(76, 24), k=1)[0]
+    candidates = [
+        (name, info) for name, info in _ITEM_DB.get(tier, {}).items()
+        if name not in inventory and name not in equipped
+    ]
+    if not candidates:
+        other = "전설" if tier == "영웅" else "영웅"
+        tier = other
+        candidates = [
+            (name, info) for name, info in _ITEM_DB.get(tier, {}).items()
+            if name not in inventory and name not in equipped
+        ]
+    if not candidates:
+        return ""
+    name, info = random.choice(candidates)
+    user.setdefault("inventory", []).append(name)
+    user.setdefault("enhancements", {}).setdefault(name, 0)
+    profile["daily_item_drops"] = int(profile.get("daily_item_drops", 0)) + 1
+    price = int(info.get("price", 0))
+    return f" · 🎁 [{tier}] **{name}** 획득 (기준가 {price:,} 식량 · `!판매 {name} 가격`)"
 
 def _resource_for(activity: str) -> str:
     return {"work": "고철", "digging": "고철", "gathering": "약초", "woodcutting": "나무"}[activity]
@@ -194,8 +228,9 @@ def _apply_outcome(user: Dict[str, Any], profile: Dict[str, Any], encounter: Enc
             user.setdefault("materials", {})
             user["materials"]["고대파편"] = int(user["materials"].get("고대파편", 0)) + 1
             rare = " · 🧩 고대파편 +1"
+        valuable = _try_valuable_item(user, profile)
         profile["daily_reward"] = int(profile.get("daily_reward", 0)) + reward
-        return f"선택이 성공했습니다. 💰 식량 +{reward:,} · 📦 {resource} +{amount}{rare}", reward
+        return f"선택이 성공했습니다. 💰 식량 +{reward:,} · 📦 {resource} +{amount}{rare}{valuable}", reward
     balance = max(0, int(user.get("balance", 0)))
     loss_max = 280 if mode == "safe" else 550 if mode == "help" else 1000
     loss = min(balance, random.randint(50, loss_max))
@@ -323,7 +358,9 @@ async def maybe_encounter(ctx: commands.Context, activity: str, user: Dict[str, 
     return message
 
 
-def register_v631_life_visuals(bot: commands.Bot, get_user: Callable[[int], Dict[str, Any]], check_registered: Callable[..., Any], save_data: Callable[[], None]) -> None:
+def register_v631_life_visuals(bot: commands.Bot, get_user: Callable[[int], Dict[str, Any]], check_registered: Callable[..., Any], save_data: Callable[[], None], item_db: Optional[Mapping[str, Mapping[str, Mapping[str, Any]]]] = None) -> None:
+    global _ITEM_DB
+    _ITEM_DB = item_db or {}
     @bot.command(name="인카운트도감", aliases=["조우도감", "랜덤이벤트도감"])
     async def encounter_codex(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
@@ -340,6 +377,7 @@ def register_v631_life_visuals(bot: commands.Bot, get_user: Callable[[int], Dict
         embed.add_field(name="누적 조우", value=f"**{int(profile.get('total', 0))}회**", inline=True)
         embed.add_field(name="오늘 조우", value=f"**{int(profile.get('daily_count', 0))}/{ENCOUNTER_DAILY_LIMIT}회**", inline=True)
         embed.add_field(name="오늘 조우 수익", value=f"**{int(profile.get('daily_reward', 0)):,}/{ENCOUNTER_REWARD_CAP:,} 식량**", inline=False)
+        embed.add_field(name="희귀 거래 장비", value=f"**{int(profile.get('daily_item_drops', 0))}/{VALUABLE_ITEM_DAILY_LIMIT}개**", inline=True)
         await send_visual(ctx, embed, "activities/digging/encounter")
 
     setattr(bot, "v631_send_visual", send_visual)

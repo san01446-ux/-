@@ -1736,115 +1736,104 @@ async def 출석보상(ctx):
         "7일·14일·30일째에는 시즌패스 포인트도 함께 쌓입니다."
     )
 
+SUPPORT_DAILY_LIMIT = 50
+SUPPORT_COOLDOWN_SECONDS = 60
+
+
+def _support_kst_date():
+    return (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d")
+
+
+def _ensure_support_profile(user):
+    profile = user.setdefault("support_v632", {})
+    if not isinstance(profile, dict):
+        profile = {}
+        user["support_v632"] = profile
+    profile.setdefault("date", _support_kst_date())
+    profile.setdefault("attempts", 0)
+    profile.setdefault("total_attempts", 0)
+    if profile.get("date") != _support_kst_date():
+        profile["date"] = _support_kst_date()
+        profile["attempts"] = 0
+    return profile
+
+
 @bot.hybrid_command()
-@commands.cooldown(1, 720, commands.BucketType.user)
+@commands.cooldown(1, SUPPORT_COOLDOWN_SECONDS, commands.BucketType.user)
 async def 돈주세요(ctx):
     if not await check_registered(ctx):
         return
-
     u = get_user(ctx.author.id)
+    profile = _ensure_support_profile(u)
+    if int(profile.get("attempts", 0)) >= SUPPORT_DAILY_LIMIT:
+        if ctx.command:
+            ctx.command.reset_cooldown(ctx)
+        await ctx.send(f"🛑 오늘의 긴급 지원 **{SUPPORT_DAILY_LIMIT}회**를 모두 사용했습니다. 자정(KST)에 초기화됩니다.")
+        return
+    profile["attempts"] = int(profile.get("attempts", 0)) + 1
+    profile["total_attempts"] = int(profile.get("total_attempts", 0)) + 1
+    remaining = SUPPORT_DAILY_LIMIT - int(profile["attempts"])
     before = int(u.get("balance", 0))
     visual_send = getattr(bot, "v632_send_visual", None)
     visual_edit = getattr(bot, "v632_edit_visual", None)
-    visual_tip = getattr(bot, "v632_tip", lambda _k: "봉인 번호와 호출 부호를 함께 확인하세요.")
+    visual_tip = getattr(bot, "v632_tip", lambda _k: "대부분은 일반 지원이며 가끔 특별 교섭이 발생합니다.")
 
-    stage1 = discord.Embed(
-        title="🎁 긴급 지원 교섭 시작",
-        description="보급 담당자와 암시장 중개인의 무전 신호를 분리하고 있습니다...",
-        color=discord.Color.gold(),
-    )
-    stage1.add_field(name="📡 1단계", value="신호 발신자 확인", inline=True)
-    stage1.add_field(name="🔐 2단계", value="배급 증서·봉인 번호 검사", inline=True)
-    stage1.add_field(name="💡 TIP", value=visual_tip("support"), inline=False)
-    if visual_send:
-        message = await visual_send(ctx, stage1, "activities/support/encounter")
-    else:
-        message = await ctx.send(embed=stage1)
-
-    await asyncio.sleep(0.65)
-    stage2 = discord.Embed(
-        title="🔍 지원 경로 검증 중",
-        description="임시 배급소·떠돌이 상인·익명 후원자의 거래 기록을 대조합니다...",
-        color=discord.Color.orange(),
-    )
-    stage2.add_field(name="🧾 거래 기록", value="호출 부호와 보급 서명 대조", inline=True)
-    stage2.add_field(name="⚖️ 위험 판정", value="빈 배급소·사기 거래 가능성 확인", inline=True)
-    stage2.add_field(name="💡 TIP", value=visual_tip("support"), inline=False)
-    if visual_edit:
-        await visual_edit(message, stage2, "activities/support/encounter")
-    else:
-        try:
-            await message.edit(embed=stage2, content=None)
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            pass
+    request_embed = discord.Embed(title="🎁 긴급 지원 요청 접수", description="보급망에서 사용 가능한 지원 기록을 확인하고 있습니다...", color=discord.Color.blurple())
+    request_embed.add_field(name="📅 오늘 남은 지원", value=f"**{remaining}회**", inline=True)
+    request_embed.add_field(name="⏳ 쿨타임", value="**1분**", inline=True)
+    request_embed.add_field(name="💡 TIP", value=visual_tip("support"), inline=False)
+    message = await visual_send(ctx, request_embed, "activities/support/encounter") if visual_send else await ctx.send(embed=request_embed)
     await asyncio.sleep(0.65)
 
     roll = random.random()
+    eligible_negotiation = False
     if roll < 0.12:
         loss = min(max(0, before), random.randint(120, 900))
         u["balance"] = before - loss
-        outcome = "failure"
-        title = "💸 위조 보급 증서에 속았습니다"
-        description = random.choice([
-            "중개인이 연막탄을 터뜨리고 운송 보증금을 챙겨 달아났습니다.",
-            "봉인 번호가 위조된 빈 상자였습니다. 검사 비용만 지불했습니다.",
-            "암시장 사기 거래였습니다. 담당자는 이미 다른 통로로 사라졌습니다.",
-        ])
-        delta = -loss
-        color = discord.Color.red()
+        outcome, delta = "failure", -loss
+        title = "💸 가짜 지원 상인에게 당했습니다"
+        description = random.choice(["상자가 비어 있었습니다. 운송 보증금만 사라졌습니다.", "상인이 연막탄을 터뜨리고 수수료를 챙겨 달아났습니다.", "위조된 보급 증서였습니다. 확인 비용을 지불했습니다."])
+        color, asset_kind, situation = discord.Color.red(), "failure", "사기 거래"
     elif roll < 0.22:
-        outcome = "empty"
-        title = "📭 버려진 배급소"
-        description = random.choice([
-            "배급소는 발견했지만 남은 물자는 모두 회수된 뒤였습니다.",
-            "지원 담당자의 기록만 남아 있고 보급 선반은 비어 있었습니다.",
-        ])
-        delta = 0
-        color = discord.Color.dark_grey()
+        outcome, delta = "empty", 0
+        title, description = "📭 버려진 배급소", "지원 기록은 남아 있었지만 배급소에는 쓸 만한 물자가 없었습니다."
+        color, asset_kind, situation = discord.Color.dark_grey(), "failure", "빈 배급소"
     else:
-        reward = random.randint(300, 8000)
+        reward = random.randint(300, 8_000)
         u["balance"] = before + reward
         u.setdefault("stats", {}).setdefault("earned", 0)
         u["stats"]["earned"] += reward
-        outcome = "jackpot" if reward >= 7000 else "success"
-        title = "💎 특별 지원 물자 승인" if outcome == "jackpot" else "🎁 긴급 지원금 수령"
-        description = random.choice([
-            "임시 보급 담당자가 활동 기록을 확인하고 식량 묶음을 전달했습니다.",
-            "암시장 상인이 정식 보증인의 서명과 함께 지원 물자를 건넸습니다.",
-            "익명의 후원자가 폐허 중계소에 생존 자금을 남겼습니다.",
-        ])
+        outcome = "jackpot" if reward >= 7_000 else "success"
         delta = reward
+        title = "💎 특별 지원 물자 확보" if outcome == "jackpot" else "🎁 긴급 지원금 수령"
+        description = random.choice(["보급 담당자가 활동 기록을 확인하고 식량 묶음을 전달했습니다.", "구호 신호를 확인한 상단이 식량 묶음을 전달했습니다.", "익명의 후원자가 폐허 중계소에 생존 자금을 남겼습니다."])
         color = discord.Color.gold() if outcome == "jackpot" else discord.Color.green()
+        asset_kind = "rare" if outcome == "jackpot" else "success"
+        situation = "특별 지원 물자" if outcome == "jackpot" else "일반 지원"
+        eligible_negotiation = True
 
     save_data()
     final = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now())
     final.set_author(name=ctx.author.display_name, icon_url=str(ctx.author.display_avatar.url))
     final.add_field(name="💰 이번 결과" if delta >= 0 else "💸 이번 손실", value=f"**{delta:+,} 식량**", inline=True)
     final.add_field(name="💳 현재 잔액", value=f"**{int(u['balance']):,} 식량**", inline=True)
-    final.add_field(name="⏳ 다음 교섭", value="**12분 후**", inline=True)
-    final.add_field(name="🎬 상황", value={"failure":"사기 거래","empty":"버려진 배급소","success":"보급 담당자 승인","jackpot":"특별 지원 물자"}[outcome], inline=False)
+    final.add_field(name="📅 오늘 남은 지원", value=f"**{remaining}회**", inline=True)
+    final.add_field(name="⏳ 다음 요청", value="**1분 후**", inline=True)
+    final.add_field(name="🎬 상황", value=situation, inline=True)
     final.add_field(name="💡 TIP", value=visual_tip("support"), inline=False)
-    final.set_footer(text="ABADDON 긴급 지원 교섭 · 실패 손실은 현재 잔액을 넘지 않습니다")
-    relative = "activities/support/failure" if outcome in {"failure", "empty"} else "activities/support/rare" if outcome == "jackpot" else "activities/support/success"
+    final.set_footer(text="ABADDON 긴급 지원 · 하루 50회 · 특별 교섭은 정상 지원 뒤 랜덤 등장")
     if visual_edit:
-        await visual_edit(message, final, relative)
+        await visual_edit(message, final, f"activities/support/{asset_kind}")
     else:
-        try:
-            await message.edit(embed=final, content=None)
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            await ctx.send(embed=final)
-
-    reactions = {
-        "failure": ("💸", "❌", "😱"),
-        "empty": ("📭", "🫥"),
-        "success": ("🎁", "✅", "💰"),
-        "jackpot": ("💎", "🎊", "🔥", "🏆"),
-    }
-    for emoji in reactions[outcome]:
-        try:
-            await message.add_reaction(emoji)
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            break
+        try: await message.edit(embed=final, content=None)
+        except (discord.Forbidden, discord.HTTPException, AttributeError): await ctx.send(embed=final)
+    for emoji in {"failure": ("💸", "❌"), "empty": ("📭", "🫥"), "success": ("🎁", "✅"), "jackpot": ("💎", "🎊")}[outcome]:
+        try: await message.add_reaction(emoji)
+        except (discord.Forbidden, discord.HTTPException, AttributeError): break
+    if eligible_negotiation:
+        maybe_special = getattr(bot, "v632_maybe_special_negotiation", None)
+        if maybe_special:
+            await maybe_special(ctx, u)
 
 
 @bot.hybrid_command()
@@ -3604,7 +3593,7 @@ async def 벌목(ctx):
 
 
 @bot.hybrid_command()
-@commands.cooldown(1, 180, commands.BucketType.user)
+@commands.cooldown(1, 120, commands.BucketType.user)
 async def 광산(ctx):
     await perform_life_activity(ctx, "광산")
 
@@ -4522,12 +4511,10 @@ register_v630_world_boss(
 # V6.3.1: 알바·땅파기·채집·벌목 시네마틱 이미지 풀 + 버튼형 인카운트 12종
 # 인카운트 도감은 prefix 전용이며 신규 최상위 슬래시를 추가하지 않습니다.
 from apocalypse_bot.commands.v631_life_visuals import register_v631_life_visuals
-register_v631_life_visuals(bot, get_user, check_registered, save_data)
+register_v631_life_visuals(bot, get_user, check_registered, save_data, ITEM_DB)
 
-# V6.3.2: 낚시·광산·코인·갈림길 탐색·긴급 지원 시네마틱 이미지 풀 + 상황형 인카운트
-# 기존 명령을 확장하며 신규 최상위 슬래시 명령은 추가하지 않습니다.
 from apocalypse_bot.commands.v632_life_visuals import register_v632_life_visuals
-register_v632_life_visuals(bot, get_user, check_registered, save_data)
+register_v632_life_visuals(bot, get_user, check_registered, save_data, ITEM_DB)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.

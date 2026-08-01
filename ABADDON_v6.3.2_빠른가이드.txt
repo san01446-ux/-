@@ -1,0 +1,6 @@
+1. ZIP을 풀고 apocalypse_bot 폴더의 내용을 기존 저장소 apocalypse_bot 폴더에 병합합니다.
+2. requirements.txt는 기존 파일과 비교 후 필요할 때만 교체합니다.
+3. .env와 Render 환경변수는 ZIP에 포함되지 않습니다.
+4. GitHub Desktop Changes에서 .env, token, ZIP, survival_data.json이 없는지 확인합니다.
+5. 커밋 예시: Update apocalypse bot to v6.3.2 life visuals stage 2
+6. Push origin 후 Render 배포 로그를 확인합니다.

@@ -41,7 +41,7 @@ WORK_DAILY_LIMIT = 40
 WORK_COOLDOWN_SECONDS = 8
 
 COIN_DAILY_LIMIT = 30
-COIN_COOLDOWN_SECONDS = 3 * 60
+COIN_COOLDOWN_SECONDS = 60
 COIN_FAILURE_COST_MIN = 60
 COIN_FAILURE_COST_MAX = 350
 # 전체 확률 기준: 실패 35.0% / 일반 48.0% / 희귀 12.0% / 영웅 3.8% / 전설 1.1% / 신화 0.1%
@@ -772,7 +772,7 @@ def register_v37_commands(
         if maybe_encounter:
             await maybe_encounter(ctx, "work", user)
 
-    @bot.hybrid_command(name="코인", aliases=["코인탐색"], description="3분마다 희귀도가 다른 암시장 자산 코인을 탐색합니다. 하루 30회")
+    @bot.hybrid_command(name="코인", aliases=["코인탐색"], description="1분마다 희귀도가 다른 암시장 자산 코인을 탐색합니다. 하루 30회")
     async def coin_draw(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
             return
@@ -840,7 +840,7 @@ def register_v37_commands(
             embed.add_field(name="💳 현재 잔액", value=f"**{int(user['balance']):,} 식량**", inline=True)
             embed.add_field(name="📅 오늘 남은 탐색", value=f"**{remaining}회**", inline=True)
             embed.add_field(name="🎲 실패 확률", value="**35.0%**", inline=True)
-            embed.add_field(name="⏳ 다음 탐색", value="**3분 후**", inline=True)
+            embed.add_field(name="⏳ 다음 탐색", value="**1분 후**", inline=True)
             embed.add_field(
                 name="📉 누적 실패 비용",
                 value=f"**{int(coin.get('total_failure_cost', 0)):,} 식량**",
@@ -858,7 +858,8 @@ def register_v37_commands(
             else: await _edit_embed(suspense, embed)
             await _safe_reactions(suspense, ("❌", "🕳️", "😭", "💸", "🪨"))
             maybe_encounter = getattr(bot, "v632_maybe_encounter", None)
-            if maybe_encounter: await maybe_encounter(ctx, "coin", user)
+            if maybe_encounter:
+                await maybe_encounter(ctx, "coin", user)
             return
 
         asset_key = draw_result
@@ -889,7 +890,7 @@ def register_v37_commands(
         embed.add_field(name="📈 현재 시세", value=f"**{current_price:,} 식량**", inline=True)
         embed.add_field(name="📦 보유 수량", value=f"**{new_quantity:,}개**", inline=True)
         embed.add_field(name="📅 오늘 남은 탐색", value=f"**{remaining}회**", inline=True)
-        embed.add_field(name="⏳ 다음 탐색", value="**3분 후**", inline=True)
+        embed.add_field(name="⏳ 다음 탐색", value="**1분 후**", inline=True)
         if remaining == 0:
             embed.add_field(
                 name="🧰 다음 수입 루트",
@@ -910,7 +911,8 @@ def register_v37_commands(
         }
         await _safe_reactions(suspense, reaction_map[asset_key])
         maybe_encounter = getattr(bot, "v632_maybe_encounter", None)
-        if maybe_encounter: await maybe_encounter(ctx, "coin", user)
+        if maybe_encounter:
+            await maybe_encounter(ctx, "coin", user)
 
     # ---------- 암시장 자동 알림 ----------
     def notification_settings() -> Dict[str, Any]:
