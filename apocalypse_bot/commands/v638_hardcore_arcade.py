@@ -238,6 +238,7 @@ class CrashView(OwnedView):
             description=final or "감염체 무리가 가까워집니다. 너무 늦기 전에 **탈출**하세요.",
             color=discord.Color.dark_red() if final else discord.Color.orange(),
         )
+        embed.add_field(name="🎮 10초 설명", value="배당이 계속 오르지만 갑자기 충돌하면 전액 손실입니다. 욕심내기 전에 **탈출** 버튼으로 회수하세요.", inline=False)
         embed.add_field(name="현재 배당", value=f"**{self.multiplier:.2f}×**", inline=True)
         embed.add_field(name="배팅", value=f"**{self.bet:,}칩**", inline=True)
         embed.add_field(name="지금 탈출", value=f"**{int(self.bet * self.multiplier):,}칩**", inline=True)
@@ -332,6 +333,7 @@ class FrequencyView(OwnedView):
             description=text or "게이지가 초록 목표 지점을 지날 때 **수신** 버튼을 누르세요.",
             color=discord.Color.blurple(),
         )
+        embed.add_field(name="🎮 10초 설명", value="움직이는 📡 표시가 초록 목표 칸을 지날 때 **수신** 버튼을 누르세요. 오차가 작을수록 보상이 큽니다.", inline=False)
         embed.add_field(name="주파수", value=self.gauge(), inline=False)
         embed.add_field(name="배팅", value=f"{self.bet:,}칩", inline=True)
         embed.add_field(name="오차", value=f"현재 {abs(self.position - self.target):.0f}%", inline=True)
@@ -453,6 +455,7 @@ class MinesView(OwnedView):
             description=text or "안전 칸을 열수록 배당이 상승합니다. **현재 회수액은 지금 도망쳤을 때 돌려받는 총액**입니다.",
             color=discord.Color.dark_gold() if not self.done else (discord.Color.green() if self.net_result >= 0 else discord.Color.dark_red()),
         )
+        embed.add_field(name="🎮 10초 설명", value="안전 칸을 열면 배당이 오릅니다. 지뢰를 밟기 전에 🏃 버튼으로 현금화하면 표시된 총액을 회수합니다.", inline=False)
         embed.add_field(name="🧨 지뢰 / 안전 통과", value=f"{self.mine_count}개 / {len(self.opened)}칸", inline=True)
         embed.add_field(name="💳 시작 전 보유 칩", value=f"{self.starting_balance:,}칩", inline=True)
         embed.add_field(name="💰 현재 보유 칩", value=f"{current_balance:,}칩", inline=True)
@@ -940,7 +943,7 @@ def register_v638_hardcore_arcade(
             await ctx.send(f"문을 해체할 식량이 부족합니다. 필요 **{entry:,}식량**")
             return
         save_data()
-        embed = discord.Embed(title="🚪 폐허의 3지선다", description="한 문에는 잭팟, 한 문에는 보급품, 한 문에는 변이체 매복이 있습니다.", color=discord.Color.dark_purple())
+        embed = discord.Embed(title="🚪 폐허의 3지선다", description="**🎮 10초 설명:** 세 문 중 하나를 고릅니다. 잭팟·보급품·매복이 무작위로 숨겨져 있으며 선택 후 되돌릴 수 없습니다.", color=discord.Color.dark_purple())
         embed.set_footer(text=f"입장 비용 {entry:,}식량 · 선택 후 되돌릴 수 없습니다.")
         await ctx.send(embed=embed, view=DoorView(ctx.author.id, user, save_data, item_db, world_data, _guild_id(ctx)))
 

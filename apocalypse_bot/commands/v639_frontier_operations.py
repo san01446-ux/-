@@ -55,12 +55,14 @@ FRONTIER_GUIDE = {
     "id": "frontier_ops",
     "emoji": "🚧",
     "title": "특수 작전 / 서버 이벤트",
-    "hint": "다크존 탈출, 밀수품 운반, 보급선, 우편·알림",
+    "hint": "다크존 탈출, 밀수품 운반, 보급선, 갈갈이, 우편·알림",
     "commands": [
         "!다크존 / !다크존진입 / !다크존탐색 / !다크존탈출 / !다크존상태",
         "!다크존공격 @유저 — 탈출 대기 중인 생존자의 작전 가방만 공격",
         "!밀수품운반 / !밀수품상태 / !밀수품습격 @유저 / !밀수품납품",
         "!보급선 / !보급선수색 — 1일 1~2회·10분 서버 피버",
+        "!고철갈갈이 나무/광석/고철 수량 — 잉여 자원을 칩·희귀 보상으로 분쇄",
+        "!장비갈갈이 장비명 — 비장착 일반·고급·희귀 장비 안전 분쇄",
         "!우편함 [페이지] / !받기 번호 또는 all",
         "!우편발송 @유저 식량/칩/나무/광석/고철 수량 제목 — 관리자",
         "!알림설정 / !알림설정 날씨·보급선·밀수품 켜기/끄기",
@@ -328,12 +330,6 @@ def update_command_guide(guide: List[Dict[str, Any]]) -> None:
     insert_at = next((i + 1 for i, cat in enumerate(guide) if cat.get("id") == "battle"), len(guide))
     guide.insert(insert_at, copy.deepcopy(FRONTIER_GUIDE))
 
-    shop = next((cat for cat in guide if cat.get("id") == "shop"), None)
-    if shop:
-        shop.setdefault("commands", []).extend([
-            "!고철갈갈이 나무/광석/고철 수량",
-            "!장비갈갈이 장비명 — 비장착 일반·고급·희귀 장비",
-        ])
     server = next((cat for cat in guide if cat.get("id") == "server"), None)
     if server:
         server.setdefault("commands", []).extend([
