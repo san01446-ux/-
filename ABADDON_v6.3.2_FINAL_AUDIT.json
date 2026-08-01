@@ -1,0 +1,159 @@
+{
+  "version": "6.3.2-final",
+  "status": "PASS",
+  "checks": {
+    "support_60s": true,
+    "support_daily_50": true,
+    "support_base_rates": true,
+    "special_negotiation_button": true,
+    "special_negotiation_5000_20000": true,
+    "special_negotiation_random_10pct": true,
+    "fishing_120": true,
+    "mining_120": true,
+    "coin_60": true,
+    "coin_daily_30": true,
+    "exploration_gambling_44pct": true,
+    "encounter_daily_12": true,
+    "encounter_reward_cap_40000": true,
+    "valuable_item_3pct_daily1": true,
+    "valuable_item_existing_db": true,
+    "treasure_file_unchanged": true,
+    "casino_dropdown_unchanged": true,
+    "forge_unchanged": true,
+    "appraisers_present": true,
+    "treasure_chance_8pct": true,
+    "no_unexpected_code_changes": true,
+    "no_deleted_files": true,
+    "compileall_ok": true,
+    "core_command_names_preserved": true,
+    "critical_commands_present": true,
+    "images_48_unique": true,
+    "images_1280x720": true,
+    "forbidden_absent": true
+  },
+  "mechanics": {
+    "랜덤 인카운트": {
+      "chance": "10% per eligible command completion",
+      "daily_limit": 12,
+      "food_reward_cap": 40000,
+      "button_timeout_seconds": 150
+    },
+    "희귀 거래 장비": {
+      "chance_on_success": "3%",
+      "daily_limit": 1,
+      "tiers": "영웅 76% / 전설 24%",
+      "source": "existing ITEM_DB",
+      "sell_command": "!판매 아이템명 가격"
+    },
+    "특별 교섭": {
+      "appearance": "normal support result then 10% chance",
+      "button_required": true,
+      "success_reward": "5000-20000 additional food",
+      "failure": "base support retained, no additional loss"
+    },
+    "돈주세요": {
+      "cooldown_seconds": 60,
+      "daily_limit": 50,
+      "base_rates": "failure 12% / empty 10% / normal 78%",
+      "normal_reward": "300-8000"
+    },
+    "낚시": {
+      "cooldown_seconds": 120,
+      "shared_with_mining": false
+    },
+    "광산": {
+      "cooldown_seconds": 120,
+      "shared_with_fishing": false
+    },
+    "코인탐색": {
+      "cooldown_seconds": 60,
+      "daily_limit": 30
+    },
+    "탐색": {
+      "category": "gambling",
+      "cooldown_seconds": 60,
+      "success_rate": 0.44,
+      "dropdown_preserved": true
+    },
+    "보물감정": {
+      "changed": false,
+      "treasure_chance": 0.08,
+      "appraisers": [
+        "마르코",
+        "세라",
+        "라울",
+        "이리스"
+      ]
+    }
+  },
+  "changed_files": [
+    "ABADDON_v6.3.2_FINAL_PATCH_NOTES.txt",
+    "apocalypse_bot/__init__.py",
+    "apocalypse_bot/core/bot.py",
+    "apocalypse_bot/commands/v631_life_visuals.py",
+    "apocalypse_bot/commands/v600_game_center.py",
+    "apocalypse_bot/commands/v632_life_visuals.py",
+    "apocalypse_bot/commands/v37_gambling_experience.py",
+    "apocalypse_bot/commands/v21_reborn.py",
+    "apocalypse_bot/assets/v632/ASSET_SHA256.txt",
+    "apocalypse_bot/assets/v632/ASSET_MANIFEST_v632.json",
+    "apocalypse_bot/assets/v632/activities/coin/failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/coin/encounter/01.jpg",
+    "apocalypse_bot/assets/v632/activities/coin/success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/coin/success/02.jpg",
+    "apocalypse_bot/assets/v632/activities/coin/rare/01.jpg",
+    "apocalypse_bot/assets/v632/activities/coin/encounter_success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/support/failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/support/failure/02.jpg",
+    "apocalypse_bot/assets/v632/activities/support/encounter/01.jpg",
+    "apocalypse_bot/assets/v632/activities/support/encounter/02.jpg",
+    "apocalypse_bot/assets/v632/activities/support/success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/support/success/02.jpg",
+    "apocalypse_bot/assets/v632/activities/support/success/03.jpg",
+    "apocalypse_bot/assets/v632/activities/support/encounter_failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/support/rare/01.jpg",
+    "apocalypse_bot/assets/v632/activities/support/rare/02.jpg",
+    "apocalypse_bot/assets/v632/activities/support/encounter_success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/support/encounter_success/02.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/failure/02.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/encounter/01.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/encounter/02.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/success/02.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/success/03.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/encounter_failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/rare/01.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/rare/02.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/encounter_success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/mining/encounter_success/02.jpg",
+    "apocalypse_bot/assets/v632/activities/exploration/failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/exploration/encounter/01.jpg",
+    "apocalypse_bot/assets/v632/activities/exploration/success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/exploration/success/02.jpg",
+    "apocalypse_bot/assets/v632/activities/exploration/encounter_failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/exploration/rare/01.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/failure/02.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/encounter/01.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/encounter/02.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/success/02.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/success/03.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/encounter_failure/01.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/rare/01.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/rare/02.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/encounter_success/01.jpg",
+    "apocalypse_bot/assets/v632/activities/fishing/encounter_success/02.jpg"
+  ],
+  "unexpected_code_changes": [],
+  "deleted_files": [],
+  "image_count": 48,
+  "unique_image_count": 48,
+  "image_sizes": {
+    "1280x720": 48
+  },
+  "forbidden_files": [],
+  "compile_stdout": "",
+  "compile_stderr": ""
+}

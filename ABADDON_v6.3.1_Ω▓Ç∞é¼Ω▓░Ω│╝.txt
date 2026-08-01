@@ -1,0 +1,45 @@
+ABADDON v6.3.1 검사 결과
+
+전체 결과: 통과 (32/32)
+
+[PASS] Python AST — 41 files
+[PASS] compileall — 41 files
+[PASS] version 6.3.1 — 
+[PASS] survival_data excluded — []
+[PASS] requirements unchanged — 0d385406613293607c67e80dcd1afa3ecc26a5321840336f32d953b3c253658e
+[PASS] file change scope — changed=['__init__.py', 'commands/v21_reborn.py', 'commands/v37_gambling_experience.py', 'commands/v600_game_center.py', 'commands/v610_digging_treasure.py', 'core/bot.py']; removed=[]; unexpected=[]; added=50
+[PASS] command and alias duplicates — {}
+[PASS] hybrid canonical set unchanged — base=92 new=92 added=[] removed=[]
+[PASS] new encounter command prefix only — 
+[PASS] slash setup unchanged — baseline top-level estimate 39/100; group max 25
+[PASS] game center category count — {'survival': 22, 'equipment': 21, 'combat': 19, 'worldboss': 9, 'expedition': 21, 'life': 24, 'digging': 4, 'casino': 25, 'story': 21, 'social': 22, 'pets': 14}
+[PASS] game center select limit — max=25
+[PASS] game center action keys unique — actions=202 duplicates=[]
+[PASS] encounter codex game-center link — 
+[PASS] encounter count — Counter({'work': 3, 'digging': 3, 'gathering': 3, 'woodcutting': 3})
+[PASS] encounter safeguards source — 
+[PASS] original work failure wording — 
+[PASS] integration hooks — 
+[PASS] encounter outcome pure simulation — success_delta=180; failure_delta=-20
+[PASS] life image count — files=48 manifest=48
+[PASS] life image distribution — Counter({'work': 12, 'digging': 12, 'gathering': 12, 'woodcutting': 12})
+[PASS] life image state pools — {"work": {"success": 3, "rare": 2, "failure": 2, "encounter": 2, "encounter_success": 2, "encounter_failure": 1}, "digging": {"success": 3, "rare": 2, "failure": 2, "encounter": 2, "encounter_success": 2, "encounter_failure": 1}, "gathering": {"success": 3, "rare": 2, "failure": 2, "encounter": 2, "encounter_success": 2, "encounter_failure": 1}, "woodcutting": {"success": 3, "rare": 2, "failure": 2, "encounter": 2, "encounter_success": 2, "encounter_failure": 1}}
+[PASS] image decode and resolution — []
+[PASS] image SHA uniqueness — unique=48
+[PASS] perceptual duplicate check — []
+[PASS] website HTML parse — index.html,commands.html,updates.html
+[PASS] website JavaScript syntax — 
+[PASS] website asset references — refs=10 missing=[]
+[PASS] website life preview assets — digging.jpg,gathering.jpg,woodcutting.jpg,work.jpg
+[PASS] website v6.3.1 latest — 
+[PASS] website invite/live feed preserved — 
+[PASS] prototype visual folders excluded — 
+
+[실제 런타임 미검증]
+- 실제 Discord 로그인
+- Discord 이미지 첨부·메시지 편집
+- 버튼 클릭과 150초 타임아웃
+- Render Background Worker 배포
+
+위 항목은 제작 환경에 Discord 토큰과 discord.py 런타임이 없어 직접 실행하지 못했습니다.
+배포 후 테스트 채널에서 !알바, !땅파기, !채집, !벌목, !인카운트도감 순서로 확인하세요.
