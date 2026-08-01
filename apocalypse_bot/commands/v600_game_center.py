@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "6.3.7"
+VERSION = "6.4.0"
 MENU_TIMEOUT = 300
 STORY3_START_NODE = "eclipse_signal"
 

@@ -1822,7 +1822,7 @@ def _make_help_embed(category=None):
             ),
             color=color,
         )
-        for cat in COMMAND_GUIDE_CATEGORIES[:12]:
+        for cat in COMMAND_GUIDE_CATEGORIES[:25]:
             embed.add_field(name=f"{cat['emoji']} {cat['title']}", value=cat['hint'], inline=True)
         embed.set_footer(text="보물감정소·감정사처럼 헷갈리는 명령은 !명령어 감 으로 찾으면 됩니다.")
         return embed
@@ -4009,7 +4009,17 @@ async def perform_life_activity(ctx, activity):
     mastery_exp = int(u["life_mastery"].get(activity, 0))
     mastery_level = 1 + mastery_exp // 20
     mastery_bonus = min(0.30, (mastery_level - 1) * 0.02)
-    amount = max(1, int(random.randint(minimum, maximum) * exploration_modifier(u) * (1.0 + mastery_bonus) * weather_reward * fortune_life))
+    supply_mult = 1.0
+    supply_rare = 0.0
+    try:
+        from apocalypse_bot.commands.v639_frontier_operations import active_supply_drop
+        supply_info = active_supply_drop(world_data, guild_id)
+        supply_mult = float(supply_info.get("life_mult", 1.0))
+        supply_rare = float(supply_info.get("rare_bonus", 0.0))
+    except Exception:
+        supply_mult = 1.0
+        supply_rare = 0.0
+    amount = max(1, int(random.randint(minimum, maximum) * exploration_modifier(u) * (1.0 + mastery_bonus) * weather_reward * fortune_life * supply_mult))
     u["life_mastery"][activity] = mastery_exp + 1
 
     rare_text = ""
@@ -4021,7 +4031,7 @@ async def perform_life_activity(ctx, activity):
         u["resources"][name] = u["resources"].get(name, 0) + amount
         result = f"📦 **{name} {amount}개** 획득"
 
-    if random.random() < min(0.20, 0.05 + weather_rare):
+    if random.random() < min(0.24, 0.05 + weather_rare + supply_rare):
         u["materials"]["고대파편"] = u["materials"].get("고대파편", 0) + 1
         rare_text = "\n✨ 희귀 발견: **고대파편 1개**"
 
@@ -4042,7 +4052,8 @@ async def perform_life_activity(ctx, activity):
     result_embed.add_field(name="⚡ 스태미나", value=f"**-{stamina_cost}** · {u['stamina']}/{get_max_stamina(u)}", inline=True)
     result_embed.add_field(name="🎬 현장 반응", value=("✨ 평범한 수확물과 다른 희귀 신호가 확인됐습니다." if rare_text else "✅ 확보한 자원을 분류해 기지 보급 목록에 등록했습니다."), inline=False)
     fortune_text = " · 오늘의 운세 미확인" if not fortune_mods.get("active") else f" · 운세 ×{fortune_life:.2f}"
-    result_embed.add_field(name="🌦️ 종말 날씨", value=f"{weather_state['emoji']} **{weather_state['name']}** · 날씨 ×{weather_reward:.2f}{fortune_text}", inline=False)
+    supply_text = f" · 🎁 보급선 ×{supply_mult:.1f}" if supply_mult > 1.0 else ""
+    result_embed.add_field(name="🌦️ 종말 날씨", value=f"{weather_state['emoji']} **{weather_state['name']}** · 날씨 ×{weather_reward:.2f}{fortune_text}{supply_text}", inline=False)
     tip_getter = getattr(bot, "v632_tip", None) if stage2_activity else getattr(bot, "v631_tip", None)
     result_embed.add_field(name="💡 TIP", value=(tip_getter(visual_key) if tip_getter else "생활 숙련도가 오르면 획득량이 증가합니다."), inline=False)
     visual_send = getattr(bot, "v632_send_visual", None) if stage2_activity else getattr(bot, "v631_send_visual", None)
@@ -5192,6 +5203,19 @@ from apocalypse_bot.commands.v638_hardcore_arcade import register_v638_hardcore_
 register_v638_hardcore_arcade(
     bot, get_user, check_registered, save_data, world_data,
     ITEM_DB, calculate_user_power, get_pet_power, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V6.3.9: 다크존·밀수품·보급선 피버·재활용·우편·알림·명령어 분류
+from apocalypse_bot.commands.v639_frontier_operations import register_v639_frontier_operations
+register_v639_frontier_operations(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    ITEM_DB, calculate_user_power, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V6.4.0: 지뢰 정산 가독성·실시간 선물 차트·반응/기억 게임·참가형 생존자 레이스·최종 명령어 분류
+from apocalypse_bot.commands.v640_interactive_arcade import register_v640_interactive_arcade
+register_v640_interactive_arcade(
+    bot, get_user, check_registered, save_data, world_data, COMMAND_GUIDE_CATEGORIES,
 )
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록

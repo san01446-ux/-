@@ -19,6 +19,7 @@ from apocalypse_bot.commands.v37_gambling_experience import (
 )
 from apocalypse_bot.commands.v635_visuals import apply_casino_visual
 from apocalypse_bot.commands.v636_world_combat import pet_casino_adjustment, weather_slot_weights
+from apocalypse_bot.commands.v639_frontier_operations import apply_supply_slot_weights
 from apocalypse_bot.commands.v40_black_casino import (
     add_casino_chips,
     apply_loss_shield,
@@ -1007,6 +1008,7 @@ def register_v39_commands(
         symbols = [item[0] for item in SLOT_SYMBOLS]
         weights = slot_symbol_weights(user, SLOT_SYMBOLS)
         weights, _weather = weather_slot_weights(guild_id, symbols, weights)
+        weights = apply_supply_slot_weights(world_data, guild_id, symbols, weights)
         return random.choices(symbols, weights=weights, k=1)[0]
 
     async def run_slots(ctx: commands.Context, bet: int) -> None:

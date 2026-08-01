@@ -414,7 +414,7 @@ class MineCellButton(discord.ui.Button):
 class MinesView(OwnedView):
     CELL_COUNT = 20
 
-    def __init__(self, owner_id: int, user: Dict[str, Any], bet: int, mine_count: int, save_data: Callable[[], None], world_data: Dict[str, Any], guild_id: int):
+    def __init__(self, owner_id: int, user: Dict[str, Any], bet: int, mine_count: int, save_data: Callable[[], None], world_data: Dict[str, Any], guild_id: int, starting_balance: int):
         super().__init__(owner_id, timeout=120)
         self.user = user
         self.bet = int(bet)
@@ -422,6 +422,10 @@ class MinesView(OwnedView):
         self.save_data = save_data
         self.world_data = world_data
         self.guild_id = guild_id
+        self.starting_balance = int(starting_balance)
+        self.result_status = "진행 중"
+        self.gross_result = 0
+        self.net_result = 0
         self.mines = set(random.sample(range(self.CELL_COUNT), self.mine_count))
         self.opened: set[int] = set()
         for index in range(self.CELL_COUNT):
@@ -441,14 +445,30 @@ class MinesView(OwnedView):
 
     def embed(self, text: Optional[str] = None) -> discord.Embed:
         mult = self.multiplier()
+        projected = int(self.bet * mult)
+        projected_net = projected - self.bet
+        current_balance = casino_chips(self.user)
         embed = discord.Embed(
             title="💣 무너진 폐허 횡단",
-            description=text or "안전하다고 생각되는 칸을 선택하세요. 언제든 **현재 배당금 챙기고 도망치기**가 가능합니다.",
-            color=discord.Color.dark_gold(),
+            description=text or "안전 칸을 열수록 배당이 상승합니다. **현재 회수액은 지금 도망쳤을 때 돌려받는 총액**입니다.",
+            color=discord.Color.dark_gold() if not self.done else (discord.Color.green() if self.net_result >= 0 else discord.Color.dark_red()),
         )
-        embed.add_field(name="지뢰", value=f"{self.mine_count}개 / 20칸", inline=True)
-        embed.add_field(name="안전 칸", value=f"{len(self.opened)}개", inline=True)
-        embed.add_field(name="현재 회수액", value=f"{int(self.bet * mult):,}칩 ({mult:.2f}×)", inline=True)
+        embed.add_field(name="🧨 지뢰 / 안전 통과", value=f"{self.mine_count}개 / {len(self.opened)}칸", inline=True)
+        embed.add_field(name="💳 시작 전 보유 칩", value=f"{self.starting_balance:,}칩", inline=True)
+        embed.add_field(name="💰 현재 보유 칩", value=f"{current_balance:,}칩", inline=True)
+        if self.done:
+            earned = max(0, self.net_result)
+            lost = max(0, -self.net_result)
+            embed.add_field(name="📌 최종 결과", value=self.result_status, inline=True)
+            embed.add_field(name="🟢 얻은 돈", value=f"+{earned:,}칩", inline=True)
+            embed.add_field(name="🔴 잃은 돈", value=f"-{lost:,}칩", inline=True)
+            embed.add_field(name="📦 최종 회수 총액", value=f"{self.gross_result:,}칩", inline=True)
+            embed.add_field(name="🏦 최종 보유 칩", value=f"{current_balance:,}칩", inline=True)
+        else:
+            embed.add_field(name="🏃 지금 현금화 총액", value=f"{projected:,}칩 ({mult:.2f}×)", inline=True)
+            embed.add_field(name="📈 지금 확정 순손익", value=f"{projected_net:+,}칩", inline=True)
+            embed.add_field(name="💥 지뢰 폭발 시", value=f"배팅액 전액 손실 **-{self.bet:,}칩**", inline=True)
+        embed.set_footer(text="총액 = 배팅 원금 포함 · 순손익 = 실제로 번 돈 또는 잃은 돈")
         return embed
 
     async def open_cell(self, interaction: discord.Interaction, button: MineCellButton) -> None:
@@ -460,27 +480,33 @@ class MinesView(OwnedView):
                 button.label = "☠"
                 button.style = discord.ButtonStyle.danger
                 self.done = True
+                self.result_status = "💥 지뢰 폭발 · 배팅액 전액 손실"
+                self.gross_result = 0
+                self.net_result = -self.bet
                 for child in self.children:
                     child.disabled = True
                     if isinstance(child, MineCellButton) and child.index in self.mines:
                         child.label = "💣"
                 _add_grave_loot(self.world_data, self.guild_id, chips=max(100, self.bet // 10), source="폐허 지뢰 폭발")
                 self.save_data()
-                await interaction.response.edit_message(embed=self.embed("💥 감염자 지뢰를 밟았습니다. 배팅 칩이 전부 사라졌습니다."), view=self)
+                await interaction.response.edit_message(embed=self.embed("💥 **지뢰가 폭발했습니다.** 현재 회수액은 0칩이며, 배팅액을 전부 잃었습니다."), view=self)
                 return
             self.opened.add(button.index)
-            button.label = "◆"
+            button.label = "✨"
             button.style = discord.ButtonStyle.success
             button.disabled = True
             if len(self.opened) >= self.CELL_COUNT - self.mine_count:
                 self.done = True
                 payout = int(self.bet * self.multiplier())
                 add_casino_chips(self.user, payout)
+                self.gross_result = payout
+                self.net_result = payout - self.bet
+                self.result_status = "🏆 모든 안전 칸 통과"
                 self.disable_all()
                 self.save_data()
-                await interaction.response.edit_message(embed=self.embed(f"🏆 모든 안전 칸을 통과했습니다. **{payout:,}칩** 회수!"), view=self)
+                await interaction.response.edit_message(embed=self.embed(f"🏆 모든 안전 칸을 통과했습니다. 총 **{payout:,}칩**, 순이익 **{self.net_result:+,}칩**!"), view=self)
                 return
-            await interaction.response.edit_message(embed=self.embed(), view=self)
+            await interaction.response.edit_message(embed=self.embed("✅ 안전 칸입니다. 현금화 총액과 순이익을 따로 확인하세요."), view=self)
 
     @discord.ui.button(label="배당금 챙기고 도망치기", emoji="🏃", style=discord.ButtonStyle.primary, row=4)
     async def cashout(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -494,9 +520,12 @@ class MinesView(OwnedView):
             self.done = True
             payout = int(self.bet * self.multiplier())
             add_casino_chips(self.user, payout)
+            self.gross_result = payout
+            self.net_result = payout - self.bet
+            self.result_status = "🏃 현금화 성공"
             self.disable_all()
             self.save_data()
-            await interaction.response.edit_message(embed=self.embed(f"🏃 폐허에서 빠져나왔습니다. **{payout:,}칩** 회수!"), view=self)
+            await interaction.response.edit_message(embed=self.embed(f"🏃 탈출 성공! 총 **{payout:,}칩** 회수 · 실제 순손익 **{self.net_result:+,}칩**"), view=self)
 
 
 class DoorView(OwnedView):
@@ -818,11 +847,12 @@ def register_v638_hardcore_arcade(
         if error:
             await ctx.send(error)
             return
+        starting_balance = casino_chips(user)
         if not _take_chips(user, 배팅액):
             await ctx.send(f"칩이 부족합니다. 보유 **{casino_chips(user):,}칩**")
             return
         save_data()
-        view = MinesView(ctx.author.id, user, 배팅액, 지뢰수, save_data, world_data, _guild_id(ctx))
+        view = MinesView(ctx.author.id, user, 배팅액, 지뢰수, save_data, world_data, _guild_id(ctx), starting_balance)
         await ctx.send(embed=view.embed(), view=view)
 
     async def resolve_race(guild_id: int, channel: discord.abc.Messageable, delay: int = 25) -> None:
