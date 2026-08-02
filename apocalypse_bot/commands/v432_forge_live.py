@@ -1200,7 +1200,7 @@ def register_v432_forge_live(
         public_event(
             event_type="system",
             title="ABADDON ONLINE",
-            message="공식 봇이 종말 네트워크에 연결되었습니다.",
+            message="ABADDON이 종말 네트워크에 연결되었습니다.",
             actor="ABADDON",
             metadata={"version": f"v{V432_VERSION}"},
         )

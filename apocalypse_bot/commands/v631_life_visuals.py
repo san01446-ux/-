@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands
 
-VERSION = "6.3.1"
+VERSION = "6.5.3"
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v631"
 KST = ZoneInfo("Asia/Seoul")
 ENCOUNTER_CHANCE = 0.10
@@ -85,6 +85,11 @@ FIXED_ASSET_MAP: Mapping[str, str] = {
 _ACTIVE_USERS: set[int] = set()
 _ITEM_DB: Mapping[str, Mapping[str, Mapping[str, Any]]] = {}
 
+CATEGORY_GALLERY_POOLS: Mapping[str, str] = {
+    "activities/gathering/": "activities/gathering/gallery",
+}
+
+
 
 def random_tip(activity: str) -> str:
     pool = TIP_POOLS.get(activity) or ("현장 상황에 따라 안전한 선택이 더 좋은 결과가 될 수 있습니다.",)
@@ -99,15 +104,22 @@ def _asset_files(relative: str) -> List[Path]:
 
 
 def pick_asset(relative: str) -> Optional[Path]:
-    fixed = FIXED_ASSET_MAP.get(relative)
-    if fixed:
-        path = ASSET_ROOT / fixed
-        if path.is_file():
-            return path
-    files = _asset_files(relative)
+    recent_key = relative
+    for prefix, gallery in CATEGORY_GALLERY_POOLS.items():
+        if relative.startswith(prefix):
+            files = _asset_files(gallery)
+            recent_key = gallery
+            break
+    else:
+        fixed = FIXED_ASSET_MAP.get(relative)
+        if fixed:
+            path = ASSET_ROOT / fixed
+            if path.is_file():
+                return path
+        files = _asset_files(relative)
     if not files:
         return None
-    recent = _RECENT_ASSETS.setdefault(relative, [])
+    recent = _RECENT_ASSETS.setdefault(recent_key, [])
     blocked = set(recent[-3:])
     choices = [p for p in files if p.name not in blocked] or files
     selected = random.choice(choices)

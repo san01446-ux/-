@@ -632,10 +632,11 @@ def register_v636_world_combat(
             await self.act(interaction, "도주")
 
     async def start_combat(ctx: commands.Context, mode: str = "RPG", difficulty: str = "보통"):
+        difficulty = {"weak":"약함", "easy":"약함", "normal":"보통", "medium":"보통", "hard":"강함", "hell":"지옥"}.get(str(difficulty or "").lower(), difficulty)
         if not await check_registered(ctx):
             return
         if difficulty not in ENEMIES:
-            await ctx.send("⚠️ 난이도: `약함 / 보통 / 강함 / 지옥`")
+            await ctx.send("⚠️ 난이도: `약함 / 보통 / 강함 / 지옥` · English: `weak / normal / hard / hell`")
             return
         user = get_user(ctx.author.id)
         active = ensure_battle(user)

@@ -11,7 +11,7 @@ from discord.ext import commands
 
 from apocalypse_bot.commands import v631_life_visuals as stage1
 
-VERSION = "6.3.2"
+VERSION = "6.5.3"
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "v632"
 ENCOUNTER_CHANCE = 0.10
 SPECIAL_NEGOTIATION_CHANCE = 0.10
@@ -48,44 +48,26 @@ TIP_POOLS: Mapping[str, Sequence[str]] = {
 
 _RECENT_ASSETS: Dict[str, List[str]] = {}
 FIXED_ASSET_MAP: Mapping[str, str] = {
-    # 낚시: 실제 낚시/어획 장면 위주로 고정
-    "activities/fishing/encounter": "activities/fishing/encounter/02.jpg",
-    "activities/fishing/encounter_success": "activities/fishing/encounter_success/01.jpg",
-    "activities/fishing/encounter_failure": "activities/mining/failure/01.jpg",
-    "activities/fishing/success": "activities/coin/failure/01.jpg",
-    "activities/fishing/failure": "activities/mining/failure/01.jpg",
-    "activities/fishing/rare": "activities/fishing/rare/02.jpg",
-
-    # 광산: 나무 패는 이미지 대신 실제 채굴/광맥 장면 사용
+    # 채굴·도박 탐색은 기존 전용 장면 유지
     "activities/mining/encounter": "activities/coin/encounter/01.jpg",
     "activities/mining/encounter_success": "activities/coin/encounter_success/01.jpg",
     "activities/mining/encounter_failure": "activities/mining/encounter_failure/01.jpg",
     "activities/mining/success": "activities/coin/success/01.jpg",
     "activities/mining/failure": "activities/mining/encounter_failure/01.jpg",
     "activities/mining/rare": "activities/coin/rare/01.jpg",
-
-    # 코인탐색: 탐지/신호/스캔 느낌으로 고정
-    "activities/coin/encounter": "activities/fishing/encounter/01.jpg",
-    "activities/coin/encounter_success": "activities/support/encounter/02.jpg",
-    "activities/coin/failure": "activities/fishing/encounter_failure/01.jpg",
-    "activities/coin/success": "activities/fishing/failure/01.jpg",
-    "activities/coin/rare": "activities/mining/encounter/01.jpg",
-
-    # 탐색은 기존 도박 성격을 반영해 테이블/선택 장면으로 고정
     "activities/exploration/encounter": "activities/support/encounter/01.jpg",
     "activities/exploration/encounter_failure": "activities/support/encounter_failure/01.jpg",
     "activities/exploration/failure": "activities/support/failure/02.jpg",
     "activities/exploration/success": "activities/support/encounter_success/02.jpg",
     "activities/exploration/rare": "activities/support/rare/01.jpg",
-
-    # 돈주세요/특별교섭
-    "activities/support/encounter": "activities/support/encounter/01.jpg",
-    "activities/support/encounter_success": "activities/support/encounter_success/01.jpg",
-    "activities/support/encounter_failure": "activities/support/encounter_failure/01.jpg",
-    "activities/support/success": "activities/support/success/03.jpg",
-    "activities/support/failure": "activities/support/failure/01.jpg",
-    "activities/support/rare": "activities/support/rare/01.jpg",
 }
+
+CATEGORY_GALLERY_POOLS: Mapping[str, str] = {
+    "activities/fishing/": "activities/fishing/gallery",
+    "activities/coin/": "activities/coin/gallery",
+    "activities/support/": "activities/support/gallery",
+}
+
 
 
 def random_tip(activity: str) -> str:
@@ -100,15 +82,22 @@ def _asset_files(relative: str) -> List[Path]:
 
 
 def pick_asset(relative: str) -> Optional[Path]:
-    fixed = FIXED_ASSET_MAP.get(relative)
-    if fixed:
-        path = ASSET_ROOT / fixed
-        if path.is_file():
-            return path
-    files = _asset_files(relative)
+    recent_key = relative
+    for prefix, gallery in CATEGORY_GALLERY_POOLS.items():
+        if relative.startswith(prefix):
+            files = _asset_files(gallery)
+            recent_key = gallery
+            break
+    else:
+        fixed = FIXED_ASSET_MAP.get(relative)
+        if fixed:
+            path = ASSET_ROOT / fixed
+            if path.is_file():
+                return path
+        files = _asset_files(relative)
     if not files:
         return None
-    recent = _RECENT_ASSETS.setdefault(relative, [])
+    recent = _RECENT_ASSETS.setdefault(recent_key, [])
     blocked = set(recent[-3:])
     choices = [p for p in files if p.name not in blocked] or files
     selected = random.choice(choices)

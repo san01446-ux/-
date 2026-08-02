@@ -1547,7 +1547,7 @@ async def bot_presence():
     market_count = len(world_data.get("market", {}))
     guilds = len(world_data.get("guilds", {}))
     activities = [
-        discord.Game("공식 승인 봇 · !명령어"),
+        discord.Game("Official ABADDON · !help / !명령어"),
         discord.Game("!대화 | 기억 공방과 오늘의 질문"),
         discord.Game("!던전 약함 | 감염자 사냥"),
         discord.Game("!심층던전 | 100층에 도전"),
@@ -1663,10 +1663,10 @@ async def 가입(ctx, *, 암호: str = ""):
         await ctx.send("⚠️ 이미 암시장에 가입된 생존자입니다.")
         return
 
-    if 암호 != CORRECT_PASSWORD:
+    if str(암호).strip().lower() not in {CORRECT_PASSWORD, "survivor"}:
         await ctx.send(
-            "❌ 암호가 틀렸습니다.\n"
-            "사용법: `!가입 생존자`"
+            "❌ 암호가 틀렸습니다. / Incorrect access word.\n"
+            "사용법: `!가입 생존자` · English: `!register survivor`"
         )
         return
 
@@ -3157,6 +3157,7 @@ async def pet_group_evolve(ctx):
 # =========================================================
 @bot.hybrid_command()
 async def 괴물목록(ctx, 난이도: str = None):
+    난이도 = {"weak":"약함", "easy":"약함", "normal":"보통", "medium":"보통", "hard":"강함", "hell":"지옥"}.get(str(난이도 or "").lower(), 난이도)
     if not await check_registered(ctx):
         return
 
@@ -3175,12 +3176,13 @@ async def 괴물목록(ctx, 난이도: str = None):
 @bot.hybrid_command()
 @commands.cooldown(1, 180, commands.BucketType.user)
 async def 던전(ctx, 난이도: str = None):
+    난이도 = {"weak":"약함", "easy":"약함", "normal":"보통", "medium":"보통", "hard":"강함", "hell":"지옥"}.get(str(난이도 or "").lower(), 난이도)
     if not await check_registered(ctx):
         return
 
     if 난이도 not in DUNGEONS:
         ctx.command.reset_cooldown(ctx)
-        await ctx.send("⚠️ 사용법: `!던전 약함/보통/강함/지옥`")
+        await ctx.send("⚠️ 사용법: `!던전 약함/보통/강함/지옥` · English: `!dungeon weak/normal/hard/hell`")
         return
 
     u = get_user(ctx.author.id)
@@ -5295,6 +5297,10 @@ register_v651_card_games(
 
 from apocalypse_bot.commands.v651_server_renewal import register_v651_server_renewal
 register_v651_server_renewal(bot, world_data, save_data)
+
+# V6.5.3: 영문 명령 유지 + 낚시·채집·상인·코인 전용 랜덤 이미지 갤러리
+from apocalypse_bot.commands.v652_english_access import register_v652_english_access
+register_v652_english_access(bot, COMMAND_GUIDE_CATEGORIES)
 
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
