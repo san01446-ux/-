@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "7.1.2"
+VERSION = "7.2.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -232,7 +232,8 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
         "참가 버튼과 비공개 패 확인을 사용하는 포커·원카드·조커잡기입니다.",
         (
             _a("card_game_menu", "카드게임 안내", "세 카드게임의 규칙과 시작 명령을 확인합니다.", "카드게임"),
-            _a("poker", "포커 모집", "2~6명이 참가해 비공개 5장과 1회 교환으로 승부합니다.", "포커", "예: 10000", force_modal=True),
+            _a("abaddon_ai", "아바돈 1:1 게임", "혼자일 때 아바돈과 7종 미니게임을 시작합니다.", "아바돈게임", "선택: 참가비", force_modal=True),
+            _a("poker", "포커 모집", "2~6명이 참가해 비공개 5장과 1회 교환으로 승부합니다. 혼자라면 아바돈을 초대할 수 있습니다.", "포커", "예: 10000", force_modal=True),
             _a("one_card", "원카드 모집", "2~6명이 같은 무늬·숫자를 내며 먼저 패를 비웁니다.", "원카드", "예: 10000", force_modal=True),
             _a("joker_draw", "조커잡기 모집", "2~8명이 짝을 버리고 마지막 조커를 피합니다.", "조커잡기", "예: 10000", force_modal=True),
         ),
@@ -414,7 +415,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("treasure", "⛏️ 굴착·감정", "땅을 파고 보물을 감정해 보관합니다.", ("dig", "treasure_box", "appraisers", "treasure_appraise")),
     ),
     "card_games": (
-        ("cards", "🃏 카드게임", "로비를 확인하거나 포커·원카드·조커잡기 모집을 엽니다.", ("card_game_menu", "poker", "one_card", "joker_draw")),
+        ("cards", "🃏 카드게임·AI 동료", "로비를 열거나 아바돈과 1:1 게임을 시작합니다.", ("card_game_menu", "abaddon_ai", "poker", "one_card", "joker_draw")),
     ),
     "casino": (
         ("lobby", "🎰 카지노 로비·보상", "잔액, 환전, VIP, 미션, 상점과 랭킹을 관리합니다.", ("casino", "casino_balance", "casino_history", "casino_rank", "casino_chips", "casino_exchange", "casino_vip", "casino_jackpot", "casino_mission", "casino_mission_reward", "casino_achievement", "casino_shop", "casino_buy", "casino_season_rank")),

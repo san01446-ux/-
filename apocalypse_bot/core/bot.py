@@ -5697,10 +5697,16 @@ register_v710_growth_loop(
     add_title, add_season_points,
 )
 
-# V7.1.2: 새싹 역할 아이콘·귀여운 환영 패널·전체 명령어 버튼 실행·입력 모달
+# V7.2.0: 통합 신규 멤버 환영·귀여운 명령 UI·선택형 테마
 # 기존 prefix/slash 명령은 유지하고 !명령어/!처음 화면만 더 쉽게 연결합니다.
 from apocalypse_bot.commands.v711_cute_interactions import register_v711_cute_interactions
 register_v711_cute_interactions(bot, world_data, save_data, COMMAND_GUIDE_CATEGORIES)
+
+# V7.2.0: 환영/역할 중복 통합 · 패치 자동 공지 · 아바돈 AI 동료 미니게임
+from apocalypse_bot.commands.v720_coop_cleanup import register_v720_coop_cleanup
+register_v720_coop_cleanup(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
 
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)

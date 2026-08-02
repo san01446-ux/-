@@ -146,6 +146,7 @@ class CardLobbyView(discord.ui.View):
     def __init__(
         self,
         *,
+        bot: commands.Bot,
         kind: str,
         host: discord.abc.User,
         bet: int,
@@ -158,6 +159,7 @@ class CardLobbyView(discord.ui.View):
         max_players: int,
     ) -> None:
         super().__init__(timeout=180)
+        self.bot = bot
         self.kind = kind
         self.host_id = int(host.id)
         self.bet = int(bet)
@@ -190,7 +192,7 @@ class CardLobbyView(discord.ui.View):
         embed.add_field(name="참가비", value=f"**{self.bet:,}칩** · 시작할 때 차감", inline=True)
         embed.add_field(name="예상 상금", value=f"현재 **{self.bet * len(self.players):,}칩**", inline=True)
         embed.add_field(name="진행", value=f"{_emoji_bar(len(self.players) / self.max_players)} **{len(self.players)}/{self.max_players}**", inline=False)
-        embed.set_footer(text="참가 버튼을 누른 사람만 입장 · 방장이 인원을 확정하면 시작")
+        embed.set_footer(text="혼자라면 🤖 아바돈 초대 · 여러 명이면 방장이 인원을 확정해 시작")
         return embed
 
     async def _update(self, note: str = "") -> None:
@@ -233,6 +235,27 @@ class CardLobbyView(discord.ui.View):
             name = self.players.pop(uid)
             await interaction.response.defer()
             await self._update(f"↩️ **{name}** 님이 참가를 취소했습니다.")
+
+    @discord.ui.button(label="아바돈 초대", emoji="🤖", style=discord.ButtonStyle.secondary)
+    async def invite_abaddon(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        async with self.lock:
+            if int(interaction.user.id) != self.host_id:
+                await interaction.response.send_message("방장만 아바돈을 초대할 수 있습니다.", ephemeral=True)
+                return
+            if self.started:
+                await interaction.response.send_message("이미 시작된 방입니다.", ephemeral=True)
+                return
+            if len(self.players) != 1:
+                await interaction.response.send_message("다른 생존자가 참가 중일 때는 일반 멀티플레이로 시작해주세요.", ephemeral=True)
+                return
+            starter = getattr(self.bot, "v720_start_ai_card", None)
+            if not callable(starter):
+                await interaction.response.send_message("아바돈 동료전 모듈을 찾지 못했습니다.", ephemeral=True)
+                return
+            self.started = True
+            ACTIVE_LOBBIES.pop(self.channel_id, None)
+            self.stop()
+            await starter(interaction, self.kind, self.bet)
 
     @discord.ui.button(label="인원 확정·시작", emoji="🚦", style=discord.ButtonStyle.primary)
     async def start_game(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -893,6 +916,7 @@ def register_v651_card_games(
         min_players, max_players = (2, 8) if kind == "조커잡기" else (2, 6)
         factory_map = {"포커": PokerSession, "원카드": OneCardSession, "조커잡기": JokerSession}
         lobby = CardLobbyView(
+            bot=bot,
             kind=kind,
             host=interaction.user,
             bet=bet,
@@ -928,6 +952,7 @@ def register_v651_card_games(
         min_players, max_players = (2, 8) if kind == "조커잡기" else (2, 6)
         factory_map = {"포커": PokerSession, "원카드": OneCardSession, "조커잡기": JokerSession}
         lobby = CardLobbyView(
+            bot=bot,
             kind=kind,
             host=ctx.author,
             bet=bet,
@@ -948,7 +973,7 @@ def register_v651_card_games(
     async def card_games(ctx: commands.Context) -> None:
         embed = discord.Embed(
             title="🃏 ABADDON 카드게임",
-            description="드롭다운에서 게임을 고르고 참가비를 입력하면 모집방이 열립니다. 참가비는 **게임 시작 시점**에만 차감됩니다.",
+            description="드롭다운에서 게임을 고르고 참가비를 입력하면 모집방이 열립니다. 혼자라면 **🤖 아바돈 초대**로 즉시 1:1 대전을 시작할 수 있습니다.",
             color=discord.Color.dark_purple(),
         )
         embed.add_field(name="♠️ 포커", value="비공개 5장 · 한 장 교환 · 족보 승부", inline=False)

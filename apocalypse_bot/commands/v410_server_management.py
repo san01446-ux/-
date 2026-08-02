@@ -1394,8 +1394,12 @@ def register_v410_server_management(
             return
         settings = get_settings(ctx.guild)
         settings["welcome_channel_id"] = 채널.id
-        save_data()
-        await ctx.send(f"✅ 환영 채널을 {채널.mention}(으)로 설정했습니다.")
+        sync = getattr(bot, "v720_sync_welcome", None)
+        if callable(sync):
+            sync(ctx.guild.id, welcome_channel_id=채널.id)
+        else:
+            save_data()
+        await ctx.send(f"✅ 통합 환영 채널을 {채널.mention}(으)로 설정했습니다.")
 
     @bot.command(
         name="인삿말설정",
@@ -1416,7 +1420,17 @@ def register_v410_server_management(
         settings["welcome_notice_channel_id"] = 공지채널.id
         settings["welcome_rules_channel_id"] = 규칙채널.id
         settings["welcome_register_channel_id"] = 가입채널.id if 가입채널 else 0
-        save_data()
+        sync = getattr(bot, "v720_sync_welcome", None)
+        if callable(sync):
+            sync(
+                ctx.guild.id,
+                welcome_channel_id=환영채널.id,
+                welcome_notice_channel_id=공지채널.id,
+                welcome_rules_channel_id=규칙채널.id,
+                welcome_register_channel_id=가입채널.id if 가입채널 else 0,
+            )
+        else:
+            save_data()
         register_text = 가입채널.mention if 가입채널 else "별도 채널 미지정"
         await ctx.send(
             "✅ 신규 멤버 인삿말 구성을 저장했습니다.\n"
@@ -1430,6 +1444,10 @@ def register_v410_server_management(
     @bot.command(name="인삿말미리보기", aliases=["인사말미리보기", "환영미리보기"])
     async def preview_welcome_guide(ctx: commands.Context) -> None:
         if not await require_manager(ctx):
+            return
+        preview = getattr(bot, "v720_welcome_preview", None)
+        if callable(preview):
+            await preview(ctx)
             return
         settings = get_settings(ctx.guild)
         notice, rules, register = welcome_link_channels(ctx.guild, settings)
@@ -1446,7 +1464,7 @@ def register_v410_server_management(
             timestamp=discord.utils.utcnow(),
         )
         embed.set_thumbnail(url=ctx.author.display_avatar.url)
-        embed.set_footer(text="실제 입장 메시지 미리보기")
+        embed.set_footer(text="통합 환영 시스템 미리보기")
         await ctx.send(embed=embed)
 
     @bot.command(name="인삿말상태", aliases=["인사말상태"])
@@ -1485,16 +1503,30 @@ def register_v410_server_management(
             return
         settings = get_settings(ctx.guild)
         settings["autorole_id"] = 역할.id
-        save_data()
-        await ctx.send(f"✅ 신규 멤버 자동 역할을 {역할.mention}(으)로 설정했습니다.")
+        sync = getattr(bot, "v720_sync_welcome", None)
+        if callable(sync):
+            sync(
+                ctx.guild.id,
+                role_id=역할.id,
+                role_mode="permanent",
+                role_enabled=True,
+                role_created_by_abaddon=False,
+            )
+        else:
+            save_data()
+        await ctx.send(f"✅ 통합 신규 멤버 역할을 {역할.mention}(으)로 설정했습니다. 이 역할은 영구 유지됩니다.")
 
     @bot.command(name="자동역할해제", help="신규 멤버 자동 역할을 해제합니다.")
     async def clear_autorole(ctx: commands.Context) -> None:
         if not await require_manager(ctx):
             return
         get_settings(ctx.guild)["autorole_id"] = 0
-        save_data()
-        await ctx.send("✅ 신규 멤버 자동 역할을 해제했습니다.")
+        sync = getattr(bot, "v720_sync_welcome", None)
+        if callable(sync):
+            sync(ctx.guild.id, role_id=0, role_enabled=False)
+        else:
+            save_data()
+        await ctx.send("✅ 통합 신규 멤버 역할 지급을 해제했습니다. 환영 메시지는 설정대로 유지됩니다.")
 
     @bot.command(name="관리역할추가", help="SERVER GUARD 운영 명령어를 사용할 역할을 추가합니다.")
     async def add_mod_role(ctx: commands.Context, 역할: discord.Role) -> None:
@@ -1863,34 +1895,21 @@ def register_v410_server_management(
         )
 
     async def handle_member_join(member: discord.Member) -> None:
-        settings = get_settings(member.guild)
-        role = member.guild.get_role(int(settings.get("autorole_id", 0))) if settings.get("autorole_id") else None
-        if role is not None and not role.managed and member.guild.me is not None and role < member.guild.me.top_role:
+        # v7.2.0: 환영 메시지와 신규 역할 처리는 통합 핸들러 한 곳에서만 실행합니다.
+        unified = getattr(bot, "v720_unified_member_join", None)
+        if callable(unified):
             try:
-                await member.add_roles(role, reason="ABADDON 신규 멤버 자동 역할")
-            except (discord.Forbidden, discord.HTTPException):
-                pass
-        channel = resolve_channel(member.guild, settings.get("welcome_channel_id", 0))
-        if isinstance(channel, discord.TextChannel):
-            notice, rules, register = welcome_link_channels(member.guild, settings)
-            embed = discord.Embed(
-                title="🆕 새로운 생존자가 도착했습니다",
-                description=(
-                    f"{member.mention} **{member.guild.name}**에 온 걸 환영합니다!\n\n"
-                    f"📢 **서버 공지사항** · {getattr(notice, 'mention', '채널 준비 중')}\n"
-                    f"📕 **서버 기본규칙** · {getattr(rules, 'mention', '채널 준비 중')}\n"
-                    + (f"🪪 **생존자 등록** · {register.mention}\n" if register else "")
-                    + "\n별도 복잡한 가입 절차는 없습니다. `!가입 생존자`를 입력하면 RPG를 바로 사용할 수 있습니다."
-                ),
-                color=0x2ECC71,
-                timestamp=discord.utils.utcnow(),
-            )
-            embed.set_thumbnail(url=member.display_avatar.url)
-            embed.set_footer(text=f"현재 멤버 {member.guild.member_count or len(member.guild.members):,}명")
-            try:
-                await channel.send(embed=embed)
-            except (discord.Forbidden, discord.HTTPException):
-                pass
+                await unified(member)
+            except Exception as exc:
+                print(f"[통합 환영 처리 실패] guild={member.guild.id} member={member.id} {type(exc).__name__}: {exc}", flush=True)
+        else:
+            settings = get_settings(member.guild)
+            role = member.guild.get_role(int(settings.get("autorole_id", 0))) if settings.get("autorole_id") else None
+            if role is not None and not role.managed and member.guild.me is not None and role < member.guild.me.top_role:
+                try:
+                    await member.add_roles(role, reason="ABADDON 신규 멤버 자동 역할")
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
         await send_log(
             member.guild,
             "📥 멤버 입장",

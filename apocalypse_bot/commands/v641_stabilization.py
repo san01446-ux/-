@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "7.1.2"
+VERSION = "7.2.0"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-03"
 
@@ -105,8 +105,10 @@ EXPECTED_RECENT_COMMANDS: Tuple[str, ...] = (
     "시스템점검", "오류현황", "운영통계", "백업목록", "백업생성", "백업검증", "복구미리보기",
     # v7.1.0
     "성장보드", "미션보상", "누적보상", "장비프리셋", "월드보스주간랭킹", "월드보스주간보상", "복귀보급",
-    # v7.1.2
+    # v7.2.0
     "귀여운메뉴", "새싹설정", "환영테마", "새싹역할설치", "새싹정리",
+    # v7.2.0
+    "아바돈게임", "아바돈초대", "아바돈전적", "패치채널", "패치자동공지", "패치공지상태", "패치공지게시",
 )
 
 VISUAL_MODULES: Tuple[str, ...] = (
@@ -284,15 +286,15 @@ def register_v641_stabilization(
     async def stabilization_status(ctx: commands.Context) -> None:
         key, theme = _theme(world_data, _guild_id(ctx))
         embed = discord.Embed(
-            title="🎨 ABADDON v7.1.2 환영 테마·운영 상태",
-            description="환영 테마 6종, 명령어 버튼 UI와 기존 성장 루프·운영 안정화를 함께 적용했습니다.",
+            title="🧩 ABADDON v7.2.0 통합 환영·동료전 운영 상태",
+            description="환영 메시지/역할 중복을 통합하고 패치 자동 공지와 아바돈 AI 미니게임을 함께 적용했습니다.",
             color=int(theme["color"]),
         )
         embed.add_field(name="서버 테마", value=f"{theme['emoji']} **{theme['title']}** (`{key}`)", inline=True)
         embed.add_field(name="명령어", value=f"등록 **{len(list(bot.walk_commands()))}개** · 가이드 **{len(guide)}/25**", inline=True)
         embed.add_field(name="데이터", value=f"생존자 **{len(user_data):,}명** · 원자적 저장/백업 보호", inline=True)
         embed.add_field(name="빠른 진단", value="`!테스트 상세`", inline=False)
-        embed.set_footer(text="v7.1.2 정책: 환영 테마 선택 · 신규 이미지 0장 · 중복 별칭 시작 오류 수정")
+        embed.set_footer(text="v7.2.0 정책: 환영 1회 · 역할 1개 · 패치 버전당 1회 · 신규 이미지 0장")
         await ctx.send(embed=embed)
 
     @bot.command(name="봇소개", aliases=["아바돈소개", "봇정보"])
@@ -583,6 +585,12 @@ def register_v641_stabilization(
             checks.append(("서버리뉴얼 테마 동기화", renewal_ok, f"드롭다운 {getattr(bot, 'v651_server_theme_count', 0)}종 / 카탈로그 {len(THEMES)}종"))
             card_commands = tuple(getattr(bot, "v651_card_game_commands", ()))
             checks.append(("카드게임 등록", set(card_commands) == {"카드게임", "포커", "원카드", "조커잡기"}, "포커·원카드·조커잡기" if card_commands else "등록 누락"))
+            ai_commands = {name for name in ("아바돈게임", "아바돈초대", "아바돈전적") if bot.get_command(name) is not None}
+            checks.append(("아바돈 AI 동료전", len(ai_commands) == 3 and callable(getattr(bot, "v720_start_ai_card", None)), "1:1 게임 7종·카드 모집방 AI 초대" if len(ai_commands) == 3 else "AI 동료전 등록 누락"))
+            unified_listener = callable(getattr(bot, "v720_unified_member_join", None))
+            checks.append(("환영/역할 단일 처리", unified_listener, "SERVER GUARD 입장 리스너 1곳에서 통합 핸들러 호출" if unified_listener else "통합 환영 핸들러 누락"))
+            patch_auto = all(bot.get_command(name) is not None for name in ("패치채널", "패치자동공지", "패치공지상태", "패치공지게시"))
+            checks.append(("패치 자동 공지", patch_auto, "버전당 1회 게시·채널 자동 감지·수동 게시" if patch_auto else "패치 공지 명령 누락"))
 
             english_aliases = getattr(bot, "v652_english_aliases", {})
             english_skipped = getattr(bot, "v652_english_alias_skipped", {})
@@ -610,7 +618,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v7.1.2 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v7.2.0 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -624,32 +632,29 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v7.1.2 귀여운 인터랙션, v7.1.0 성장 루프, v7.0.2 데이터 보호와 주요 시스템을 읽기 전용으로 검사합니다."
+        previous_test.help = "v7.2.0 통합 환영·AI 동료전·패치 자동 공지와 기존 데이터 보호를 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🎨 ABADDON v7.1.2 — 환영 테마·시작 오류 핫픽스",
-                description="신규 멤버 환영 패널에 선택형 테마 6종을 추가하고, Render 시작을 막던 `데이터백업` 중복 별칭을 제거했습니다. 신규 이미지는 추가하지 않았습니다.",
-                color=0xD6563F,
+                title="🧩 ABADDON v7.2.0 — 통합 환영 · 아바돈 동료전",
+                description="겹치던 신규 멤버 메시지와 역할 지급을 하나로 합치고, 패치 자동 공지와 혼자 즐기는 아바돈 AI 미니게임을 추가했습니다.",
+                color=0x6F42C1,
             )
-            embed.add_field(name="🎨 환영 테마 6종", value="🌱 새싹 정원 · 🌸 벚꽃 피크닉 · 🫧 말랑 버블 · 🌙 별빛 탐험대 · 🐾 동물 친구 · ☣️ 아포칼립스 생존구역", inline=False)
-            embed.add_field(name="☣️ 아포칼립스 테마", value="폐허 통신·오염 경보·생존 지침 분위기의 전용 문구, 색상과 역할 아이콘을 사용", inline=False)
-            embed.add_field(name="🛠️ Render 시작 오류 수정", value="`!백업생성`의 중복 별칭 `데이터백업`을 제거하고 `즉시백업`으로 교체", inline=False)
-            embed.add_field(name="🌱 신규 생존자 표식", value="선택한 테마의 역할 아이콘과 색상을 적용하고 기본 7일 뒤 자동 정리", inline=False)
-            embed.add_field(name="🫧 시작 버튼 패널", value="가입·정보·출석·오늘할일·게임센터·명령어 도감을 버튼으로 바로 실행", inline=False)
-            embed.add_field(name="📚 전체 명령어 클릭 실행", value="등록된 모든 prefix 명령을 카테고리/검색/페이지로 선택 · 입력값이 필요하면 모달 실행", inline=False)
-            embed.add_field(name="🧯 오류 UX 보강", value="잘못된 명령·누락 입력·형식 오류·쿨타임·UI 예외에 복구 버튼과 사건 번호 제공", inline=False)
-            embed.add_field(name="🌿 기존 성장 루프 유지", value="v7.1.0 일일·주간 성장 보드, 누적 보상, 프리셋, 월드보스 주간 랭킹 유지", inline=False)
-            embed.add_field(name="🛡️ 기반 유지", value="v7.0.2 검증 저장·자동 복구·명령 잠금과 v7.0.0 월드보스 기믹을 그대로 유지", inline=False)
-            embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 봇·홈페이지·명령어 검색 동기화", inline=False)
-            embed.set_footer(text=f"최신 버전 v7.1.2 · {PATCH_DATE} · 신규 이미지 0장")
+            embed.add_field(name="👋 환영 시스템 통합", value="기존 공지·규칙·가입 안내 + 선택형 테마 + 시작 버튼을 하나의 환영 카드에 표시", inline=False)
+            embed.add_field(name="🏷️ 신규 역할 통합", value="기존 `!자동역할`과 새싹 역할을 하나의 설정으로 연결 · 임시/영구 모드 지원", inline=False)
+            embed.add_field(name="📣 패치 자동 공지", value="`!패치채널` 지정 후 새 버전 내용을 버전당 한 번만 자동 게시", inline=False)
+            embed.add_field(name="🤖 아바돈 1:1 게임 7종", value="가위바위보 · 홀짝 · 숫자결투 · 포커 · 간편 원카드 · 조커 추적 · 신호 예측", inline=False)
+            embed.add_field(name="🏁 멀티게임 AI 초대", value="생존자 레이스와 카드게임 모집방에서 사람이 부족하면 **아바돈 초대**", inline=False)
+            embed.add_field(name="🛡️ 안정화 검수", value="명령/별칭 충돌 · 중복 입장 이벤트 · 저장/정산 · 드롭다운 25개 제한 · ZIP 구조 재검사", inline=False)
+            embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 신규 이미지 0장", inline=False)
+            embed.set_footer(text=f"최신 버전 v7.2.0 · {PATCH_DATE}")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v7.1.2 환영 테마 선택과 Render 시작 오류 수정 내용을 확인합니다."
+        patch.help = "ABADDON v7.2.0 통합 환영, 패치 자동 공지와 아바돈 AI 동료전 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION

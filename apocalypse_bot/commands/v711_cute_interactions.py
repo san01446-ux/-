@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v600_game_center import (
 )
 
 
-VERSION = "7.1.2"
+VERSION = "7.2.0"
 MENU_TIMEOUT = 300
 PAGE_SIZE = 25
 NEWCOMER_ROLE_NAME = "저 새로 들어왔어요, 환영해주세요!"
@@ -197,10 +197,29 @@ def _guild_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any]
     settings.setdefault("enabled", True)
     settings.setdefault("days", 7)
     settings.setdefault("role_id", 0)
+    settings.setdefault("role_mode", "temporary")
+    settings.setdefault("role_created_by_abaddon", False)
+    settings.setdefault("role_enabled", True)
     settings.setdefault("welcome_channel_id", 0)
+    settings.setdefault("welcome_notice_channel_id", 0)
+    settings.setdefault("welcome_rules_channel_id", 0)
+    settings.setdefault("welcome_register_channel_id", 0)
     settings.setdefault("welcome_message", True)
     settings.setdefault("role_icon", True)
     settings.setdefault("theme", "sprout")
+    legacy = world_data.setdefault("server_management", {}).setdefault(str(guild_id), {})
+    # v7.2.0: 기존 환영/자동 역할 설정을 하나의 소스로 자동 이관합니다.
+    for key in ("welcome_channel_id", "welcome_notice_channel_id", "welcome_rules_channel_id", "welcome_register_channel_id"):
+        if not settings.get(key) and legacy.get(key):
+            settings[key] = legacy.get(key)
+        elif settings.get(key):
+            legacy[key] = settings.get(key)
+    if not settings.get("role_id") and legacy.get("autorole_id"):
+        settings["role_id"] = legacy.get("autorole_id")
+        settings["role_mode"] = "permanent"
+        settings["role_created_by_abaddon"] = False
+    elif settings.get("role_id"):
+        legacy["autorole_id"] = settings.get("role_id")
     if settings.get("theme") not in WELCOME_THEMES:
         settings["theme"] = "sprout"
     return settings
@@ -320,16 +339,19 @@ async def _ensure_newcomer_role(
             colour=colour,
             hoist=False,
             mentionable=False,
-            reason="ABADDON v7.1.2 신규 생존자 환영 표식",
+            reason="ABADDON v7.2.0 통합 신규 생존자 역할",
         )
+        settings["role_created_by_abaddon"] = True
+        settings["role_mode"] = "temporary"
 
     settings["role_id"] = role.id
     edit_kwargs: Dict[str, Any] = {}
-    if role.name != NEWCOMER_ROLE_NAME:
+    managed_style = bool(settings.get("role_created_by_abaddon")) or str(settings.get("role_mode")) == "temporary"
+    if managed_style and role.name != NEWCOMER_ROLE_NAME:
         edit_kwargs["name"] = NEWCOMER_ROLE_NAME
-    if role.colour != colour:
+    if managed_style and role.colour != colour:
         edit_kwargs["colour"] = colour
-    if "ROLE_ICONS" in getattr(guild, "features", []):
+    if managed_style and "ROLE_ICONS" in getattr(guild, "features", []):
         if settings.get("role_icon", True):
             selected_emoji = str(theme.get("role_emoji", "🌱"))
             if getattr(role, "unicode_emoji", None) != selected_emoji:
@@ -340,37 +362,62 @@ async def _ensure_newcomer_role(
         try:
             role = await role.edit(
                 **edit_kwargs,
-                reason="ABADDON v7.1.2 환영 테마 역할 반영",
+                reason="ABADDON v7.2.0 통합 환영 역할 반영",
             )
         except (TypeError, discord.Forbidden, discord.HTTPException):
             pass
     return role
 
 
-def _welcome_embed(member: discord.Member, days: int, theme_key: str = "sprout") -> discord.Embed:
+def _welcome_embed(
+    member: discord.Member,
+    days: int,
+    theme_key: str = "sprout",
+    *,
+    settings: Optional[Dict[str, Any]] = None,
+) -> discord.Embed:
     theme = _welcome_theme(theme_key)
     mark = random.choice(tuple(theme["marks"]))
+    settings = settings or {}
+    role_mode = str(settings.get("role_mode", "temporary"))
+    if not settings.get("role_enabled", True):
+        role_text = "신규 역할 표식은 사용하지 않습니다."
+    elif role_mode == "permanent":
+        role_text = "서버 기본 신규 역할이 자동으로 지급됩니다."
+    else:
+        role_text = f"신규 생존자 표식은 약 {days}일 동안 유지됩니다."
     embed = discord.Embed(
         title=random.choice(tuple(theme["titles"])),
         description=(
-            f"{member.mention} 님, **ABADDON 생존 구역**에 온 걸 환영해요! {mark}\n"
+            f"{member.mention} 님, **{member.guild.name}**에 온 걸 환영해요! {mark}\n"
             f"{random.choice(tuple(theme['lines']))}\n\n"
-            f"{theme['emoji']} **신규 생존자 표식은 약 {days}일 동안 유지됩니다.**"
+            f"{theme['emoji']} **{role_text}**"
         ),
         colour=discord.Colour.from_rgb(*theme["color"]),
         timestamp=discord.utils.utcnow(),
+    )
+    def channel_mention(key: str, fallback: str) -> str:
+        try:
+            channel = member.guild.get_channel(int(settings.get(key, 0) or 0))
+        except (TypeError, ValueError):
+            channel = None
+        return getattr(channel, "mention", fallback)
+    notice = channel_mention("welcome_notice_channel_id", "채널 준비 중")
+    rules = channel_mention("welcome_rules_channel_id", "채널 준비 중")
+    register = channel_mention("welcome_register_channel_id", "`!가입 생존자`")
+    embed.add_field(
+        name="📌 먼저 확인해주세요",
+        value=f"📢 공지 · {notice}\n📕 규칙 · {rules}\n🪪 생존자 등록 · {register}",
+        inline=False,
     )
     embed.add_field(
         name="🧭 처음이라면 이 순서로",
         value="`가입하기` → `처음 시작` → `오늘 할 일` → `게임 열기`",
         inline=False,
     )
-    embed.add_field(
-        name="💬 기존 생존자에게",
-        value=str(theme["guide"]),
-        inline=False,
-    )
-    embed.set_footer(text=f"ABADDON v{VERSION} · {_theme_name(theme_key)} 환영 테마")
+    embed.add_field(name="💬 기존 생존자에게", value=str(theme["guide"]), inline=False)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_footer(text=f"ABADDON v{VERSION} · {_theme_name(theme_key)} · 통합 환영 시스템")
     return embed
 
 
@@ -1012,6 +1059,7 @@ class WelcomeThemeView(CuteOwnedView):
                 interaction.user,
                 int(settings.get("days", 7) or 7),
                 str(settings.get("theme", "sprout")),
+                settings=settings,
             ),
             ephemeral=True,
         )
@@ -1069,7 +1117,7 @@ async def _cleanup_newcomers_for_guild(
         role = guild.get_role(int(settings.get("role_id", 0) or 0))
     except (TypeError, ValueError):
         role = None
-    if role is None:
+    if role is None or str(settings.get("role_mode", "temporary")) != "temporary":
         return 0
     cutoff = discord.utils.utcnow() - timedelta(days=max(1, min(30, int(settings.get("days", 7) or 7))))
     removed = 0
@@ -1173,6 +1221,11 @@ def register_v711_cute_interactions(
                 settings["welcome_channel_id"] = ctx.channel.id
             elif action == "아이콘" and len(tokens) >= 2:
                 settings["role_icon"] = tokens[1].casefold() in {"켜기", "on", "활성화"}
+            elif action in {"역할", "역할지급"} and len(tokens) >= 2:
+                settings["role_enabled"] = tokens[1].casefold() in {"켜기", "on", "활성화"}
+            elif action in {"역할모드", "모드"} and len(tokens) >= 2:
+                mode = tokens[1].casefold()
+                settings["role_mode"] = "permanent" if mode in {"영구", "permanent", "자동"} else "temporary"
             elif action == "메시지" and len(tokens) >= 2:
                 settings["welcome_message"] = tokens[1].casefold() in {"켜기", "on", "활성화"}
             elif action in {"테마", "theme"} and len(tokens) >= 2:
@@ -1184,8 +1237,8 @@ def register_v711_cute_interactions(
             else:
                 await ctx.send(
                     "🌿 사용법: `!새싹설정 켜기`, `!새싹설정 끄기`, `!새싹설정 기간 7`, "
-                    "`!새싹설정 환영채널`, `!새싹설정 아이콘 켜기`, `!새싹설정 메시지 끄기`, "
-                    "`!새싹설정 테마 아포칼립스`"
+                    "`!새싹설정 환영채널`, `!새싹설정 아이콘 켜기`, `!새싹설정 역할 켜기`, "
+                    "`!새싹설정 역할모드 임시/영구`, `!새싹설정 메시지 끄기`, `!새싹설정 테마 아포칼립스`"
                 )
                 return
             save_data()
@@ -1203,6 +1256,8 @@ def register_v711_cute_interactions(
         embed.add_field(name="상태", value="✅ 켜짐" if settings["enabled"] else "⏸️ 꺼짐", inline=True)
         embed.add_field(name="유지 기간", value=f"**{settings['days']}일**", inline=True)
         embed.add_field(name="역할", value=role.mention if role else "아직 설치되지 않음", inline=True)
+        embed.add_field(name="역할 지급", value="✅ 사용" if settings.get("role_enabled", True) else "⏸️ 미사용", inline=True)
+        embed.add_field(name="역할 모드", value="영구 자동 역할" if settings.get("role_mode") == "permanent" else f"임시 {settings['days']}일", inline=True)
         channel = _find_welcome_channel(ctx.guild, settings)
         embed.add_field(name="환영 채널", value=channel.mention if channel else "사용 가능한 채널 없음", inline=True)
         selected_theme = _welcome_theme(settings)
@@ -1234,7 +1289,7 @@ def register_v711_cute_interactions(
         if lowered.startswith("미리보기") or lowered.startswith("preview"):
             requested = raw.split(maxsplit=1)[1] if len(raw.split(maxsplit=1)) > 1 else str(settings.get("theme", "sprout"))
             theme_key = _resolve_theme_key(requested) or str(settings.get("theme", "sprout"))
-            await ctx.send(embed=_welcome_embed(ctx.author, int(settings.get("days", 7) or 7), theme_key))
+            await ctx.send(embed=_welcome_embed(ctx.author, int(settings.get("days", 7) or 7), theme_key, settings=settings))
             return
         if raw and lowered not in {"목록", "list", "설정", "선택"}:
             theme_key = _resolve_theme_key(raw)
@@ -1267,8 +1322,12 @@ def register_v711_cute_interactions(
             await ctx.send("🔒 서버 관리 권한이 필요해요.")
             return
         settings = _guild_settings(world_data, ctx.guild.id)
+        settings["role_mode"] = "temporary"
+        settings["role_enabled"] = True
+        settings["role_created_by_abaddon"] = True
+        settings["role_id"] = 0
         try:
-            role = await _ensure_newcomer_role(ctx.guild, settings)
+            role = await _ensure_newcomer_role(ctx.guild, settings, force_recreate=True)
         except (discord.Forbidden, discord.HTTPException) as exc:
             await ctx.send(f"🫧 역할을 만들지 못했어요. 봇의 **역할 관리** 권한과 역할 순서를 확인해주세요. `{type(exc).__name__}`")
             return
@@ -1300,9 +1359,12 @@ def register_v711_cute_interactions(
             return
         role = None
         try:
-            role = await _ensure_newcomer_role(member.guild, settings)
-            if role is not None and role not in member.roles:
-                await member.add_roles(role, reason="ABADDON 신규 생존자 새싹 표식")
+            if settings.get("role_enabled", True):
+                role = await _ensure_newcomer_role(member.guild, settings)
+                if role is not None and role not in member.roles:
+                    await member.add_roles(role, reason="ABADDON v7.2.0 통합 신규 생존자 역할")
+            legacy = world_data.setdefault("server_management", {}).setdefault(str(member.guild.id), {})
+            legacy["autorole_id"] = int(settings.get("role_id", 0) or 0) if settings.get("role_enabled", True) else 0
             save_data()
         except (discord.Forbidden, discord.HTTPException, TypeError) as exc:
             print(f"[새싹 역할 부여 실패] guild={member.guild.id} member={member.id} {type(exc).__name__}: {exc}", flush=True)
@@ -1319,6 +1381,7 @@ def register_v711_cute_interactions(
                     member,
                     int(settings.get("days", 7) or 7),
                     str(settings.get("theme", "sprout")),
+                    settings=settings,
                 ),
                 view=WelcomeQuickView(bot, member.id, world_data, save_data, command_guide_categories),
                 allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
@@ -1326,7 +1389,8 @@ def register_v711_cute_interactions(
         except (discord.Forbidden, discord.HTTPException) as exc:
             print(f"[새싹 환영 전송 실패] guild={member.guild.id} channel={getattr(channel, 'id', 0)} {type(exc).__name__}: {exc}", flush=True)
 
-    bot.add_listener(handle_member_join, "on_member_join")
+    # v7.2.0: 기존 SERVER GUARD 입장 리스너 하나에서만 호출하여 메시지/역할 중복을 방지합니다.
+    bot.v720_unified_member_join = handle_member_join  # type: ignore[attr-defined]
 
     @tasks.loop(hours=1)
     async def cleanup_loop() -> None:
@@ -1354,6 +1418,27 @@ def register_v711_cute_interactions(
     def error_view_factory(owner_id: int, command: Optional[commands.Command] = None) -> ErrorRecoveryView:
         return ErrorRecoveryView(bot, owner_id, world_data, save_data, command_guide_categories, command)
 
+    def sync_legacy_welcome(guild_id: int, **changes: Any) -> Dict[str, Any]:
+        settings = _guild_settings(world_data, guild_id)
+        legacy = world_data.setdefault("server_management", {}).setdefault(str(guild_id), {})
+        for key, value in changes.items():
+            settings[key] = value
+            if key in {"welcome_channel_id", "welcome_notice_channel_id", "welcome_rules_channel_id", "welcome_register_channel_id"}:
+                legacy[key] = value
+            elif key == "role_id":
+                legacy["autorole_id"] = value
+        save_data()
+        return settings
+
+    async def unified_preview(ctx: commands.Context) -> None:
+        settings = _guild_settings(world_data, ctx.guild.id)
+        await ctx.send(
+            embed=_welcome_embed(ctx.author, int(settings.get("days", 7) or 7), str(settings.get("theme", "sprout")), settings=settings),
+            view=WelcomeQuickView(bot, ctx.author.id, world_data, save_data, command_guide_categories),
+        )
+
+    bot.v720_sync_welcome = sync_legacy_welcome  # type: ignore[attr-defined]
+    bot.v720_welcome_preview = unified_preview  # type: ignore[attr-defined]
     bot.v711_error_view_factory = error_view_factory  # type: ignore[attr-defined]
     bot.v711_command_catalog_count = lambda: len(_walk_commands(bot))  # type: ignore[attr-defined]
     bot.v711_newcomer_settings = lambda guild_id: _guild_settings(world_data, guild_id)  # type: ignore[attr-defined]

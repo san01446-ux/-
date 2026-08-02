@@ -7,6 +7,7 @@ import random
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import discord
@@ -465,6 +466,7 @@ class SurvivorRaceView(discord.ui.View):
         self.save_data = save_data
         self.on_close = on_close
         self.participants: Dict[int, discord.Member] = {}
+        self.bot_invited = False
         self.message: Optional[discord.Message] = None
         self.started = False
         self.done = False
@@ -474,13 +476,16 @@ class SurvivorRaceView(discord.ui.View):
         lines = []
         for i, member in enumerate(self.participants.values()):
             lines.append(f"{self.ICONS[i % len(self.ICONS)]} {member.display_name}")
+        if self.bot_invited:
+            lines.append("🤖 아바돈 · AI 동료")
         embed = discord.Embed(title="🏁 생존자 탈출 레이스", description=description or "참가를 원하는 사람만 **참가** 버튼을 누르세요. 방장이 인원을 확인한 뒤 시작합니다.", color=discord.Color.orange())
         embed.add_field(name="🎮 10초 설명", value="참가할 사람만 🏃 버튼을 누르고, 최소 2명이 모이면 방장이 🚦 버튼으로 출발합니다. 시작 전 취소는 전액 환불됩니다.", inline=False)
         embed.add_field(name="참가비", value=f"{self.entry_fee:,}칩", inline=True)
-        embed.add_field(name="참가 인원", value=f"{len(self.participants)}/8명", inline=True)
-        embed.add_field(name="예상 우승 상금", value=f"{int(self.entry_fee * len(self.participants) * 0.9):,}칩", inline=True)
+        total_players = len(self.participants) + (1 if self.bot_invited else 0)
+        embed.add_field(name="참가 인원", value=f"{total_players}/8명", inline=True)
+        embed.add_field(name="예상 우승 상금", value=f"{int(self.entry_fee * total_players * 0.9):,}칩", inline=True)
         embed.add_field(name="참가자", value="\n".join(lines) if lines else "아직 없음", inline=False)
-        embed.set_footer(text=f"방장: {self.host.display_name} · 최소 2명 · 시작 전 취소 시 전액 환불")
+        embed.set_footer(text=f"방장: {self.host.display_name} · 사람이 부족하면 🤖 아바돈 초대 · 시작 전 취소 시 전액 환불")
         return embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -498,7 +503,8 @@ class SurvivorRaceView(discord.ui.View):
             if uid in self.participants:
                 await interaction.response.send_message("이미 참가했습니다.", ephemeral=True)
                 return
-            if len(self.participants) >= 8:
+            total_players = len(self.participants) + (1 if self.bot_invited else 0)
+            if total_players >= 8:
                 await interaction.response.send_message("참가 인원이 가득 찼습니다.", ephemeral=True)
                 return
             user = self.get_user(uid)
@@ -529,6 +535,25 @@ class SurvivorRaceView(discord.ui.View):
             self.save_data()
             await interaction.response.edit_message(embed=self.embed(f"↩️ {interaction.user.mention} 참가 취소 · 전액 환불"), view=self)
 
+    @discord.ui.button(label="아바돈 초대", emoji="🤖", style=discord.ButtonStyle.secondary)
+    async def invite_abaddon(self, interaction: discord.Interaction, button: discord.ui.Button):
+        async with self.lock:
+            if int(interaction.user.id) != int(self.host.id):
+                await interaction.response.send_message("방장만 아바돈을 초대할 수 있습니다.", ephemeral=True)
+                return
+            if self.started or self.done:
+                await interaction.response.send_message("이미 시작되었거나 종료된 레이스입니다.", ephemeral=True)
+                return
+            if self.bot_invited:
+                await interaction.response.send_message("아바돈이 이미 참가 중입니다. 🤖", ephemeral=True)
+                return
+            if len(self.participants) >= 8:
+                await interaction.response.send_message("참가 인원이 가득 찼습니다.", ephemeral=True)
+                return
+            self.bot_invited = True
+            button.disabled = True
+            await interaction.response.edit_message(embed=self.embed("🤖 **아바돈이 레이스에 참가했습니다!**"), view=self)
+
     @discord.ui.button(label="인원 확정·시작", emoji="🚦", style=discord.ButtonStyle.primary)
     async def start_race(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self.lock:
@@ -538,8 +563,9 @@ class SurvivorRaceView(discord.ui.View):
             if self.started or self.done:
                 await interaction.response.send_message("이미 처리된 레이스입니다.", ephemeral=True)
                 return
-            if len(self.participants) < 2:
-                await interaction.response.send_message("최소 2명이 참가 버튼을 눌러야 합니다.", ephemeral=True)
+            total_players = len(self.participants) + (1 if self.bot_invited else 0)
+            if total_players < 2:
+                await interaction.response.send_message("최소 2명이 필요합니다. 혼자라면 `아바돈 초대`를 눌러주세요.", ephemeral=True)
                 return
             self.started = True
             for child in self.children:
@@ -570,6 +596,8 @@ class SurvivorRaceView(discord.ui.View):
 
     async def _run(self) -> None:
         players = list(self.participants.items())
+        if self.bot_invited:
+            players.append((0, SimpleNamespace(display_name="아바돈", mention="🤖 아바돈")))
         positions = {uid: 0 for uid, _ in players}
         events = ["⚡ 가속", "🕳️ 잔해 회피", "💨 질주", "🧟 감염체 추격", "🛡️ 방어 돌파", "🔥 위험 지대"]
         finish = 12
@@ -597,10 +625,10 @@ class SurvivorRaceView(discord.ui.View):
         top = max(positions.values())
         candidates = [uid for uid, pos in positions.items() if pos == top]
         winner_id = random.choice(candidates)
-        winner_member = self.participants[winner_id]
+        winner_member = next(member for uid, member in players if uid == winner_id)
         pot = self.entry_fee * len(players)
         payout = int(pot * 0.9)
-        winner_user = self.get_user(winner_id)
+        winner_user = self.get_user(winner_id) if winner_id != 0 else None
         if winner_user:
             add_casino_chips(winner_user, payout)
         self.save_data()
@@ -609,8 +637,12 @@ class SurvivorRaceView(discord.ui.View):
         self.on_close()
         result_lines = []
         for uid, member in players:
-            if uid == winner_id:
+            if uid == winner_id and uid == 0:
+                result_lines.append("🤖 아바돈: 레이스 승리 · 상금은 생존 구역 운영금으로 회수")
+            elif uid == winner_id:
                 result_lines.append(f"🏆 {member.display_name}: +{payout - self.entry_fee:,}칩 순이익")
+            elif uid == 0:
+                result_lines.append("🤖 아바돈: AI 참가")
             else:
                 result_lines.append(f"💀 {member.display_name}: -{self.entry_fee:,}칩")
         embed = discord.Embed(title="🏆 생존자 레이스 종료", description=f"우승자 {winner_member.mention}\n\n" + "\n".join(result_lines), color=discord.Color.gold())
@@ -773,7 +805,8 @@ def register_v640_interactive_arcade(
         embed.add_field(name="💣 위험·현금화", value="`!지뢰찾기 5 100000` · `!괴질탈출 100000`", inline=False)
         embed.add_field(name="📊 실시간", value="`!선물거래 100000 5` · `!비상주파수 100000`", inline=False)
         embed.add_field(name="⚡ 개인 순발력", value="`!반응속도 50000` · `!기억회로 50000`", inline=False)
-        embed.add_field(name="🏁 서버 참가형", value="`!생존자레이스 100000` — 참가 버튼 → 방장 인원 확정 → 시작", inline=False)
+        embed.add_field(name="🏁 서버 참가형", value="`!생존자레이스 100000` — 사람이 부족하면 **🤖 아바돈 초대**", inline=False)
+        embed.add_field(name="🤖 혼자 플레이", value="`!아바돈게임` · `!아바돈초대 포커 100000` — 1:1 미니게임 7종", inline=False)
         embed.add_field(name="☠️ 고난도", value="`!돌연변이경주` · `!오염문` · `!비상보급상자` · `!금고개설`", inline=False)
         await ctx.send(embed=embed)
 
