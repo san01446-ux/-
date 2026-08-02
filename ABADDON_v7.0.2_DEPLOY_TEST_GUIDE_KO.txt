@@ -1,0 +1,25 @@
+ABADDON v7.0.2 Render 배포·검증 가이드
+
+1. Render Worker/Service의 기존 코드를 백업합니다.
+2. ABADDON_BOT_v7.0.2_STABILITY_PATCH.zip을 루트에 배포합니다.
+3. 기존 환경 변수 DATA_FILE을 유지합니다. 권장값: /var/data/survival_data.json
+4. 선택 환경 변수:
+   DATA_BACKUP_DIR=/var/data/backups
+   BACKUP_RETENTION=30
+   AUTO_BACKUP_EVERY_SAVES=50
+5. Persistent Disk가 /var/data에 연결되어 있는지 확인합니다.
+6. 재배포 후 로그에 로그인 완료가 표시되는지 확인합니다.
+7. 관리자 계정으로 다음 순서대로 실행합니다.
+   !시스템점검
+   !백업검증
+   !백업생성
+   !백업목록
+   !운영통계
+8. 일반 계정으로 !처음, !게임, !정보, !월드보스를 확인합니다.
+9. 같은 계정에서 보상/구매 명령을 빠르게 연속 실행해 두 번째 요청이 순차 처리되는지 확인합니다.
+10. 홈페이지 ZIP을 루트에 업로드하고 Ctrl+F5 후 v7.0.2 표기와 새 안정화 섹션을 확인합니다.
+
+주의
+- !복구미리보기는 비교만 하며 실제 파일을 바꾸지 않습니다.
+- 실제 복구는 Render 서비스를 중지한 뒤 정상 백업을 DATA_FILE 위치로 교체하고 재시작하세요.
+- 실서버 배포 전 스테이징에서 월드보스 보상과 주요 경제 명령을 확인하는 것을 권장합니다.

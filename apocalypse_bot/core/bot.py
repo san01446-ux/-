@@ -9,7 +9,8 @@ import shutil
 import threading
 import difflib
 import uuid
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from apocalypse_bot.game_data.jobs import JOBS
 from apocalypse_bot.commands.conditions import (
@@ -42,20 +43,119 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 DATA_FILE = os.getenv("DATA_FILE", "/var/data/survival_data.json")
+DATA_BACKUP_DIR = os.getenv("DATA_BACKUP_DIR", os.path.join(os.path.dirname(DATA_FILE) or ".", "backups"))
+BACKUP_RETENTION = max(5, int(os.getenv("BACKUP_RETENTION", "30") or 30))
+AUTO_BACKUP_EVERY_SAVES = max(10, int(os.getenv("AUTO_BACKUP_EVERY_SAVES", "50") or 50))
 CORRECT_PASSWORD = "생존자"
 MAX_MESSAGE_LENGTH = 1900
+KST = timezone(timedelta(hours=9))
+_LOAD_RECOVERY_STATUS = {"source": "new", "recovered": False, "error": "", "loaded_at": ""}
 
 # =========================================================
 # 데이터 로드 / 저장 / 마이그레이션
 # =========================================================
+def _safe_backup_reason(value):
+    cleaned = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in str(value or "auto"))
+    return cleaned[:32] or "auto"
+
+
+def validate_data_snapshot(path):
+    """JSON 데이터 스냅샷을 읽어 구조와 기본 통계를 반환합니다."""
+    result = {
+        "path": str(path), "exists": False, "valid": False, "size": 0,
+        "users": 0, "world_keys": 0, "modified_at": "", "error": "",
+    }
+    try:
+        if not os.path.isfile(path):
+            result["error"] = "파일 없음"
+            return result
+        stat = os.stat(path)
+        result["exists"] = True
+        result["size"] = stat.st_size
+        result["modified_at"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if not isinstance(payload, dict):
+            raise ValueError("루트가 객체가 아닙니다.")
+        if "users" not in payload:
+            legacy_users = {k: v for k, v in payload.items() if str(k).isdigit() and isinstance(v, dict)}
+            payload = {"users": legacy_users, "world": {}}
+        users = payload.get("users")
+        world = payload.get("world")
+        if not isinstance(users, dict) or not isinstance(world, dict):
+            raise ValueError("users/world 구조가 올바르지 않습니다.")
+        result.update(valid=True, users=len(users), world_keys=len(world))
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"[:300]
+    return result
+
+
+def list_data_backups():
+    try:
+        os.makedirs(DATA_BACKUP_DIR, exist_ok=True)
+    except OSError:
+        return []
+    rows = []
+    for name in os.listdir(DATA_BACKUP_DIR):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(DATA_BACKUP_DIR, name)
+        if not os.path.isfile(path):
+            continue
+        state = validate_data_snapshot(path)
+        state["name"] = name
+        rows.append(state)
+    rows.sort(key=lambda row: row.get("modified_at", ""), reverse=True)
+    return rows
+
+
+def create_data_backup(reason="manual"):
+    """현재 주 데이터를 검증한 뒤 타임스탬프 백업으로 보존합니다."""
+    current = validate_data_snapshot(DATA_FILE)
+    if not current.get("valid"):
+        raise ValueError(f"주 데이터 검증 실패: {current.get('error') or '알 수 없음'}")
+    os.makedirs(DATA_BACKUP_DIR, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"survival_data_{stamp}_{_safe_backup_reason(reason)}.json"
+    target = os.path.join(DATA_BACKUP_DIR, filename)
+    temp = f"{target}.tmp"
+    try:
+        shutil.copy2(DATA_FILE, temp)
+        checked = validate_data_snapshot(temp)
+        if not checked.get("valid"):
+            raise ValueError(f"백업 검증 실패: {checked.get('error')}")
+        os.replace(temp, target)
+    finally:
+        if os.path.exists(temp):
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
+    rows = list_data_backups()
+    for old in rows[BACKUP_RETENTION:]:
+        try:
+            os.remove(old["path"])
+        except OSError:
+            pass
+    result = validate_data_snapshot(target)
+    result["name"] = filename
+    result["reason"] = str(reason)
+    return result
+
+
 def load_data():
-    """주 데이터가 손상되면 최근 정상 백업(.bak)을 우선 복구합니다."""
-    candidates = [DATA_FILE, f"{DATA_FILE}.bak"]
+    """주 데이터가 손상되면 .bak 및 최근 정상 스냅샷까지 순서대로 복구합니다."""
+    global _LOAD_RECOVERY_STATUS
+    backups = [row["path"] for row in list_data_backups() if row.get("valid")]
+    candidates = [DATA_FILE, f"{DATA_FILE}.bak", *backups]
     raw = None
     loaded_from = ""
+    errors = []
+    seen = set()
     for candidate in candidates:
-        if not os.path.exists(candidate):
+        if candidate in seen or not os.path.exists(candidate):
             continue
+        seen.add(candidate)
         try:
             with open(candidate, "r", encoding="utf-8") as f:
                 value = json.load(f)
@@ -63,20 +163,25 @@ def load_data():
                 raw = value
                 loaded_from = candidate
                 break
+            errors.append(f"{candidate}: 루트 형식 오류")
         except (json.JSONDecodeError, OSError, TypeError) as exc:
-            print(f"[데이터 로드 경고] {candidate}: {type(exc).__name__}: {exc}", flush=True)
+            line = f"{candidate}: {type(exc).__name__}: {exc}"
+            errors.append(line)
+            print(f"[데이터 로드 경고] {line}", flush=True)
 
+    _LOAD_RECOVERY_STATUS = {
+        "source": loaded_from or "new",
+        "recovered": bool(loaded_from and loaded_from != DATA_FILE),
+        "error": " | ".join(errors[-3:])[:600],
+        "loaded_at": datetime.now().isoformat(),
+    }
     if raw is None:
         return {"users": {}, "world": {}}
-    if loaded_from.endswith(".bak"):
-        print(f"[데이터 자동 복구] 주 파일 대신 백업을 불러왔습니다: {loaded_from}", flush=True)
+    if loaded_from != DATA_FILE:
+        print(f"[데이터 자동 복구] 정상 스냅샷을 불러왔습니다: {loaded_from}", flush=True)
 
-    # 구버전 데이터는 최상위에 유저 ID가 바로 존재함
     if "users" not in raw:
-        old_users = {
-            k: v for k, v in raw.items()
-            if str(k).isdigit() and isinstance(v, dict)
-        }
+        old_users = {k: v for k, v in raw.items() if str(k).isdigit() and isinstance(v, dict)}
         return {"users": old_users, "world": {}}
 
     raw.setdefault("users", {})
@@ -91,6 +196,9 @@ world_data = data["world"]
 
 _SAVE_LOCK = threading.Lock()
 _SAVE_COUNT = 0
+_LAST_SAVE_AT = ""
+_LAST_BACKUP_AT = ""
+_LAST_SAVE_ERROR = ""
 
 
 def save_data():
@@ -99,7 +207,7 @@ def save_data():
     단일 이벤트 루프에서도 여러 명령이 연달아 저장할 수 있으므로 임시 파일을
     완전히 기록·검증한 뒤 교체합니다. 기존 정상 파일은 .bak으로 한 단계 보존합니다.
     """
-    global _SAVE_COUNT
+    global _SAVE_COUNT, _LAST_SAVE_AT, _LAST_BACKUP_AT, _LAST_SAVE_ERROR
     directory = os.path.dirname(DATA_FILE)
     if directory:
         os.makedirs(directory, exist_ok=True)
@@ -125,6 +233,17 @@ def save_data():
                     print(f"[데이터 백업 경고] {type(backup_exc).__name__}: {backup_exc}", flush=True)
             os.replace(temp_file, DATA_FILE)
             _SAVE_COUNT += 1
+            _LAST_SAVE_AT = datetime.now().isoformat()
+            _LAST_SAVE_ERROR = ""
+            if _SAVE_COUNT % AUTO_BACKUP_EVERY_SAVES == 0:
+                try:
+                    snapshot = create_data_backup("auto")
+                    _LAST_BACKUP_AT = snapshot.get("modified_at", _LAST_SAVE_AT)
+                except Exception as backup_exc:
+                    print(f"[자동 스냅샷 경고] {type(backup_exc).__name__}: {backup_exc}", flush=True)
+        except Exception as save_exc:
+            _LAST_SAVE_ERROR = f"{type(save_exc).__name__}: {save_exc}"[:500]
+            raise
         finally:
             if os.path.exists(temp_file):
                 try:
@@ -1335,7 +1454,7 @@ SEASON_REWARDS = {
 
 
 def current_week_key():
-    year, week, _ = datetime.now().isocalendar()
+    year, week, _ = datetime.now(timezone.utc).astimezone(KST).isocalendar()
     return f"{year}-W{week:02d}"
 
 
@@ -1364,7 +1483,7 @@ def progress_weekly(u, quest_type, amount=1):
 
 
 def ensure_season_pass(u):
-    season = datetime.now().strftime("%Y-%m")
+    season = datetime.now(timezone.utc).astimezone(KST).strftime("%Y-%m")
     sp = u["season_pass"]
     if sp.get("season") != season:
         u["season_pass"] = {
@@ -1391,7 +1510,7 @@ QUEST_TYPES = [
 
 
 def ensure_daily_quest(u):
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).astimezone(KST).strftime("%Y-%m-%d")
     q = u["daily_quest"]
 
     if q.get("date") == today:
@@ -1506,11 +1625,65 @@ def get_server_boss(guild_id):
 
 
 # =========================================================
+# V7.0.2 명령 트랜잭션 잠금 / 운영 계측
+# =========================================================
+class ConcurrentOperation(commands.CheckFailure):
+    pass
+
+
+_COMMAND_LOCKS = {}
+
+
+def _release_command_lock(ctx):
+    lock = getattr(ctx, "_abaddon_user_lock", None)
+    if lock is not None and lock.locked():
+        lock.release()
+    setattr(ctx, "_abaddon_user_lock", None)
+
+
+@bot.before_invoke
+async def _v702_before_command(ctx):
+    user_id = str(getattr(ctx.author, "id", "0"))
+    lock = _COMMAND_LOCKS.setdefault(user_id, asyncio.Lock())
+    try:
+        await asyncio.wait_for(lock.acquire(), timeout=4.0)
+    except asyncio.TimeoutError as exc:
+        raise ConcurrentOperation("이전 명령 처리 중") from exc
+    ctx._abaddon_user_lock = lock
+    ctx._abaddon_started_monotonic = time.monotonic()
+    recorder = getattr(bot, "v702_record_command_start", None)
+    if callable(recorder):
+        recorder(ctx)
+
+
+@bot.after_invoke
+async def _v702_after_command(ctx):
+    try:
+        if not bool(getattr(ctx, "command_failed", False)):
+            recorder = getattr(bot, "v702_record_command_success", None)
+            if callable(recorder):
+                recorder(ctx, max(0.0, time.monotonic() - getattr(ctx, "_abaddon_started_monotonic", time.monotonic())))
+    finally:
+        _release_command_lock(ctx)
+
+
+# =========================================================
 # 이벤트
 # =========================================================
 @bot.event
 async def on_ready():
+    global _LAST_BACKUP_AT
     print(f"로그인 완료: {bot.user} / 서버 {len(bot.guilds)}개")
+    if not getattr(bot, "_abaddon_v702_startup_checked", False):
+        bot._abaddon_v702_startup_checked = True
+        bot._abaddon_load_recovery_status = dict(_LOAD_RECOVERY_STATUS)
+        try:
+            snapshot = create_data_backup("startup")
+            _LAST_BACKUP_AT = snapshot.get("modified_at", datetime.now().isoformat())
+            bot._abaddon_startup_backup = snapshot
+        except Exception as exc:
+            bot._abaddon_startup_backup = {"valid": False, "error": f"{type(exc).__name__}: {exc}"}
+            print(f"[시작 백업 경고] {type(exc).__name__}: {exc}", flush=True)
 
     if not getattr(bot, "_abaddon_slash_synced", False):
         bot._abaddon_slash_sync_status = "syncing"
@@ -1617,6 +1790,10 @@ async def on_command_error(ctx, error):
     if ctx.command is not None and hasattr(ctx.command, "on_error"):
         return
 
+    if isinstance(error, ConcurrentOperation):
+        _release_command_lock(ctx)
+        await ctx.send("⏳ 이전 명령을 저장하고 있습니다. 잠시 뒤 다시 실행해 주세요.")
+        return
     if isinstance(error, commands.CommandNotFound):
         raw = str(getattr(ctx.message, "content", "")).lstrip("!").split(maxsplit=1)[0]
         candidates = sorted({name for name in bot.all_commands if not str(name).startswith("_")})
@@ -1646,6 +1823,10 @@ async def on_command_error(ctx, error):
 
     original = getattr(error, "original", error)
     incident_id = uuid.uuid4().hex[:8].upper()
+    recorder = getattr(bot, "v702_record_command_failure", None)
+    if callable(recorder):
+        recorder(ctx, original, incident_id, max(0.0, time.monotonic() - getattr(ctx, "_abaddon_started_monotonic", time.monotonic())))
+    _release_command_lock(ctx)
     print(
         f"[명령어 오류:{incident_id}] 명령={getattr(ctx.command, 'qualified_name', None)} "
         f"유저={getattr(ctx.author, 'id', None)} 길드={getattr(getattr(ctx, 'guild', None), 'id', None)} "
@@ -1858,6 +2039,7 @@ COMMAND_GUIDE_CATEGORIES = [
             "!서버설정", "!서버세팅 미리보기/실행/상태/취소", "!퀴즈알림설정", "!퀴즈알림상태", "!퀴즈알림해제",
             "!실시간피드상태", "!실시간피드테스트", "!실시간피드 켜기/끄기", "!실시간공지 내용",
             "!가방조회 @유저", "!식량지급 @유저 금액", "!식량회수 @유저 금액", "!월드보스리셋 보스명", "!월드보스테스트 보스명",
+            "!시스템점검", "!오류현황", "!운영통계", "!백업목록", "!백업생성", "!백업검증", "!복구미리보기 [파일명]",
             "!테스트 / !테스트 상세 — 최신 패치 읽기 전용 자체 진단"
         ],
     },
@@ -2247,7 +2429,7 @@ async def 출석(ctx):
         return
 
     u = get_user(ctx.author.id)
-    now = datetime.now()
+    now = datetime.now(timezone.utc).astimezone(KST)
     today = now.strftime("%Y-%m-%d")
 
     if u["last_attendance"] == today:
@@ -5465,8 +5647,31 @@ register_v651_server_renewal(bot, world_data, save_data)
 from apocalypse_bot.commands.v652_english_access import register_v652_english_access
 register_v652_english_access(bot, COMMAND_GUIDE_CATEGORIES)
 
-# 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
-# Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
+# V7.0.2: 다중 백업·자동 복구·명령 트랜잭션 잠금·운영 계측
+from apocalypse_bot.commands.v702_stability import register_v702_stability
+register_v702_stability(
+    bot, world_data, user_data, save_data,
+    data_file=DATA_FILE,
+    create_backup=create_data_backup,
+    list_backups=list_data_backups,
+    validate_snapshot=validate_data_snapshot,
+    runtime_state=lambda: {
+        "save_count": _SAVE_COUNT,
+        "last_save_at": _LAST_SAVE_AT,
+        "last_backup_at": _LAST_BACKUP_AT,
+        "last_save_error": _LAST_SAVE_ERROR,
+        "backup_dir": DATA_BACKUP_DIR,
+    },
+)
+
+# V7.1.0: 이모지 성장 루프·일일/주간 미션·누적 보상·장비 프리셋·월드보스 주간 랭킹
+# 신규 기능은 prefix 전용으로 추가하고 기존 퀘스트·시즌패스·영문 명령을 유지합니다.
+from apocalypse_bot.commands.v710_growth_loop import register_v710_growth_loop
+register_v710_growth_loop(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+    add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

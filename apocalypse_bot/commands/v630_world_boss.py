@@ -889,6 +889,12 @@ def register_v630_world_boss(
             )
             codex["damage"] = _safe_int(codex.get("damage"), 0, 0) + damage
             codex["attacks"] = _safe_int(codex.get("attacks"), 0, 0) + 1
+            weekly_tracker = getattr(bot, "v710_record_worldboss_damage", None)
+            if callable(weekly_tracker):
+                try:
+                    weekly_tracker(guild_id, ctx.author.id, damage)
+                except Exception as exc:
+                    print(f"[V7.1 월드보스 주간 집계 경고] {type(exc).__name__}: {exc}", flush=True)
             weapon_state = consume_weapon_durability(user, 2 if critical else 1)
         else:
             codex = None

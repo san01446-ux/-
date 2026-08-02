@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "7.0.1"
+VERSION = "7.1.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -53,6 +53,10 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("job_info", "직업 정보", "특정 직업의 능력을 확인합니다.", "직업정보", "예: 의무병", force_modal=True),
             _a("job_change", "직업 변경", "조건을 충족하면 직업을 변경합니다.", "직업변경", "예: 기술자", force_modal=True),
             _a("tutorial", "튜토리얼", "튜토리얼 진행 상태를 확인합니다.", "튜토리얼"),
+            _a("growth_board", "성장 루프 보드", "일일·주간 미션, 연속 달성, 참여 점수를 이모지 진행률로 확인합니다.", "성장보드"),
+            _a("mission_reward_v710", "성장 미션 보상", "완료한 일일·주간 성장 루프 보상을 한 번에 받습니다.", "미션보상"),
+            _a("lifetime_reward_v710", "누적 참여 보상", "누적 참여 점수 이정표 보상을 확인하고 수령합니다.", "누적보상"),
+            _a("catchup_support_v710", "신규·복귀 보급", "신규 또는 14일 이상 복귀 생존자의 따라잡기 보급을 확인합니다.", "복귀보급"),
             _a("daily_quest", "일일 퀘스트", "오늘의 임무와 진행도를 확인합니다.", "일일퀘스트"),
             _a("daily_reward", "일일 퀘스트 보상", "완료한 일일 퀘스트 보상을 받습니다.", "퀘스트보상"),
             _a("weekly_quest", "주간 퀘스트", "이번 주 임무와 진행도를 확인합니다.", "주간퀘스트"),
@@ -84,6 +88,7 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("equipment_option", "장비 옵션", "장비의 랜덤 옵션을 확인합니다.", "장비옵션", "예: 생존자 장검", force_modal=True),
             _a("reroll_option", "옵션 재설정", "장비 옵션을 다시 설정합니다.", "옵션재설정", "예: 생존자 장검", force_modal=True),
             _a("set_effect", "세트 효과", "현재 적용 가능한 세트 효과를 확인합니다.", "세트효과"),
+            _a("equipment_preset_v710", "장비 프리셋", "레이드·생활·탐색 장비 구성을 최대 3개 저장하고 적용합니다.", "장비프리셋"),
             _a("materials", "재료 보관함", "보유 제작 재료를 확인합니다.", "재료"),
             _a("craft_list", "제작 목록", "제작 가능한 아이템을 확인합니다.", "제작목록"),
             _a("craft", "아이템 제작", "아이템 이름을 입력해 제작합니다.", "제작", "예: 응급 키트", force_modal=True),
@@ -129,7 +134,9 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("worldboss_status", "현재 월드보스", "활성 보스의 HP, 페이즈, 약점과 TOP 5를 확인합니다.", "월드보스"),
             _a("worldboss_attack_v630", "월드보스 공격", "하루 10회, 45초 간격으로 공동 보스를 공격합니다.", "월드보스공격"),
             _a("worldboss_contribution", "내 기여도", "누적 피해, 현재 순위와 오늘 남은 공격을 확인합니다.", "월드보스기여도"),
-            _a("worldboss_ranking_v630", "서버 기여도 순위", "현재 전투의 누적 피해 순위를 확인합니다.", "보스랭킹"),
+            _a("worldboss_ranking_v630", "현재 전투 순위", "현재 전투의 누적 피해 순위를 확인합니다.", "보스랭킹"),
+            _a("worldboss_weekly_rank_v710", "주간 누적 랭킹", "이번 주 서버 월드보스 누적 피해와 공격 횟수를 확인합니다.", "월드보스주간랭킹"),
+            _a("worldboss_weekly_reward_v710", "지난주 랭킹 보상", "지난주 월드보스 누적 순위 보상을 수령합니다.", "월드보스주간보상"),
             _a("worldboss_reward", "보상 수령", "새 보스가 출현해도 보존되는 보상 큐에서 오래된 보상부터 수령합니다.", "월드보스보상"),
             _a("worldboss_reward_list", "미수령 보상 목록", "보상 큐에 저장된 미수령 전투를 확인합니다.", "월드보스보상목록"),
             _a("worldboss_list", "보스 6종 목록", "보스별 HP, 특성, 약점과 전용 재료를 확인합니다.", "월드보스목록"),
@@ -373,11 +380,12 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
     "survival": (
         ("basics", "🧾 기본 생존", "정보·출석·상태·튜토리얼처럼 가장 먼저 쓰는 기능입니다.", ("info", "wallet", "attendance", "attendance_reward", "support", "status", "rest", "tutorial")),
         ("jobs", "🧑‍🔧 직업", "직업을 살펴보고 선택하거나 변경합니다.", ("jobs", "job_choose", "job_info", "job_change")),
-        ("quests", "🎯 퀘스트·시즌", "일일·주간 임무, 시즌 패스, 업적과 칭호를 관리합니다.", ("daily_quest", "daily_reward", "weekly_quest", "weekly_reward", "season_pass", "season_reward", "achievements", "titles", "title_set", "ranking")),
+        ("growth_loop", "🌱 성장 루프", "오늘 할 일, 일일·주간 미션, 누적 참여와 따라잡기 보급을 관리합니다.", ("growth_board", "mission_reward_v710", "lifetime_reward_v710", "catchup_support_v710")),
+        ("quests", "🎯 기존 퀘스트·시즌", "기존 일일·주간 퀘스트, 시즌 패스, 업적과 칭호를 관리합니다.", ("daily_quest", "daily_reward", "weekly_quest", "weekly_reward", "season_pass", "season_reward", "achievements", "titles", "title_set", "ranking")),
     ),
     "equipment": (
         ("manage", "🎒 상점·보유·장착", "장비를 사고 확인하고 장착하는 기본 흐름입니다.", ("shop", "equipment_list", "buy", "inventory", "equipment", "equip", "unequip", "discard", "identify", "new_gear")),
-        ("enhance", "✨ 강화·옵션", "강화, 보호 강화, 옵션, 세트 효과와 랭킹입니다.", ("enhance", "enhance_info", "protected_enhance", "equipment_option", "reroll_option", "set_effect", "enhance_rank")),
+        ("enhance", "✨ 강화·옵션·프리셋", "강화, 보호 강화, 옵션, 세트 효과, 장비 프리셋과 랭킹입니다.", ("enhance", "enhance_info", "protected_enhance", "equipment_option", "reroll_option", "set_effect", "equipment_preset_v710", "enhance_rank")),
         ("craft", "🛠️ 제작·수리·개조", "재료 확인부터 제작, 수리, 무기 개조까지 이어집니다.", ("materials", "craft_list", "craft", "durability", "repair_weapon", "mod_list", "craft_mod", "install_mod", "economy_balance")),
     ),
     "combat": (
@@ -386,7 +394,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("invasion", "🚨 서버 침공", "서버 공동 침공 참가, 공격, 랭킹과 상점입니다.", ("invasion", "invasion_join", "invasion_attack", "invasion_rank", "invasion_shop")),
     ),
     "worldboss": (
-        ("battle", "🌋 전투·기여·보상", "현재 보스를 확인하고 공격한 뒤 기여도와 보상을 관리합니다.", ("worldboss_status", "worldboss_attack_v630", "worldboss_contribution", "worldboss_ranking_v630", "worldboss_reward", "worldboss_reward_list")),
+        ("battle", "🌋 전투·기여·보상", "현재 보스를 확인하고 공격한 뒤 전투·주간 기여도와 보상을 관리합니다.", ("worldboss_status", "worldboss_attack_v630", "worldboss_contribution", "worldboss_ranking_v630", "worldboss_weekly_rank_v710", "worldboss_weekly_reward_v710", "worldboss_reward", "worldboss_reward_list")),
         ("records", "📚 목록·도감", "보스 6종과 개인 누적 기록을 확인합니다.", ("worldboss_list", "worldboss_codex_v630")),
         ("admin", "🧪 관리자 테스트", "실전과 분리된 샌드박스 보스를 소환하고 점검합니다.", ("worldboss_spawn_admin", "worldboss_test_admin", "worldboss_test_status", "worldboss_test_attack")),
     ),
@@ -430,8 +438,8 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
 }
 
 QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
-    "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·튜토리얼·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "tutorial", "daily_quest", "shop", "inventory", "equipment", "training")),
-    "grow": ("📈 강해지고 싶어요", "장비를 갖추고 강화하며 퀘스트·시즌 보상으로 성장합니다.", ("info", "shop", "inventory", "equipment", "equip", "enhance", "daily_quest", "weekly_quest", "season_pass", "achievements")),
+    "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·성장 보드·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "tutorial", "growth_board", "catchup_support_v710", "shop", "inventory", "equipment", "training")),
+    "grow": ("📈 강해지고 싶어요", "성장 보드에서 목표를 확인하고 프리셋·강화·미션 보상으로 성장합니다.", ("growth_board", "mission_reward_v710", "info", "shop", "inventory", "equipment", "equipment_preset_v710", "equip", "enhance", "season_pass", "achievements")),
     "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "region_list", "region_explore", "raid", "worldboss_status")),
     "earn": ("🥫 식량과 자원이 필요해요", "지원금·알바·채집·굴착과 자원 시장으로 재화를 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "dig", "treasure_appraise", "resource_market")),
     "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·퀴즈 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "expedition", "exp_start", "relic", "daily_quiz")),

@@ -20,7 +20,7 @@ from discord.ext import commands
 from apocalypse_bot.commands import v433_voice_sanctuary as voice_system
 
 
-VERSION = "6.1.0"
+VERSION = "7.1.0"
 DIAGNOSTIC_LOG_LIMIT = 30
 DIAGNOSTIC_MENU_TIMEOUT = 300
 RECENT_LOGS: Deque[str] = deque(maxlen=DIAGNOSTIC_LOG_LIMIT)

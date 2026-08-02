@@ -13,9 +13,9 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "6.5.4"
+VERSION = "7.1.0"
 KST = timezone(timedelta(hours=9))
-PATCH_DATE = "2026-08-02"
+PATCH_DATE = "2026-08-03"
 
 THEMES: Dict[str, Dict[str, Any]] = {
     # 아포칼립스 / 생존
@@ -66,10 +66,10 @@ STABILITY_GUIDE = {
     "id": "stability_theme",
     "emoji": "🧰",
     "title": "안정화 / 서버 테마",
-    "hint": "통합 점검, 오늘 할 일, 서버 브리핑, 28종 서버 리뉴얼·카드게임",
+    "hint": "통합 점검, 이모지 성장 보드, 서버 브리핑, 28종 서버 리뉴얼·카드게임",
     "commands": [
         "!안정화상태 — 현재 버전·데이터·명령어·텍스트 우선 정책 확인",
-        "!오늘할일 — 출석·운세·퀴즈·생활·전투 추천 체크리스트",
+        "!오늘할일 — 일일·주간 성장 진행률과 다음 추천 행동을 이모지로 확인",
         "!서버브리핑 — 날씨·위험구역·보급선·기지방어를 한 화면에 요약",
         "!서버테마 [전체/아포칼립스/깔끔고딕/화사자연/모던판타지] — 28종 테마 확인",
         "!서버테마미리보기 [테마명] — 텍스트형 테마를 적용 전 확인",
@@ -77,6 +77,8 @@ STABILITY_GUIDE = {
         "!서버리뉴얼 — 28종 테마·채널 구조·알림·백업·복구 통합 드롭다운",
         "!서버리뉴얼 테마목록 — 최신 테마와 채널 구조 매핑 확인",
         "!데이터백업 — 관리자가 현재 생존 데이터를 수동 백업",
+        "!시스템점검 / !오류현황 / !운영통계 — v7.0.2 운영 상태와 사건 기록 확인",
+        "!백업목록 / !백업생성 / !백업검증 / !복구미리보기 — 검증된 데이터 보호 도구",
         "!테스트 상세 — 명령어·가이드·데이터·이미지 정책 통합 진단",
         "!봇소개 — ABADDON 핵심 기능과 빠른 시작 확인",
     ],
@@ -99,6 +101,10 @@ EXPECTED_RECENT_COMMANDS: Tuple[str, ...] = (
     "안정화상태", "오늘할일", "서버브리핑", "서버테마", "서버테마미리보기", "서버테마설정", "데이터백업",
     # v6.5.1
     "카드게임", "포커", "원카드", "조커잡기", "서버리뉴얼", "봇소개",
+    # v7.0.2
+    "시스템점검", "오류현황", "운영통계", "백업목록", "백업생성", "백업검증", "복구미리보기",
+    # v7.1.0
+    "성장보드", "미션보상", "누적보상", "장비프리셋", "월드보스주간랭킹", "월드보스주간보상", "복귀보급",
 )
 
 VISUAL_MODULES: Tuple[str, ...] = (
@@ -276,15 +282,15 @@ def register_v641_stabilization(
     async def stabilization_status(ctx: commands.Context) -> None:
         key, theme = _theme(world_data, _guild_id(ctx))
         embed = discord.Embed(
-            title="🌍 ABADDON v6.5.3 서버 리뉴얼·카드게임 상태",
-            description="카지노 이미지만 비활성화하고 생활·장비·보물·제작·펫·기지·갈갈이·월드보스 이미지는 유지합니다.",
+            title="🌱 ABADDON v7.1.0 성장 루프·운영 상태",
+            description="일일·주간 성장 루프와 운영 안정화를 적용하고, 진행 상태는 이모지 게이지로 명확하게 표시합니다.",
             color=int(theme["color"]),
         )
         embed.add_field(name="서버 테마", value=f"{theme['emoji']} **{theme['title']}** (`{key}`)", inline=True)
         embed.add_field(name="명령어", value=f"등록 **{len(list(bot.walk_commands()))}개** · 가이드 **{len(guide)}/25**", inline=True)
         embed.add_field(name="데이터", value=f"생존자 **{len(user_data):,}명** · 원자적 저장/백업 보호", inline=True)
         embed.add_field(name="빠른 진단", value="`!테스트 상세`", inline=False)
-        embed.set_footer(text="이미지 정책: 카지노만 미사용 · 진행 상태는 이모지 바와 퍼센트로 보강")
+        embed.set_footer(text="v7.1.0 정책: 신규 이미지는 추가하지 않고 이모지·게이지·버튼형 안내를 우선")
         await ctx.send(embed=embed)
 
     @bot.command(name="봇소개", aliases=["아바돈소개", "봇정보"])
@@ -302,7 +308,7 @@ def register_v641_stabilization(
         embed.add_field(name="🧰 성장과 수집", value="장비 강화·개조 · 보물 감정 · 펫 성장·진화 · 기지 5단계", inline=False)
         embed.add_field(name="🎮 커뮤니티 콘텐츠", value="생활·거래·미니게임·포커·원카드·조커잡기 · 28종 서버 테마", inline=False)
         embed.add_field(name="🛡️ 안전 설계", value="원자적 저장·백업·복구 · 정산 보호 · 오류 사건 번호 · 읽기 전용 `!테스트 상세`", inline=False)
-        embed.add_field(name="🚀 빠른 시작", value="`!명령어` → `!시작` → `!오늘할일` → `!스토리` 또는 `!던전 약함`", inline=False)
+        embed.add_field(name="🚀 빠른 시작", value="`!명령어` → `!처음` → `!오늘할일` → `!성장보드` → `!미션보상`", inline=False)
         embed.set_footer(text=f"ABADDON v{VERSION} · 패치 {PATCH_DATE}")
         await ctx.send(embed=embed)
 
@@ -504,6 +510,12 @@ def register_v641_stabilization(
             missing_guide = [name for name in EXPECTED_RECENT_COMMANDS if name not in guide_tokens]
             checks.append(("!명령어 최신화", not missing_guide, "최근 기능 전부 노출" if not missing_guide else ", ".join(missing_guide[:20])))
 
+            growth_commands = ("성장보드", "미션보상", "누적보상", "장비프리셋", "월드보스주간랭킹", "월드보스주간보상", "복귀보급")
+            missing_growth = [name for name in growth_commands if bot.get_command(name) is None]
+            growth_root = world_data.get("growth_loop_v710", {})
+            growth_ok = not missing_growth and callable(getattr(bot, "v710_record_worldboss_damage", None)) and isinstance(growth_root, dict)
+            checks.append(("v7.1 성장 루프", growth_ok, "명령 7종·월드보스 훅·저장 루트 정상" if growth_ok else f"누락: {', '.join(missing_growth) or '월드보스 훅/저장 루트'}"))
+
             project_root = Path(__file__).resolve().parents[2]
             py_files = sorted(project_root.rglob("*.py"))
             compile_errors: List[str] = []
@@ -596,7 +608,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v6.5.4 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v7.1.0 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -610,31 +622,29 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v6.5.4 한국어·영어 도움말 분리, 명령어 별칭, 28종 서버 테마와 주요 시스템을 읽기 전용으로 검사합니다."
+        previous_test.help = "v7.1.0 성장 루프, v7.0.2 데이터 보호, 한국어·영어 도움말 분리와 주요 시스템을 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🖼️ ABADDON v6.5.3 — 활동 이미지 갤러리 패치",
-                description="낚시·채집·상인·코인 탐색에 행동별 전용 이미지 갤러리를 추가하고, 모든 이미지를 Discord 안전 비율로 정리했습니다. 기존 한국어·영어 명령어와 게임 규칙은 유지합니다.",
-                color=discord.Color.dark_teal(),
+                title="🌱 ABADDON v7.1.0 — 성장 루프 패치",
+                description="출석·퀘스트·생활·전투·성장·월드보스를 하나의 작전 보드로 연결했습니다. 신규 이미지는 추가하지 않고 표준 이모지와 게이지로 진행·완료·보상 상태를 표시합니다.",
+                color=0x63C174,
             )
-            embed.add_field(name="🃏 카드게임 오류 수정", value="포커 선택지의 비표준 카드 문자 `🂡`를 Discord가 허용하는 `♠️`로 교체 · `!카드게임` 400 Invalid Form Body 수정", inline=False)
-            embed.add_field(name="🎨 서버리뉴얼 이모지 안전화", value="깔끔·고딕 분류의 텍스트 기호 `♜`를 표준 이모지 `🏰`로 교체 · 28종 테마와 2단 드롭다운 유지", inline=False)
-            embed.add_field(name="🃏 카드게임", value="포커 2~6명 · 원카드 2~6명 · 조커잡기 2~8명 · 참가 버튼·비공개 패·턴제 선택·시간 초과 환불", inline=False)
-            embed.add_field(name="🛠️ 서버 설정 통합", value="서버 브리핑·이벤트 채널·개인 알림·백업·복구·429 상태를 `!서버리뉴얼` 한 화면에서 관리", inline=False)
-            embed.add_field(name="🌐 홈페이지 품질", value="기지 방어·변동 자원 시장·강화 5단계 이미지를 새 경로로 교체 · CSS/JS/이미지 캐시 우회 · 기지 단계 재보정", inline=False)
-            embed.add_field(name="🖼️ 활동 이미지 확장", value="낚시·채집·상인·코인 탐색 각 10장 · 최근 3장 반복 방지 랜덤 선택 · 행동별 폴더 완전 분리", inline=False)
-            embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 홈페이지·`!명령어`·`!패치노트` 동기화", inline=False)
-            embed.add_field(name="💾 안전 정산", value="카드게임 참가비는 시작 시 차감 · 모집 취소는 미차감 · 진행 시간 초과는 전원 환불 · 재시작 잔존 예약 자동 복구", inline=False)
-            embed.add_field(name="📚 명령어 드롭다운", value="카드게임/파티 최상위 카테고리 추가 · 안정화/서버 테마에 `!서버리뉴얼` 최신 명령 반영", inline=False)
-            embed.set_footer(text=f"최신 버전 v6.5.3 · {PATCH_DATE} · 카지노만 이미지 미사용")
+            embed.add_field(name="📋 통합 작전 보드", value="`!오늘할일` · `!성장보드`에서 일일 6개·주간 6개 목표, 다음 추천 행동, 연속 완주와 누적 참여를 확인", inline=False)
+            embed.add_field(name="🎁 미션 정산", value="일일 6개 중 5개 완주 · `!미션보상`에서 일일 보상과 주간 2/4/6단계 보상을 통합 수령", inline=False)
+            embed.add_field(name="🏅 장기 성장", value="`!누적보상` 참여 이정표 · 성장 인장 · 신규/14일 복귀 생존자 `!복귀보급`", inline=False)
+            embed.add_field(name="🎒 장비 프리셋", value="레이드·생활·탐색용 현재 장비 구성을 최대 3개 저장·적용·삭제", inline=False)
+            embed.add_field(name="🌋 월드보스 주간전", value="`!월드보스주간랭킹` · `!월드보스주간보상`으로 주차별 피해·공격 횟수와 지난주 보상 정산", inline=False)
+            embed.add_field(name="🛡️ 기반 유지", value="v7.0.2 검증 저장·자동 복구·명령 잠금과 v7.0.1 초보자 UX, v7.0.0 월드보스 기믹을 그대로 유지", inline=False)
+            embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 봇·홈페이지·명령어 검색 동기화", inline=False)
+            embed.set_footer(text=f"최신 버전 v7.1.0 · {PATCH_DATE} · 신규 이미지 0장")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v6.5.3 활동별 랜덤 이미지 갤러리와 메시지 문구 정리 내용을 확인합니다."
+        patch.help = "ABADDON v7.1.0 성장 루프와 이모지 진행 상황 패치 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION
