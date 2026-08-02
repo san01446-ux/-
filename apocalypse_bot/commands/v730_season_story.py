@@ -5,7 +5,11 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 import discord
 from discord.ext import commands
 
-VERSION = "7.3.0"
+from apocalypse_bot.commands.story_progression import (
+    can_access_season, is_story_admin, locked_text, season_display_status, season_state,
+)
+
+VERSION = "7.5.0"
 START_NODE = "t1_red_signal"
 
 
@@ -421,6 +425,13 @@ def register_v730_season_story(
                 story_category.setdefault("commands", []).append(row)
                 existing += "\n" + row
 
+    async def require_season4_access(ctx: commands.Context, user: Dict[str, Any]) -> bool:
+        allowed, _reason = await can_access_season(ctx, bot, user, 4)
+        if allowed:
+            return True
+        await ctx.send(locked_text(4))
+        return False
+
     async def render_to(send: Callable[..., Any], owner_id: int, user: Dict[str, Any]) -> None:
         state = ensure_v730(user)["season4"]
         if not state["started"]:
@@ -428,7 +439,7 @@ def register_v730_season_story(
                 title="🚂 스토리 시즌 4 · 황혼의 종착역",
                 description=(
                     "도시 밖으로 이어지는 마지막 열차 ‘황혼선 04’에 탑승하는 선택형 캠페인입니다.\n"
-                    "이전 시즌의 완료 기록은 계승 문구에 반영되지만, 시즌 4는 누구나 시작할 수 있습니다."
+                    "시즌 3 엔딩을 1회 완료하면 해금됩니다. 서버 관리자와 봇 소유자는 점검을 위해 잠금을 우회할 수 있습니다."
                 ),
                 colour=discord.Colour.from_rgb(212, 85, 67),
             )
@@ -556,13 +567,18 @@ def register_v730_season_story(
     async def season4(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
             return
-        await render_to(ctx.send, ctx.author.id, get_user(ctx.author.id))
+        user = get_user(ctx.author.id)
+        if not await require_season4_access(ctx, user):
+            return
+        await render_to(ctx.send, ctx.author.id, user)
 
     @season4.command(name="시작")
     async def season4_start(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season4_access(ctx, user):
+            return
         state = ensure_v730(user)["season4"]
         if state["completed"]:
             await ctx.send("🏁 이미 완료했습니다. `!시즌4 재시작`으로 다른 엔딩을 찾아보세요.")
@@ -581,13 +597,19 @@ def register_v730_season_story(
     async def season4_choose(ctx: commands.Context, 번호: int) -> None:
         if not await check_registered(ctx):
             return
+        user = get_user(ctx.author.id)
+        if not await require_season4_access(ctx, user):
+            return
         await apply_choice(ctx.author.id, 번호, ctx=ctx)
 
     @season4.command(name="기록")
     async def season4_history(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
             return
-        state = ensure_v730(get_user(ctx.author.id))["season4"]
+        user = get_user(ctx.author.id)
+        if not await require_season4_access(ctx, user):
+            return
+        state = ensure_v730(user)["season4"]
         if not state["history"]:
             await ctx.send("📜 아직 선택 기록이 없습니다. `!시즌4 시작`으로 시작하세요.")
             return
@@ -602,6 +624,8 @@ def register_v730_season_story(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season4_access(ctx, user):
+            return
         state = ensure_v730(user)["season4"]
         if not state["started"]:
             await ctx.send("먼저 `!시즌4 시작`을 사용해주세요.")
@@ -622,26 +646,45 @@ def register_v730_season_story(
         await ctx.send("🔄 시즌 4를 다시 시작합니다. 엔딩 수집과 이미 받은 선택 보상은 유지됩니다.")
         await render_to(ctx.send, ctx.author.id, user)
 
-    @bot.command(name="시즌여정", aliases=["스토리여정", "시즌현황"], help="스토리 시즌 1~4 완료와 엔딩 수집 현황을 확인합니다.")
+    @bot.command(name="시즌여정", aliases=["스토리여정", "시즌현황", "스토리해금"], help="스토리 시즌 1~4 완료·잠금·엔딩 수집 현황을 확인합니다.")
     async def season_journey(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
-        s1 = user.get("story") if isinstance(user.get("story"), dict) else {}
-        s2 = ((user.get("v430") or {}).get("season2") if isinstance(user.get("v430"), dict) else {}) or {}
-        s3 = ((user.get("v600") or {}).get("season3") if isinstance(user.get("v600"), dict) else {}) or {}
-        s4 = ensure_v730(user)["season4"]
-        def row(emoji: str, name: str, state: Mapping[str, Any], total: int) -> str:
-            mark = "✅" if state.get("completed") else ("🟨" if state.get("started") else "⬜")
+        admin = await is_story_admin(ctx, bot)
+
+        def row(season: int, name: str, state: Mapping[str, Any], total: int) -> str:
+            mark = season_display_status(user, season, admin=admin)
             endings = len(state.get("endings", [])) if isinstance(state.get("endings"), list) else (1 if state.get("ending") else 0)
-            return f"{mark} {emoji} **{name}** · 엔딩 {endings}/{total}"
-        embed = discord.Embed(title="📚 아바돈 스토리 시즌 여정", colour=discord.Colour.from_rgb(212, 85, 67))
-        embed.description = "\n".join([
-            row("📡", "시즌 1 검은 주파수", s1, 3),
-            row("⚪", "시즌 2 백색 방주", s2, 4),
-            row("👑", "시즌 3 종말의 왕좌", s3, 4),
-            row("🚂", "시즌 4 황혼의 종착역", s4, 4),
-        ])
+            suffix = " · 관리자 우회 가능" if mark == "🛡️" else ""
+            return f"{mark} **시즌 {season} · {name}** · 엔딩 {endings}/{total}{suffix}"
+
+        s1 = season_state(user, 1)
+        s2 = season_state(user, 2)
+        s3 = season_state(user, 3)
+        s4 = ensure_v730(user)["season4"]
+        embed = discord.Embed(
+            title="📚 아바돈 스토리 순차 해금",
+            description="시즌을 1회 완료하면 다음 시즌이 열립니다. 기존에 시작한 후속 시즌은 진행이 보존됩니다.",
+            colour=discord.Colour.from_rgb(212, 85, 67),
+        )
+        embed.add_field(
+            name="진행",
+            value="\n".join([
+                row(1, "검은 주파수", s1, 3),
+                row(2, "백색 방주", s2, 4),
+                row(3, "종말의 왕좌", s3, 4),
+                row(4, "황혼의 종착역", s4, 4),
+            ]),
+            inline=False,
+        )
+        embed.add_field(
+            name="해금 순서",
+            value="📡 시즌 1 완료 → ⚪ 시즌 2 → 👑 시즌 3 → 🚂 시즌 4",
+            inline=False,
+        )
+        if admin:
+            embed.add_field(name="🛡️ 관리자 점검 권한", value="이 계정은 모든 시즌 잠금을 우회하여 실행할 수 있습니다.", inline=False)
         embed.set_footer(text="시즌 4 엔딩 수집 보상: !시즌유산")
         await ctx.send(embed=embed)
 
@@ -650,6 +693,8 @@ def register_v730_season_story(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season4_access(ctx, user):
+            return
         state = ensure_v730(user)["season4"]
         count = len(state["endings"])
         claims = state["legacy_claims"]

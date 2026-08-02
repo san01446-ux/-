@@ -11,7 +11,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 from apocalypse_bot.commands.v651_card_games import _card_text, _deck, _poker_score
 
-VERSION = "7.3.0"
+VERSION = "7.5.0"
 PATCH_DATE = "2026-08-03"
 MAX_AI_BET = 5_000_000
 MAX_AI_FOOD_BET = 10_000_000
@@ -83,35 +83,40 @@ def _guild_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any]
 
 def _patch_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="🚂 ABADDON v7.3.0 — 황혼의 종착역",
+        title="🏰 ABADDON v7.5.0 — 길드·기지·금고·레이드 통합",
         description=(
-            "스토리 시즌 4 ‘황혼의 종착역’과 시즌 유산 보상을 추가하고, "
-            "아바돈 1:1 대전에 카지노 칩과 식량 선택 베팅을 지원합니다."
+            "기존 길드 명령과 데이터를 삭제하지 않고 하나의 통합 구조로 확장했습니다. "
+            "공동 생존 기지, 일일·주간 임무, 이중 승인형 금고와 부위 파괴 길드 레이드를 제공합니다."
         ),
         colour=discord.Colour.from_rgb(111, 66, 193),
         timestamp=discord.utils.utcnow(),
     )
     embed.add_field(
-        name="🚂 스토리 시즌 4",
-        value="황혼의 종착역 선택형 캠페인 · 4개 엔딩 · 이전 시즌 계승 문구 · 엔딩 수집 보상",
+        name="🏚️ 공동 생존 기지",
+        value="발전기·창고·의무실·무기고 건설/강화 · 길드 전체 생산·레이드 효과",
         inline=False,
     )
     embed.add_field(
-        name="💰 아바돈 1:1 선택 베팅",
-        value="기존 칩 베팅에 식량 베팅 추가 · 무승부/시간초과 환급 · 게임별 배당 표시",
+        name="🎯 길드 임무·기여도",
+        value="일일·주간 공동 목표 · 개인 활동 조건 · 길드훈장과 식량 보상",
         inline=False,
     )
     embed.add_field(
-        name="🏺 시즌 유산",
-        value="시즌 4 엔딩 1·2·3·4종 수집 단계마다 식량·에너지코어·시즌 포인트·칭호 지급",
+        name="🏦 승인형 통합 금고",
+        value="기존 길드 기금 자동 연동 · 식량/자원 입금 · 요청자 자기 승인 차단 · 감사 기록",
         inline=False,
     )
     embed.add_field(
-        name="🛡️ 기존 기능 유지",
-        value="채널별 고정 안내·통합 환영·패치 자동 공지·v7.0.2 데이터 보호 유지",
+        name="👹 길드 레이드",
+        value="돌격·지원·의무 전술 · 장갑판/동력핵/감염낭 부위 파괴 · 주간 기여도와 중복 방지 보상",
         inline=False,
     )
-    embed.set_footer(text=f"ABADDON v{VERSION} · {PATCH_DATE} · 신규 이미지 0장")
+    embed.add_field(
+        name="🛡️ 안정화 원칙",
+        value="길드별 트랜잭션 잠금 · 데이터 자동 이관 · 치명 무결성 검사 · 실제 폐기 0건",
+        inline=False,
+    )
+    embed.set_footer(text=f"ABADDON v{VERSION} · {PATCH_DATE} · 기존 이미지 변경 0장")
     return embed
 
 
@@ -894,4 +899,4 @@ def register_v720_coop_cleanup(
     bot.v720_start_ai_game = start_ai_game  # type: ignore[attr-defined]
     bot.v720_patch_embed = _patch_embed  # type: ignore[attr-defined]
     bot._abaddon_v720_registered = True  # type: ignore[attr-defined]
-    print("[V7.3.0 STORY/WAGER] 시즌 4·선택형 AI 베팅·기존 협동 기능 등록 완료", flush=True)
+    print("[V7.5.0 GUILD/RAID] 길드·기지·금고·레이드 통합 및 기존 협동 기능 등록 완료", flush=True)

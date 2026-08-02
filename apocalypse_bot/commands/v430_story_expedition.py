@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 import discord
 from discord.ext import commands
 
+from apocalypse_bot.commands.story_progression import can_access_season, locked_text
+
 from apocalypse_bot.commands.v431_growth_balance import (
     apply_player_turn_status, ensure_expedition_growth, expire_stale_battle,
     maybe_inflict_player_status, prepare_enemy, progress_expedition_missions,
@@ -652,6 +654,13 @@ def register_v430_story_expedition(
             lines.append(f"🏷️ 칭호 획득: {title}")
         return lines
 
+    async def require_season2_access(ctx, user: dict) -> bool:
+        allowed, _reason = await can_access_season(ctx, bot, user, 2)
+        if allowed:
+            return True
+        await ctx.send(locked_text(2))
+        return False
+
     async def render_season2(ctx, user: dict) -> None:
         root = ensure_v430(user)
         season2 = root["season2"]
@@ -713,6 +722,8 @@ def register_v430_story_expedition(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season2_access(ctx, user):
+            return
         ensure_v430(user)
         await render_season2(ctx, user)
 
@@ -721,6 +732,8 @@ def register_v430_story_expedition(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season2_access(ctx, user):
+            return
         season2 = ensure_v430(user)["season2"]
         if season2["completed"]:
             await ctx.send("🏁 이미 시즌 2를 완료했습니다. `!시즌2 재시작`으로 다른 분기를 진행하세요.")
@@ -745,6 +758,8 @@ def register_v430_story_expedition(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season2_access(ctx, user):
+            return
         root = ensure_v430(user)
         season2 = root["season2"]
         if not season2["started"]:
@@ -818,6 +833,8 @@ def register_v430_story_expedition(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season2_access(ctx, user):
+            return
         season2 = ensure_v430(user)["season2"]
         if not season2["history"]:
             await ctx.send("📜 시즌 2 선택 기록이 없습니다. `!시즌2 시작`으로 시작하세요.")
@@ -840,6 +857,8 @@ def register_v430_story_expedition(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season2_access(ctx, user):
+            return
         season2 = ensure_v430(user)["season2"]
         if not season2["started"]:
             await ctx.send("⚠️ 아직 시즌 2를 시작하지 않았습니다. `!시즌2 시작`을 사용하세요.")

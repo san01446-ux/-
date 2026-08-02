@@ -11,9 +11,10 @@ import discord
 from discord.ext import commands
 
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
+from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "7.3.0"
+VERSION = "7.5.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -304,17 +305,58 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("quiz_rank", "퀴즈 랭킹", "퀴즈 정답 랭킹을 확인합니다.", "퀴즈랭킹"),
         ),
     ),
-    "social": (
-        "🤝 길드·파티·거래",
-        "길드, 파티, 거래소, 경매와 유저 간 상호작용을 사용합니다.",
+    "guild": (
+        "🏰 길드·공동 기지",
+        "기존 길드 명령과 공동 기지, 임무, 금고를 한 화면에서 관리합니다.",
         (
             _a("guild_list", "길드 목록", "서버의 길드 목록을 확인합니다.", "길드목록"),
             _a("guild_create", "길드 생성", "길드명을 입력해 생성합니다.", "길드생성", "예: 황혼원정대", force_modal=True),
-            _a("guild_join", "길드 가입", "길드명을 입력해 가입합니다.", "길드가입", "예: 황혼원정대", force_modal=True),
+            _a("guild_join", "길드 가입", "자유 가입 길드에 즉시 가입합니다.", "길드가입", "예: 황혼원정대", force_modal=True),
             _a("guild_info", "길드 정보", "현재 가입 길드 정보를 확인합니다.", "길드정보"),
-            _a("guild_donate", "길드 기부", "기부할 식량을 입력합니다.", "길드기부", "예: 1000", force_modal=True),
-            _a("guild_upgrade", "길드 강화", "길드 자원으로 길드를 강화합니다.", "길드강화"),
-            _a("guild_leave", "길드 탈퇴", "현재 길드에서 탈퇴합니다.", "길드탈퇴"),
+            _a("guild_donate", "기존 식량 기부", "기존 길드 식량 기부 명령을 사용합니다.", "길드기부", "예: 1000", force_modal=True),
+            _a("guild_upgrade", "기존 길드 강화", "기존 길드 레벨을 강화합니다.", "길드강화"),
+            _a("guild_leave", "길드 탈퇴", "마지막 멤버여도 기록은 휴면 상태로 보존합니다.", "길드탈퇴"),
+            _a("guild_dashboard", "통합 길드 관리", "조직·기지·임무·금고·레이드를 한 화면에서 확인합니다.", "길드관리"),
+            _a("guild_description", "길드 소개", "현재 길드 소개를 확인합니다.", "길드소개"),
+            _a("guild_settings", "가입 방식 설정", "자유·승인·비공개 중 하나를 설정합니다.", "길드설정", "예: 가입방식 승인", force_modal=True),
+            _a("guild_apply", "길드 가입 신청", "승인제 길드에 가입을 신청합니다.", "길드신청", "예: 황혼원정대", force_modal=True),
+            _a("guild_applications", "가입 신청 목록", "대기 중인 가입 신청을 확인합니다.", "길드신청목록"),
+            _a("guild_application_process", "가입 신청 처리", "대상과 승인/거절을 입력합니다.", "길드신청처리", "예: @생존자 승인", force_modal=True),
+            _a("guild_role", "길드 직책", "길드원을 간부 또는 일반으로 변경합니다.", "길드직책", "예: @생존자 간부", force_modal=True),
+            _a("guild_kick", "길드 추방", "길드원을 추방합니다.", "길드추방", "예: @생존자", force_modal=True),
+            _a("guild_transfer", "길드장 위임", "길드장 권한을 다른 길드원에게 넘깁니다.", "길드위임", "예: @생존자", force_modal=True),
+            _a("guild_base", "공동 기지", "발전기·창고·의무실·무기고와 공사를 확인합니다.", "길드기지"),
+            _a("guild_build", "시설 건설", "새 공동 시설을 건설합니다.", "길드건설", "예: 발전기", force_modal=True),
+            _a("guild_facility_upgrade", "시설 강화", "완성된 공동 시설을 강화합니다.", "길드시설강화", "예: 창고", force_modal=True),
+            _a("guild_base_collect", "기지 생산 수확", "발전기 생산 식량을 공동 금고로 회수합니다.", "길드기지수확"),
+            _a("guild_missions", "길드 공동 임무", "일일·주간 공동 목표를 확인합니다.", "길드임무"),
+            _a("guild_mission_reward", "길드 임무 보상", "일일 또는 주간 완료 보상을 받습니다.", "길드임무보상", "예: 주간", force_modal=True),
+            _a("guild_vault", "통합 길드 금고", "식량·건축 자원과 출금 요청을 확인합니다.", "길드금고"),
+            _a("guild_deposit", "길드 금고 입금", "식량 또는 건축 자원을 입금합니다.", "길드입금", "예: 식량 10000", force_modal=True),
+            _a("guild_withdraw_request", "길드 출금 요청", "재화·금액·사유를 입력해 승인을 요청합니다.", "길드출금요청", "예: 식량 5000 장비 수리", force_modal=True),
+        ),
+    ),
+    "guild_raid": (
+        "👹 길드 레이드·감사",
+        "승인형 금고 처리, 주간 길드 레이드와 관리자 무결성 검사를 사용합니다.",
+        (
+            _a("guild_withdraw_approve", "출금 승인", "다른 길드원의 출금 요청을 승인합니다.", "길드출금승인", "예: 요청번호", force_modal=True),
+            _a("guild_withdraw_reject", "출금 거절", "출금 요청을 사유와 함께 거절합니다.", "길드출금거절", "예: 요청번호 사유", force_modal=True),
+            _a("guild_transactions", "길드 거래 내역", "최근 입출금과 승인 기록을 확인합니다.", "길드거래내역"),
+            _a("guild_raid", "주간 길드 레이드", "현재 보스·부위·길드 진행도를 확인합니다.", "길드레이드"),
+            _a("guild_raid_attack", "길드 레이드 공격", "전술과 부위를 선택해 공격합니다.", "길드레이드공격", "예: 지원 동력핵", force_modal=True),
+            _a("guild_raid_reward", "레이드 보상", "토벌한 레이드의 개인 기여 보상을 받습니다.", "길드레이드보상"),
+            _a("guild_raid_ranking", "레이드 기여도", "현재 길드 레이드 기여도 순위를 확인합니다.", "길드레이드랭킹"),
+            _a("guild_overall_ranking", "길드 종합 랭킹", "시설·레이드·기여도를 합산한 길드 순위를 확인합니다.", "길드종합랭킹"),
+            _a("guild_audit", "길드 데이터 검수", "길드·금고·레이드 데이터를 읽기 전용으로 검사합니다.", "길드검수"),
+            _a("guild_repair_preview", "복구 미리보기", "변경 없이 안전 복구 후보만 표시합니다.", "길드복구미리보기"),
+            _a("v750_stability", "v7.5 안정화 검수", "명령 충돌·잠금·중복 정산·삭제 여부를 검사합니다.", "750안정화검수"),
+        ),
+    ),
+    "social": (
+        "🤝 파티·거래",
+        "파티, 거래소, 경매와 유저 간 상호작용을 사용합니다. 길드는 전용 메뉴로 이동했습니다.",
+        (
             _a("party_create", "파티 생성", "전투 파티를 생성합니다.", "파티생성"),
             _a("party_join", "파티 가입", "리더 멘션 또는 ID를 입력합니다.", "파티가입", "예: @리더", force_modal=True),
             _a("party_info", "파티 정보", "현재 파티 상태를 확인합니다.", "파티정보"),
@@ -436,8 +478,17 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("season4", "🚂 시즌 4 · 황혼의 종착역", "네 번째 스토리와 시즌 전체 여정·엔딩 유산 보상입니다.", ("story4", "story4_start", "story4_choose", "story4_history", "story4_restart", "story_journey", "story_legacy")),
         ("quiz", "🧠 오늘의 퀴즈", "오늘 문제를 풀고 서버 퀴즈 랭킹을 확인합니다.", ("daily_quiz", "quiz_answer", "quiz_rank")),
     ),
+    "guild": (
+        ("organization", "🏰 길드 조직", "기존 길드 기능과 가입·직책·운영 설정입니다.", ("guild_list", "guild_create", "guild_join", "guild_info", "guild_dashboard", "guild_description", "guild_settings", "guild_apply", "guild_applications", "guild_application_process", "guild_role", "guild_kick", "guild_transfer", "guild_leave")),
+        ("base", "🏗️ 공동 기지·임무", "시설 건설·강화·생산과 일일·주간 공동 목표입니다.", ("guild_base", "guild_build", "guild_facility_upgrade", "guild_base_collect", "guild_missions", "guild_mission_reward")),
+        ("vault", "🏦 통합 금고", "식량·자원 입금과 승인형 출금 요청입니다.", ("guild_vault", "guild_deposit", "guild_withdraw_request")),
+    ),
+    "guild_raid": (
+        ("vault_admin", "🧾 금고 승인·감사", "출금 승인·거절과 거래 기록을 확인합니다.", ("guild_withdraw_approve", "guild_withdraw_reject", "guild_transactions")),
+        ("raid", "👹 주간 길드 레이드", "전술·부위 파괴·기여도·개인 보상입니다.", ("guild_raid", "guild_raid_attack", "guild_raid_reward", "guild_raid_ranking", "guild_overall_ranking")),
+        ("audit", "🛡️ 길드 안정화", "읽기 전용 감사·복구 미리보기·v7.5 안정화 검사입니다.", ("guild_audit", "guild_repair_preview", "v750_stability")),
+    ),
     "social": (
-        ("guild", "🛡️ 길드", "길드 목록·생성·가입·기부·강화·탈퇴입니다.", ("guild_list", "guild_create", "guild_join", "guild_info", "guild_donate", "guild_upgrade", "guild_leave")),
         ("party", "👥 파티", "파티 생성·가입·정보·사냥·탈퇴입니다.", ("party_create", "party_join", "party_info", "party_hunt", "party_leave")),
         ("trade", "💰 거래·경매", "개인 송금, 거래소 판매·구매와 경매를 관리합니다.", ("market", "sell", "market_buy", "sell_cancel", "auction_search", "auction_register", "auction_bid", "auction_finish", "auction_history", "transfer")),
     ),
@@ -453,7 +504,7 @@ QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
     "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "region_list", "region_explore", "raid", "worldboss_status")),
     "earn": ("🥫 식량과 자원이 필요해요", "지원금·알바·채집·굴착과 자원 시장으로 재화를 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "dig", "treasure_appraise", "resource_market")),
     "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·퀴즈 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "expedition", "exp_start", "relic", "daily_quiz")),
-    "community": ("🤝 같이 놀고 싶어요", "길드·파티·카드게임·거래와 송금을 확인합니다.", ("guild_list", "guild_create", "party_create", "card_game_menu", "market", "transfer")),
+    "community": ("🤝 같이 놀고 싶어요", "길드·공동 기지·레이드·파티·카드게임·거래로 이동합니다.", ("guild_dashboard", "guild_base", "guild_raid", "party_create", "card_game_menu", "market", "transfer")),
 }
 
 
@@ -2078,8 +2129,17 @@ def register_v600_game_center(
         await interaction.followup.send(embed=embed, view=view)
 
 
+    async def require_season3_access(ctx: commands.Context, user: Dict[str, Any]) -> bool:
+        allowed, _reason = await can_access_season(ctx, bot, user, 3)
+        if allowed:
+            return True
+        await ctx.send(locked_text(3))
+        return False
+
     async def send_season3(ctx: commands.Context) -> None:
         user = get_user(ctx.author.id)
+        if not await require_season3_access(ctx, user):
+            return
         season3 = ensure_v600(user)["season3"]
         if not season3.get("started"):
             await ctx.send(
@@ -2121,6 +2181,8 @@ def register_v600_game_center(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season3_access(ctx, user):
+            return
         season3 = ensure_v600(user)["season3"]
         if season3.get("completed"):
             await ctx.send("🏁 이미 시즌 3를 완료했습니다. `!시즌3 재시작`으로 다른 엔딩을 찾으세요.")
@@ -2149,6 +2211,8 @@ def register_v600_game_center(
             return
         # prefix 선택은 동일 로직을 사용하되 가짜 Interaction을 만들지 않고 직접 처리합니다.
         user = get_user(ctx.author.id)
+        if not await require_season3_access(ctx, user):
+            return
         season3 = ensure_v600(user)["season3"]
         if not season3.get("started"):
             await ctx.send("⚠️ 먼저 `!시즌3 시작`을 사용해주세요.")
@@ -2218,6 +2282,8 @@ def register_v600_game_center(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season3_access(ctx, user):
+            return
         season3 = ensure_v600(user)["season3"]
         history = season3.get("history", [])
         if not history:
@@ -2235,6 +2301,8 @@ def register_v600_game_center(
         if not await check_registered(ctx):
             return
         user = get_user(ctx.author.id)
+        if not await require_season3_access(ctx, user):
+            return
         season3 = ensure_v600(user)["season3"]
         if not season3.get("started"):
             await ctx.send("⚠️ 아직 시즌 3를 시작하지 않았습니다.")

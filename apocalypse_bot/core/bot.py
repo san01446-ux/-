@@ -4809,179 +4809,95 @@ async def 기지수확(ctx):
 
 
 # =========================================================
-# 길드 시스템
+# 길드 시스템 · v7.5.0 통합 위임
 # =========================================================
-def find_guild_by_name(name):
-    for gid, guild in world_data["guilds"].items():
-        if guild["name"].lower() == name.lower():
-            return gid, guild
-    return None, None
+# 기존 HybridCommand 이름과 슬래시 진입점은 그대로 유지하면서 실제 처리는
+# v7.5.0 길드 서비스로 위임합니다. 구형 길드 기금은 통합 금고 식량과 미러링됩니다.
+from apocalypse_bot.commands.v750_guild_raid import (
+    legacy_guild_create as _v750_guild_create,
+    legacy_guild_donate as _v750_guild_donate,
+    legacy_guild_info as _v750_guild_info,
+    legacy_guild_join as _v750_guild_join,
+    legacy_guild_leave as _v750_guild_leave,
+    legacy_guild_list as _v750_guild_list,
+    legacy_guild_upgrade as _v750_guild_upgrade,
+)
 
 
 @bot.hybrid_command()
 async def 길드목록(ctx):
-    if not await check_registered(ctx):
-        return
-    guilds = list(world_data["guilds"].items())
-    if not guilds:
-        await ctx.send("🛡️ 아직 생성된 길드가 없습니다.")
-        return
-    guilds.sort(key=lambda x: (x[1]["level"], x[1]["fund"]), reverse=True)
-    lines = []
-    for _, g in guilds[:20]:
-        lines.append(
-            f"• **{g['name']}** | Lv.{g['level']} | "
-            f"인원 {len(g['members'])}명 | 기금 {g['fund']:,}"
-        )
-    await send_pages(ctx.channel, "🛡️ **[길드 목록]**\n" + "\n".join(lines))
+    await _v750_guild_list(ctx, world_data=world_data, check_registered=check_registered)
 
 
 @bot.hybrid_command()
 async def 길드생성(ctx, *, 길드명: str):
-    if not await check_registered(ctx):
-        return
-    u = get_user(ctx.author.id)
-    if u.get("guild_id"):
-        await ctx.send("⚠️ 이미 길드에 소속되어 있습니다.")
-        return
-    if len(길드명) < 2 or len(길드명) > 16:
-        await ctx.send("⚠️ 길드명은 2~16자로 입력하세요.")
-        return
-    if find_guild_by_name(길드명)[1]:
-        await ctx.send("⚠️ 이미 존재하는 길드명입니다.")
-        return
-    cost = 45000
-    if u["balance"] < cost:
-        await ctx.send(f"⚠️ 길드 창설 비용 **{cost:,}개**가 필요합니다.")
-        return
-
-    guild_id = str(max([int(x) for x in world_data["guilds"].keys()] + [0]) + 1)
-    world_data["guilds"][guild_id] = {
-        "name": 길드명,
-        "owner": str(ctx.author.id),
-        "members": [str(ctx.author.id)],
-        "level": 1,
-        "fund": 0,
-        "exp": 0
-    }
-    u["balance"] -= cost
-    u["guild_id"] = guild_id
-    add_title(u, "길드 창설자")
-    add_season_points(u, 50)
-    save_data()
-    await ctx.send(f"🛡️ 길드 **{길드명}** 창설 완료!")
+    await _v750_guild_create(
+        ctx,
+        name=길드명,
+        world_data=world_data,
+        get_user=get_user,
+        check_registered=check_registered,
+        save_data=save_data,
+        add_title=add_title,
+        add_season_points=add_season_points,
+    )
 
 
 @bot.hybrid_command()
 async def 길드가입(ctx, *, 길드명: str):
-    if not await check_registered(ctx):
-        return
-    u = get_user(ctx.author.id)
-    if u.get("guild_id"):
-        await ctx.send("⚠️ 이미 길드에 소속되어 있습니다.")
-        return
-    gid, guild = find_guild_by_name(길드명)
-    if not guild:
-        await ctx.send("⚠️ 해당 길드를 찾을 수 없습니다.")
-        return
-    max_members = 10 + guild["level"] * 5
-    if len(guild["members"]) >= max_members:
-        await ctx.send("⚠️ 해당 길드는 인원이 가득 찼습니다.")
-        return
-    guild["members"].append(str(ctx.author.id))
-    u["guild_id"] = gid
-    save_data()
-    await ctx.send(f"🛡️ **{guild['name']}** 길드에 가입했습니다.")
+    await _v750_guild_join(
+        ctx,
+        name=길드명,
+        world_data=world_data,
+        get_user=get_user,
+        check_registered=check_registered,
+        save_data=save_data,
+    )
 
 
 @bot.hybrid_command()
 async def 길드정보(ctx):
-    if not await check_registered(ctx):
-        return
-    u = get_user(ctx.author.id)
-    gid = u.get("guild_id")
-    if not gid or gid not in world_data["guilds"]:
-        await ctx.send("⚠️ 소속된 길드가 없습니다.")
-        return
-    g = world_data["guilds"][gid]
-    owner = f"<@{g['owner']}>"
-    await ctx.send(
-        f"🛡️ **[{g['name']}]**\n"
-        f"길드장: {owner}\n"
-        f"레벨: **Lv.{g['level']}**\n"
-        f"인원: **{len(g['members'])}/{10 + g['level'] * 5}명**\n"
-        f"길드 기금: **{g['fund']:,}개**\n"
-        f"길드 전투력 보너스: **+{g['level'] * 2}%**"
+    await _v750_guild_info(
+        ctx,
+        world_data=world_data,
+        get_user=get_user,
+        check_registered=check_registered,
+        save_data=save_data,
     )
 
 
 @bot.hybrid_command()
 async def 길드기부(ctx, 금액: int):
-    if not await check_registered(ctx):
-        return
-    u = get_user(ctx.author.id)
-    gid = u.get("guild_id")
-    if not gid or gid not in world_data["guilds"]:
-        await ctx.send("⚠️ 길드에 가입되어 있지 않습니다.")
-        return
-    if 금액 <= 0 or u["balance"] < 금액:
-        await ctx.send("⚠️ 기부 금액이 잘못됐거나 잔액이 부족합니다.")
-        return
-    g = world_data["guilds"][gid]
-    u["balance"] -= 금액
-    g["fund"] += 금액
-    g["exp"] += 금액 // 100
-    add_season_points(u, min(30, 금액 // 1000))
-    save_data()
-    await ctx.send(f"💰 길드에 식량 **{금액:,}개** 기부 완료.")
+    await _v750_guild_donate(
+        ctx,
+        amount=금액,
+        world_data=world_data,
+        get_user=get_user,
+        check_registered=check_registered,
+        save_data=save_data,
+    )
 
 
 @bot.hybrid_command()
 async def 길드강화(ctx):
-    if not await check_registered(ctx):
-        return
-    u = get_user(ctx.author.id)
-    gid = u.get("guild_id")
-    if not gid or gid not in world_data["guilds"]:
-        await ctx.send("⚠️ 길드에 가입되어 있지 않습니다.")
-        return
-    g = world_data["guilds"][gid]
-    if g["owner"] != str(ctx.author.id):
-        await ctx.send("❌ 길드장만 길드를 강화할 수 있습니다.")
-        return
-    cost = g["level"] * 65000
-    if g["fund"] < cost:
-        await ctx.send(f"⚠️ 길드 기금 **{cost:,}개**가 필요합니다.")
-        return
-    g["fund"] -= cost
-    g["level"] += 1
-    save_data()
-    await ctx.send(f"🛡️ 길드가 **Lv.{g['level']}**로 성장했습니다!")
+    await _v750_guild_upgrade(
+        ctx,
+        world_data=world_data,
+        get_user=get_user,
+        check_registered=check_registered,
+        save_data=save_data,
+    )
 
 
 @bot.hybrid_command()
 async def 길드탈퇴(ctx):
-    if not await check_registered(ctx):
-        return
-    u = get_user(ctx.author.id)
-    gid = u.get("guild_id")
-    if not gid or gid not in world_data["guilds"]:
-        await ctx.send("⚠️ 소속된 길드가 없습니다.")
-        return
-    g = world_data["guilds"][gid]
-    uid = str(ctx.author.id)
-    if g["owner"] == uid and len(g["members"]) > 1:
-        await ctx.send("⚠️ 길드장은 다른 길드원이 있는 동안 탈퇴할 수 없습니다.")
-        return
-    if uid in g["members"]:
-        g["members"].remove(uid)
-    u["guild_id"] = None
-    if not g["members"]:
-        del world_data["guilds"][gid]
-        await ctx.send("🛡️ 길드에서 탈퇴했으며, 남은 인원이 없어 길드가 해산됐습니다.")
-    else:
-        await ctx.send("🛡️ 길드에서 탈퇴했습니다.")
-    save_data()
+    await _v750_guild_leave(
+        ctx,
+        world_data=world_data,
+        get_user=get_user,
+        check_registered=check_registered,
+        save_data=save_data,
+    )
 
 
 # =========================================================
@@ -5713,6 +5629,20 @@ from apocalypse_bot.commands.v730_season_story import register_v730_season_story
 register_v730_season_story(
     bot, get_user, check_registered, save_data, COMMAND_GUIDE_CATEGORIES,
     add_title, add_season_points,
+)
+
+# V7.3.1: 중복 기능 읽기 전용 감사 · 스토리 순차 해금 · 관리자 점검 우회
+from apocalypse_bot.commands.v731_duplicate_stability import register_v731_duplicate_stability
+register_v731_duplicate_stability(
+    bot, world_data, user_data, save_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V7.5.0: 기존 길드 완전 통합 · 공동 기지 · 일일/주간 임무 · 승인형 금고 · 부위 파괴 길드 레이드
+# 기존 길드 HybridCommand는 위임 방식으로 유지하고 신규 관리 기능은 prefix 전용으로 추가합니다.
+from apocalypse_bot.commands.v750_guild_raid import register_v750_guild_raid
+register_v750_guild_raid(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
