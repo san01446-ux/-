@@ -4809,10 +4809,10 @@ async def 기지수확(ctx):
 
 
 # =========================================================
-# 길드 시스템 · v7.5.0 통합 위임
+# 길드 시스템 · v7.5.1 통합 위임
 # =========================================================
 # 기존 HybridCommand 이름과 슬래시 진입점은 그대로 유지하면서 실제 처리는
-# v7.5.0 길드 서비스로 위임합니다. 구형 길드 기금은 통합 금고 식량과 미러링됩니다.
+# v7.5.1 길드 서비스로 위임합니다. 구형 길드 기금은 통합 금고 식량과 미러링됩니다.
 from apocalypse_bot.commands.v750_guild_raid import (
     legacy_guild_create as _v750_guild_create,
     legacy_guild_donate as _v750_guild_donate,
@@ -5637,7 +5637,7 @@ register_v731_duplicate_stability(
     bot, world_data, user_data, save_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V7.5.0: 기존 길드 완전 통합 · 공동 기지 · 일일/주간 임무 · 승인형 금고 · 부위 파괴 길드 레이드
+# V7.5.1: 길드 통합 런타임 핫픽스 · 레이드 전술실 · 기존 길드 완전 통합 · 공동 기지 · 일일/주간 임무 · 승인형 금고 · 부위 파괴 길드 레이드
 # 기존 길드 HybridCommand는 위임 방식으로 유지하고 신규 관리 기능은 prefix 전용으로 추가합니다.
 from apocalypse_bot.commands.v750_guild_raid import register_v750_guild_raid
 register_v750_guild_raid(

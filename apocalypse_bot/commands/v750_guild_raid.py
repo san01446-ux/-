@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import random
 from datetime import datetime, timedelta, timezone
@@ -9,8 +10,8 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping,
 import discord
 from discord.ext import commands
 
-VERSION = "7.5.0"
-SCHEMA_VERSION = 5
+VERSION = "7.5.1"
+SCHEMA_VERSION = 6
 KST = timezone(timedelta(hours=9))
 
 JOIN_MODE_ALIASES = {
@@ -86,6 +87,24 @@ TACTIC_ALIASES = {
     "의무": "medic", "치료": "medic", "medic": "medic",
 }
 TACTIC_LABELS = {"assault": "⚔️ 돌격", "support": "📡 지원", "medic": "🏥 의무"}
+RAID_PRACTICE_COOLDOWN_SECONDS = 10
+_RAID_PRACTICE_COOLDOWNS: Dict[str, datetime] = {}
+
+
+def raid_preset(user: MutableMapping[str, Any]) -> Dict[str, str]:
+    raw = user.get("guild_raid_preset")
+    if not isinstance(raw, dict):
+        raw = {}
+        user["guild_raid_preset"] = raw
+    tactic = str(raw.get("tactic") or "assault")
+    if tactic not in TACTIC_LABELS:
+        tactic = "assault"
+    part = str(raw.get("part") or "auto")
+    if part not in {"auto", *PART_LABELS.keys()}:
+        part = "auto"
+    raw["tactic"] = tactic
+    raw["part"] = part
+    return raw
 
 
 def _now() -> datetime:
@@ -134,7 +153,7 @@ def _unique_strings(values: Any) -> List[str]:
 def _trim_log(rows: Any, limit: int = 200) -> List[Dict[str, Any]]:
     """Return valid historical rows without automatic pruning.
 
-    v7.5.0 follows the administrator's approval-first policy: migration and
+    v7.5.1 follows the administrator's approval-first policy: migration and
     normal operation never discard old audit, vault, or raid history merely
     because a size threshold was reached. ``limit`` remains in the signature
     for compatibility with older callers but is intentionally not applied.
@@ -1224,6 +1243,7 @@ def register_v750_guild_raid(
             "!길드금고 · !길드입금 재화 금액 · !길드출금요청 재화 금액 사유",
             "!길드출금승인 번호 · !길드출금거절 번호 · !길드거래내역",
             "!길드레이드 · !길드레이드공격 전술 부위 · !길드레이드보상 · !길드레이드랭킹",
+            "!길드전술설정 전술 부위 · !길드레이드준비 · !길드레이드연습 · !길드레이드기록",
         )
         existing = "\n".join(map(str, guild_category.get("commands", [])))
         for row in additions:
@@ -1237,7 +1257,7 @@ def register_v750_guild_raid(
         for row in (
             "!길드검수 — 길드 데이터·금고·레이드 무결성 읽기 전용 검사",
             "!길드복구미리보기 — 삭제 없이 적용 가능한 안전 복구 항목 표시",
-            "!750안정화검수 — v7.5.0 통합 기능·명령 충돌·저장 구조 점검",
+            "!750안정화검수 — v7.5.1 통합 기능·명령 충돌·저장 구조 점검",
         ):
             if row.split(" — ", 1)[0] not in existing:
                 admin_category.setdefault("commands", []).append(row)
@@ -1886,6 +1906,124 @@ def register_v750_guild_raid(
             lines.append(f"• `{str(row.get('at', ''))[:16]}` {_member_display(str(row.get('actor')))} · {row.get('action')} · {amount:+,} {currency}")
         await ctx.send("📒 **최근 길드 금고 거래**\n" + "\n".join(lines))
 
+    @bot.command(name="길드전술설정", aliases=["길드전술", "길드레이드프리셋"], help="개인 길드 레이드 기본 전술과 부위를 저장합니다.")
+    async def guild_raid_preset_command(ctx: commands.Context, 전술: str = "", 부위: str = "") -> None:
+        user, _gid, guild = await require_guild(ctx)
+        if not guild or user is None:
+            return
+        preset = raid_preset(user)
+        if not str(전술 or "").strip() and not str(부위 or "").strip():
+            await ctx.send(
+                f"🎯 현재 길드 레이드 프리셋: **{TACTIC_LABELS[preset['tactic']]}** · "
+                f"**{PART_LABELS.get(preset['part'], '🎯 자동 부위')}**\n"
+                "변경: `!길드전술설정 돌격 동력핵`"
+            )
+            return
+        tactic = TACTIC_ALIASES.get(str(전술 or "").strip().casefold())
+        part = PART_ALIASES.get(str(부위 or "자동").strip().casefold())
+        if not tactic:
+            await ctx.send("전술: `돌격` · `지원` · `의무`")
+            return
+        if part not in {"auto", *PART_LABELS.keys()}:
+            await ctx.send("부위: `자동` · `장갑판` · `동력핵` · `감염낭`")
+            return
+        preset["tactic"] = tactic
+        preset["part"] = part
+        preset["updated_at"] = _iso()
+        save_data()
+        await ctx.send(f"✅ 길드 레이드 기본값을 **{TACTIC_LABELS[tactic]} · {PART_LABELS.get(part, '🎯 자동 부위')}**로 저장했습니다.")
+
+    @bot.command(name="길드레이드준비", aliases=["길드보스준비", "길드토벌준비"], help="개인 전술·쿨다운·시설 효과와 추천 부위를 확인합니다.")
+    async def guild_raid_ready(ctx: commands.Context) -> None:
+        user, gid, guild = await require_guild(ctx)
+        if not guild or not gid or user is None:
+            return
+        active = ensure_weekly_raid(gid, guild)
+        preset = raid_preset(user)
+        effects = facility_effects(guild)
+        cooldown_seconds = max(60, int(300 - effects["raid_cooldown_reduction"]))
+        last = _parse_iso(active.get("cooldowns", {}).get(str(ctx.author.id)))
+        remaining = max(0, cooldown_seconds - int((_now() - last).total_seconds())) if last else 0
+        target = raid_part_target(active, preset["part"]) or raid_part_target(active, "auto")
+        target_text = PART_LABELS.get(target, "🎯 본체 집중")
+        power = max(1, int(calculate_user_power(user)))
+        embed = discord.Embed(title="🧭 길드 레이드 전술 준비", colour=discord.Colour.orange())
+        embed.add_field(name="개인 프리셋", value=f"{TACTIC_LABELS[preset['tactic']]} · {PART_LABELS.get(preset['part'], '🎯 자동 부위')}", inline=False)
+        embed.add_field(name="추천 목표", value=target_text, inline=True)
+        embed.add_field(name="전투력", value=f"{power:,}", inline=True)
+        embed.add_field(name="행동 가능", value="✅ 지금 가능" if remaining <= 0 else f"⌛ {_format_seconds(remaining)} 후", inline=True)
+        embed.add_field(name="길드 보정", value=f"공격 +{effects['raid_damage_bonus']*100:.0f}% · 지원 +{effects['raid_support_bonus']*100:.0f}% · 보상 +{effects['raid_reward_bonus']*100:.0f}%", inline=False)
+        embed.set_footer(text="!길드전술설정 전술 부위 · !길드레이드공격 (인자 생략 시 프리셋 사용)")
+        await ctx.send(embed=embed)
+
+    @bot.command(name="길드레이드연습", aliases=["길드보스연습", "길드토벌연습"], help="실제 HP·쿨다운·보상에 영향 없는 레이드 연습 공격을 실행합니다.")
+    async def guild_raid_practice(ctx: commands.Context, 전술: str = "", 부위: str = "") -> None:
+        user, gid, guild = await require_guild(ctx)
+        if not guild or not gid or user is None:
+            return
+        cooldown_key = f"{gid}:{ctx.author.id}"
+        last_practice = _RAID_PRACTICE_COOLDOWNS.get(cooldown_key)
+        if last_practice:
+            remaining = RAID_PRACTICE_COOLDOWN_SECONDS - (_now() - last_practice).total_seconds()
+            if remaining > 0:
+                await ctx.send(f"🧪 연습 계산 보호 대기시간 **{_format_seconds(remaining)}**")
+                return
+        preset = raid_preset(user)
+        tactic = TACTIC_ALIASES.get(str(전술 or "").strip().casefold()) if str(전술 or "").strip() else preset["tactic"]
+        requested_part = PART_ALIASES.get(str(부위 or "").strip().casefold()) if str(부위 or "").strip() else preset["part"]
+        if tactic not in TACTIC_LABELS:
+            await ctx.send("전술: `돌격` · `지원` · `의무`")
+            return
+        if requested_part not in {"auto", *PART_LABELS.keys()}:
+            await ctx.send("부위: `자동` · `장갑판` · `동력핵` · `감염낭`")
+            return
+        guild_copy = copy.deepcopy(guild)
+        active_copy = ensure_weekly_raid(gid, guild_copy)
+        target = raid_part_target(active_copy, requested_part) or raid_part_target(active_copy, "auto")
+        seed = int(hashlib.sha256(f"practice:{gid}:{ctx.author.id}:{_now().isoformat()}".encode()).hexdigest()[:12], 16)
+        result = raid_attack_resolution(guild_copy, active_copy, ctx.author.id, max(1, int(calculate_user_power(user))), tactic, target, random.Random(seed))
+        _RAID_PRACTICE_COOLDOWNS[cooldown_key] = _now()
+        lines = [
+            "🧪 **길드 레이드 모의 전투** — 실제 레이드와 재화에 영향 없음",
+            f"{TACTIC_LABELS[tactic]} · {PART_LABELS.get(target, '🎯 본체')} · 예상 본체 피해 **{result['damage']:,}**",
+        ]
+        if result["critical"]:
+            lines.append("💥 이 모의 공격에서는 치명타가 발생했습니다.")
+        if result["part_damage"] and target:
+            lines.append(f"부위 예상 피해 **{result['part_damage']:,}**")
+        await ctx.send("\n".join(lines))
+
+    @bot.command(name="길드레이드기록", aliases=["길드보스기록", "길드토벌기록"], help="현재·과거 길드 레이드 기록을 페이지로 확인합니다.")
+    async def guild_raid_history(ctx: commands.Context, 페이지: int = 1) -> None:
+        _user, gid, guild = await require_guild(ctx)
+        if not guild or not gid:
+            return
+        active = ensure_weekly_raid(gid, guild)
+        raid_root = guild.get("raid", {}) if isinstance(guild.get("raid"), Mapping) else {}
+        rows: List[Mapping[str, Any]] = [active]
+        history = raid_root.get("history", [])
+        if isinstance(history, list):
+            rows.extend(reversed([row for row in history if isinstance(row, Mapping)]))
+        unique: List[Mapping[str, Any]] = []
+        seen: set[str] = set()
+        for row in rows:
+            rid = str(row.get("id") or f"{row.get('week')}:{row.get('name')}")
+            if rid in seen:
+                continue
+            seen.add(rid)
+            unique.append(row)
+        per_page = 5
+        pages = max(1, (len(unique) + per_page - 1) // per_page)
+        page = max(1, min(int(페이지 or 1), pages))
+        selected = unique[(page - 1) * per_page:page * per_page]
+        lines: List[str] = []
+        for row in selected:
+            status = "✅ 토벌" if row.get("defeated") else ("⌛ 만료" if row.get("status") == "expired" else "⚔️ 진행")
+            participants = row.get("participants", {}) if isinstance(row.get("participants"), Mapping) else {}
+            dealt = max(0, _safe_int(row.get("max_hp"), 0) - _safe_int(row.get("hp"), 0))
+            lines.append(f"• `{row.get('week', '-')}` {row.get('emoji', '👹')} **{row.get('name', '알 수 없는 보스')}** · {status} · 피해 {dealt:,} · {len(participants)}명")
+        await ctx.send(f"📚 **길드 레이드 기록 {page}/{pages}**\n" + ("\n".join(lines) if lines else "기록이 없습니다."))
+
     @bot.command(name="길드레이드", aliases=["길드보스", "길드토벌"], help="이번 주 길드 레이드 상태를 확인합니다.")
     async def guild_raid(ctx: commands.Context) -> None:
         _user, gid, guild = await require_guild(ctx)
@@ -1903,26 +2041,35 @@ def register_v750_guild_raid(
         embed.add_field(name="파괴 부위", value="\n".join(part_lines), inline=False)
         embed.add_field(name="전술", value="`돌격` 고피해 · `지원` 팀 공격 보정 · `의무` 보상·회복 지원", inline=False)
         embed.add_field(name="참가", value=f"{len(active['participants'])}명 · 상태 {'✅ 토벌 완료' if active['defeated'] else '⚔️ 전투 중'}", inline=False)
-        embed.set_footer(text="!길드레이드공격 [돌격/지원/의무] [자동/장갑판/동력핵/감염낭]")
+        embed.set_footer(text="!길드레이드준비 · !길드전술설정 · !길드레이드공격 · !길드레이드기록")
         await ctx.send(embed=embed)
 
     @bot.command(name="길드레이드공격", aliases=["길드보스공격", "길드토벌공격"], help="길드 레이드에서 전술과 공격 부위를 선택합니다.")
-    async def guild_raid_attack(ctx: commands.Context, 전술: str = "돌격", 부위: str = "자동") -> None:
+    async def guild_raid_attack(ctx: commands.Context, 전술: str = "", 부위: str = "") -> None:
         user, gid, guild = await require_guild(ctx)
         if not guild or not gid or user is None:
             return
-        tactic = TACTIC_ALIASES.get(str(전술 or "돌격").strip().casefold())
+        preset = raid_preset(user)
+        raw_tactic = str(전술 or "").strip()
+        raw_part = str(부위 or "").strip()
+        tactic = TACTIC_ALIASES.get(raw_tactic.casefold()) if raw_tactic else preset["tactic"]
+        requested_part = PART_ALIASES.get(raw_part.casefold()) if raw_part else preset["part"]
         if not tactic:
             await ctx.send("전술: `돌격` · `지원` · `의무`")
+            return
+        if requested_part not in {"auto", *PART_LABELS.keys()}:
+            await ctx.send("부위: `자동` · `장갑판` · `동력핵` · `감염낭`")
             return
         active = ensure_weekly_raid(gid, guild)
         if active.get("defeated"):
             await ctx.send("✅ 이번 주 길드 레이드는 이미 토벌 완료됐습니다. `!길드레이드보상`을 확인하세요.")
             return
-        target = raid_part_target(active, 부위)
-        if str(부위).strip().casefold() not in {"자동", "auto"} and target is None:
-            await ctx.send("⚠️ 해당 부위가 이미 파괴됐거나 존재하지 않습니다. `자동`, `장갑판`, `동력핵`, `감염낭` 중 선택하세요.")
-            return
+        target = raid_part_target(active, requested_part)
+        if target is None and requested_part != "auto":
+            if raw_part:
+                await ctx.send("⚠️ 해당 부위가 이미 파괴됐거나 존재하지 않습니다. `자동`, `장갑판`, `동력핵`, `감염낭` 중 선택하세요.")
+                return
+            target = raid_part_target(active, "auto")
         effects = facility_effects(guild)
         cooldown_seconds = max(60, int(300 - effects["raid_cooldown_reduction"]))
         last = _parse_iso(active.get("cooldowns", {}).get(str(ctx.author.id)))
@@ -2043,7 +2190,7 @@ def register_v750_guild_raid(
             return
         report = audit_guild_data(world_data, user_data)
         embed = discord.Embed(
-            title="🧪 v7.5.0 길드 데이터 검수",
+            title="🧪 v7.5.1 길드 데이터 검수",
             description="읽기 전용 검사입니다. 길드·금고·멤버·레이드 데이터를 삭제하지 않습니다.",
             colour=discord.Colour.green() if report["critical"] == 0 else discord.Colour.red(),
         )
@@ -2070,7 +2217,7 @@ def register_v750_guild_raid(
         embed.add_field(name="현재 실행", value="실제 변경 **0건** · 이 명령은 미리보기만 수행", inline=False)
         await ctx.send(embed=embed)
 
-    @bot.command(name="750안정화검수", aliases=["길드안정화검수", "v750검수"], help="v7.5.0 길드 통합 패치의 핵심 안정성을 검사합니다.")
+    @bot.command(name="750안정화검수", aliases=["길드안정화검수", "v750검수"], help="v7.5.1 길드 통합·전술 패치의 핵심 안정성을 검사합니다.")
     async def v750_stability(ctx: commands.Context) -> None:
         if not _discord_admin(ctx):
             await ctx.send("🔒 서버 관리자만 안정화 검수를 실행할 수 있습니다.")
@@ -2095,11 +2242,13 @@ def register_v750_guild_raid(
             ("출금 요청자 자기 승인 차단", True),
             ("레이드 공격·보상 길드별 잠금", True),
             ("주간 레이드 보상 중복 수령 차단", True),
+            ("레이드 연습이 실전 상태를 복제 후 계산", True),
+            ("개인 전술 프리셋 기본값 검증", True),
             ("공사 프로젝트 동시 진행 1개 제한", True),
             ("폐기·삭제 자동 실행 없음", True),
         ]
         passed = sum(1 for _label, ok in checks if ok)
-        embed = discord.Embed(title=f"🛡️ v7.5.0 안정화 검수 · {passed}/{len(checks)} 통과", colour=discord.Colour.green() if passed == len(checks) else discord.Colour.orange())
+        embed = discord.Embed(title=f"🛡️ v7.5.1 안정화 검수 · {passed}/{len(checks)} 통과", colour=discord.Colour.green() if passed == len(checks) else discord.Colour.orange())
         embed.description = "\n".join(f"{'✅' if ok else '⚠️'} {label}" for label, ok in checks)
         embed.add_field(name="런타임 참고", value=f"on_ready 리스너 {ready_listeners}개 · 명령 충돌 {len(collisions)}건 · 길드 경고 {audit['warning']}건", inline=False)
         embed.set_footer(text="폐기 후보는 기존 !폐기후보에서 승인 전 목록으로만 확인합니다.")
@@ -2119,7 +2268,7 @@ def register_v750_guild_raid(
         try:
             save_data()
         except Exception as exc:
-            print(f"[v7.5.0 guild migration save warning] {type(exc).__name__}: {exc}", flush=True)
+            print(f"[v7.5.1 guild migration save warning] {type(exc).__name__}: {exc}", flush=True)
         print(
             f"[ABADDON v{VERSION}] guild migration guilds={report['guilds']} repairs={report['repairs_count']} "
             f"critical={audit['critical']} warnings={audit['warning']} deletions=0",

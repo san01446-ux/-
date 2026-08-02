@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import os
 import shlex
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -14,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "7.5.0"
+VERSION = "7.5.1"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -344,7 +346,11 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("guild_withdraw_reject", "출금 거절", "출금 요청을 사유와 함께 거절합니다.", "길드출금거절", "예: 요청번호 사유", force_modal=True),
             _a("guild_transactions", "길드 거래 내역", "최근 입출금과 승인 기록을 확인합니다.", "길드거래내역"),
             _a("guild_raid", "주간 길드 레이드", "현재 보스·부위·길드 진행도를 확인합니다.", "길드레이드"),
-            _a("guild_raid_attack", "길드 레이드 공격", "전술과 부위를 선택해 공격합니다.", "길드레이드공격", "예: 지원 동력핵", force_modal=True),
+            _a("guild_raid_ready", "레이드 준비", "개인 전술·쿨다운·시설 보정과 추천 부위를 확인합니다.", "길드레이드준비"),
+            _a("guild_raid_preset", "개인 전술 프리셋", "기본 전술과 공격 부위를 저장합니다.", "길드전술설정", "예: 돌격 동력핵", force_modal=True),
+            _a("guild_raid_practice", "레이드 연습", "실제 HP·쿨다운·보상에 영향 없는 모의 공격입니다.", "길드레이드연습", "예: 지원 장갑판", force_modal=True),
+            _a("guild_raid_history", "레이드 기록", "현재와 과거 길드 레이드 기록을 페이지로 확인합니다.", "길드레이드기록", "예: 1", force_modal=False),
+            _a("guild_raid_attack", "길드 레이드 공격", "전술과 부위를 선택해 공격합니다. 인자를 생략하면 저장한 프리셋을 사용합니다.", "길드레이드공격", "예: 지원 동력핵", force_modal=False),
             _a("guild_raid_reward", "레이드 보상", "토벌한 레이드의 개인 기여 보상을 받습니다.", "길드레이드보상"),
             _a("guild_raid_ranking", "레이드 기여도", "현재 길드 레이드 기여도 순위를 확인합니다.", "길드레이드랭킹"),
             _a("guild_overall_ranking", "길드 종합 랭킹", "시설·레이드·기여도를 합산한 길드 순위를 확인합니다.", "길드종합랭킹"),
@@ -396,17 +402,24 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
     ),
 }
 
-ACTION_INDEX: Dict[str, ActionSpec] = {
-    action.key: action
-    for _, _, actions in GAME_CATEGORIES.values()
-    for action in actions
-}
+def _build_action_catalog() -> Tuple[Dict[str, ActionSpec], Dict[str, str]]:
+    index: Dict[str, ActionSpec] = {}
+    categories: Dict[str, str] = {}
+    duplicate_definitions: Dict[str, List[str]] = defaultdict(list)
+    for category_key, (_title, _description, actions) in GAME_CATEGORIES.items():
+        for action in actions:
+            if action.key in index:
+                duplicate_definitions[action.key].extend((categories[action.key], category_key))
+                continue
+            index[action.key] = action
+            categories[action.key] = category_key
+    if duplicate_definitions:
+        details = {key: sorted(set(values)) for key, values in duplicate_definitions.items()}
+        raise RuntimeError(f"게임 기능 키 중복 정의: {details}")
+    return index, categories
 
-ACTION_CATEGORY: Dict[str, str] = {
-    action.key: category_key
-    for category_key, (_, _, actions) in GAME_CATEGORIES.items()
-    for action in actions
-}
+
+ACTION_INDEX, ACTION_CATEGORY = _build_action_catalog()
 
 MAX_GAME_FAVORITES = 20
 MAX_GAME_RECENT = 10
@@ -479,13 +492,13 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("quiz", "🧠 오늘의 퀴즈", "오늘 문제를 풀고 서버 퀴즈 랭킹을 확인합니다.", ("daily_quiz", "quiz_answer", "quiz_rank")),
     ),
     "guild": (
-        ("organization", "🏰 길드 조직", "기존 길드 기능과 가입·직책·운영 설정입니다.", ("guild_list", "guild_create", "guild_join", "guild_info", "guild_dashboard", "guild_description", "guild_settings", "guild_apply", "guild_applications", "guild_application_process", "guild_role", "guild_kick", "guild_transfer", "guild_leave")),
+        ("organization", "🏰 길드 조직", "기존 길드 기능과 가입·직책·운영 설정입니다.", ("guild_list", "guild_create", "guild_join", "guild_info", "guild_donate", "guild_upgrade", "guild_dashboard", "guild_description", "guild_settings", "guild_apply", "guild_applications", "guild_application_process", "guild_role", "guild_kick", "guild_transfer", "guild_leave")),
         ("base", "🏗️ 공동 기지·임무", "시설 건설·강화·생산과 일일·주간 공동 목표입니다.", ("guild_base", "guild_build", "guild_facility_upgrade", "guild_base_collect", "guild_missions", "guild_mission_reward")),
         ("vault", "🏦 통합 금고", "식량·자원 입금과 승인형 출금 요청입니다.", ("guild_vault", "guild_deposit", "guild_withdraw_request")),
     ),
     "guild_raid": (
         ("vault_admin", "🧾 금고 승인·감사", "출금 승인·거절과 거래 기록을 확인합니다.", ("guild_withdraw_approve", "guild_withdraw_reject", "guild_transactions")),
-        ("raid", "👹 주간 길드 레이드", "전술·부위 파괴·기여도·개인 보상입니다.", ("guild_raid", "guild_raid_attack", "guild_raid_reward", "guild_raid_ranking", "guild_overall_ranking")),
+        ("raid", "👹 주간 길드 레이드", "전술 프리셋·연습·기록·부위 파괴·기여도·개인 보상입니다.", ("guild_raid", "guild_raid_ready", "guild_raid_preset", "guild_raid_practice", "guild_raid_history", "guild_raid_attack", "guild_raid_reward", "guild_raid_ranking", "guild_overall_ranking")),
         ("audit", "🛡️ 길드 안정화", "읽기 전용 감사·복구 미리보기·v7.5 안정화 검사입니다.", ("guild_audit", "guild_repair_preview", "v750_stability")),
     ),
     "social": (
@@ -542,22 +555,134 @@ def _today_specs(user: Dict[str, Any]) -> List[ActionSpec]:
     return result[:20]
 
 
-def _validate_game_sections() -> None:
+def _scan_game_sections() -> Dict[str, Any]:
     expected = set(ACTION_INDEX)
     assigned: List[str] = []
+    locations: Dict[str, List[str]] = defaultdict(list)
+    invalid_categories: List[str] = []
+    duplicate_sections: List[str] = []
+    overflow: List[str] = []
     for category_key, sections in GAME_SECTIONS.items():
-        for _section_key, _title, _description, keys in sections:
+        if category_key not in GAME_CATEGORIES:
+            invalid_categories.append(category_key)
+        section_names: set[str] = set()
+        for section_key, _title, _description, keys in sections:
+            if section_key in section_names:
+                duplicate_sections.append(f"{category_key}/{section_key}")
+            section_names.add(section_key)
             if len(keys) > SELECT_PAGE_SIZE:
-                raise RuntimeError(f"게임 기능군이 Discord 선택 제한을 초과했습니다: {category_key}")
-            assigned.extend(str(key) for key in keys)
-    missing = expected.difference(assigned)
-    duplicated = {key for key in assigned if assigned.count(key) > 1}
-    unknown = set(assigned).difference(expected)
-    if missing or duplicated or unknown:
-        raise RuntimeError(f"게임 기능군 연결 오류: missing={sorted(missing)}, duplicated={sorted(duplicated)}, unknown={sorted(unknown)}")
+                overflow.append(f"{category_key}/{section_key} ({len(keys)}개)")
+            for raw_key in keys:
+                key = str(raw_key)
+                assigned.append(key)
+                locations[key].append(f"{category_key}/{section_key}")
+    counts = Counter(assigned)
+    return {
+        "missing": sorted(expected.difference(counts)),
+        "duplicated": {key: locations[key] for key, count in counts.items() if count > 1},
+        "unknown": sorted(set(counts).difference(expected)),
+        "invalid_categories": sorted(invalid_categories),
+        "duplicate_sections": sorted(duplicate_sections),
+        "overflow": sorted(overflow),
+    }
 
 
-_validate_game_sections()
+def _repair_game_sections() -> Dict[str, Any]:
+    """게임센터 메타데이터 오류가 봇 전체 부팅을 막지 않도록 안전 복구합니다.
+
+    첫 번째 정상 연결을 보존하고 중복·미등록 키를 제거합니다. 누락된 기능은
+    원래 카테고리의 복구 섹션으로 되돌립니다. 실제 명령이나 사용자 데이터는
+    삭제하지 않으며 메뉴 연결만 정규화합니다.
+    """
+    global GAME_SECTIONS
+    seen: set[str] = set()
+    repaired: Dict[str, List[Tuple[str, str, str, Tuple[str, ...]]]] = {}
+    removed_duplicates: Dict[str, List[str]] = defaultdict(list)
+    removed_unknown: Dict[str, List[str]] = defaultdict(list)
+    renamed_sections: List[str] = []
+
+    for category_key, sections in GAME_SECTIONS.items():
+        if category_key not in GAME_CATEGORIES:
+            continue
+        rows: List[Tuple[str, str, str, Tuple[str, ...]]] = []
+        used_section_names: set[str] = set()
+        for section_key, title, description, keys in sections:
+            safe_section_key = str(section_key)
+            if safe_section_key in used_section_names:
+                suffix = 2
+                while f"{safe_section_key}_{suffix}" in used_section_names:
+                    suffix += 1
+                renamed_sections.append(f"{category_key}/{safe_section_key}->{safe_section_key}_{suffix}")
+                safe_section_key = f"{safe_section_key}_{suffix}"
+            used_section_names.add(safe_section_key)
+            clean: List[str] = []
+            for raw_key in keys:
+                key = str(raw_key)
+                if key not in ACTION_INDEX:
+                    removed_unknown[f"{category_key}/{safe_section_key}"].append(key)
+                    continue
+                if key in seen:
+                    removed_duplicates[f"{category_key}/{safe_section_key}"].append(key)
+                    continue
+                seen.add(key)
+                clean.append(key)
+            for index in range(0, len(clean), SELECT_PAGE_SIZE):
+                chunk = tuple(clean[index:index + SELECT_PAGE_SIZE])
+                chunk_key = safe_section_key if index == 0 else f"{safe_section_key}_{index // SELECT_PAGE_SIZE + 1}"
+                chunk_title = str(title) if index == 0 else f"{title} {index // SELECT_PAGE_SIZE + 1}"
+                rows.append((chunk_key, chunk_title, str(description), chunk))
+        repaired[category_key] = rows
+
+    missing = [key for key in ACTION_INDEX if key not in seen]
+    by_category: Dict[str, List[str]] = defaultdict(list)
+    for key in missing:
+        by_category[ACTION_CATEGORY[key]].append(key)
+    for category_key, keys in by_category.items():
+        rows = repaired.setdefault(category_key, [])
+        for index in range(0, len(keys), SELECT_PAGE_SIZE):
+            number = index // SELECT_PAGE_SIZE + 1
+            rows.append((
+                f"recovered_{number}",
+                "🛟 자동 복구 기능" if number == 1 else f"🛟 자동 복구 기능 {number}",
+                "메뉴 연결 검사에서 누락되어 안전하게 복구된 기능입니다.",
+                tuple(keys[index:index + SELECT_PAGE_SIZE]),
+            ))
+
+    GAME_SECTIONS = {key: tuple(rows) for key, rows in repaired.items()}
+    return {
+        "removed_duplicates": dict(removed_duplicates),
+        "removed_unknown": dict(removed_unknown),
+        "renamed_sections": renamed_sections,
+        "recovered_missing": missing,
+    }
+
+
+def _validate_game_sections(*, strict: Optional[bool] = None) -> Dict[str, Any]:
+    strict_mode = (os.getenv("ABADDON_STRICT_MENU_VALIDATION", "0") == "1") if strict is None else bool(strict)
+    before = _scan_game_sections()
+    has_error = any(bool(before[key]) for key in before)
+    if not has_error:
+        return {"ok": True, "repaired": False, "before": before, "after": before, "changes": {}}
+
+    message = (
+        "게임 기능군 연결 오류: "
+        f"missing={before['missing']}, duplicated={before['duplicated']}, unknown={before['unknown']}, "
+        f"invalid_categories={before['invalid_categories']}, duplicate_sections={before['duplicate_sections']}, "
+        f"overflow={before['overflow']}"
+    )
+    if strict_mode:
+        raise RuntimeError(message)
+
+    changes = _repair_game_sections()
+    after = _scan_game_sections()
+    remaining = any(bool(after[key]) for key in after)
+    if remaining:
+        raise RuntimeError(f"{message} / 자동 복구 후에도 오류가 남았습니다: {after}")
+    print(f"[ABADDON v{VERSION}] 게임센터 연결 자동 복구: {changes}", flush=True)
+    return {"ok": True, "repaired": True, "before": before, "after": after, "changes": changes}
+
+
+GAME_SECTION_VALIDATION = _validate_game_sections()
 
 
 # =========================================================

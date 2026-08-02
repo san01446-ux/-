@@ -9,7 +9,7 @@ from apocalypse_bot.commands.story_progression import (
     can_access_season, is_story_admin, locked_text, season_display_status, season_state,
 )
 
-VERSION = "7.5.0"
+VERSION = "7.5.1"
 START_NODE = "t1_red_signal"
 
 

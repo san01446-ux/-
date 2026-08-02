@@ -2,19 +2,10 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
+TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
 from apocalypse_bot.core.bot import bot
 
+if not TOKEN:
+    raise RuntimeError("Discord bot token environment variable is missing (DISCORD_TOKEN/BOT_TOKEN/TOKEN).")
 
-def main():
-    token = os.getenv("DISCORD_TOKEN")
-    if not token:
-        raise RuntimeError(
-            "DISCORD_TOKEN이 없습니다. .env 파일에 "
-            "DISCORD_TOKEN=봇토큰 형식으로 입력하세요."
-        )
-    bot.run(token)
-
-
-if __name__ == "__main__":
-    main()
+bot.run(TOKEN)
