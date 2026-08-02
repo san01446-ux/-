@@ -1541,9 +1541,23 @@ async def bot_presence():
     registered = len(user_data)
     guild_count = len(bot.guilds)
     member_count = sum(g.member_count or 0 for g in bot.guilds)
-    boss = migrate_world_boss(world_data.get("world_boss"))
-    boss_active = boss.get("status") == "active" and boss.get("hp", 0) > 0
-    boss_percent = boss.get("hp", 0) / max(1, boss.get("max_hp", 1)) * 100
+    # V7.0: 길드별 실전 월드보스 상태를 기준으로 활동 상태를 표시합니다.
+    # 구형 전역 world_boss는 데이터 마이그레이션 전용이며 Presence에는 사용하지 않습니다.
+    v700_root = world_data.get("world_boss_v630", {})
+    v700_guilds = v700_root.get("guilds", {}) if isinstance(v700_root, dict) else {}
+    active_bosses = []
+    if isinstance(v700_guilds, dict):
+        for guild_state in v700_guilds.values():
+            active = guild_state.get("active") if isinstance(guild_state, dict) else None
+            if isinstance(active, dict) and active.get("status") == "active" and active.get("hp", 0) > 0:
+                active_bosses.append(active)
+    boss = min(
+        active_bosses,
+        key=lambda row: row.get("hp", 0) / max(1, row.get("max_hp", 1)),
+        default=None,
+    )
+    boss_active = isinstance(boss, dict)
+    boss_percent = boss.get("hp", 0) / max(1, boss.get("max_hp", 1)) * 100 if boss_active else 0.0
     market_count = len(world_data.get("market", {}))
     guilds = len(world_data.get("guilds", {}))
     activities = [
@@ -1569,8 +1583,8 @@ async def bot_presence():
     if boss_active:
         activities.extend([
             discord.Activity(type=discord.ActivityType.competing, name=f"{boss['name']} 토벌"),
-            discord.Activity(type=discord.ActivityType.watching, name=f"월드보스 HP {boss_percent:.1f}%"),
-            discord.Game("!월드보스공격 | 전 서버 협동"),
+            discord.Activity(type=discord.ActivityType.watching, name=f"월드보스 HP {boss_percent:.1f}% · {len(active_bosses)}개 서버"),
+            discord.Game("!월드보스공격 | 서버 협동 레이드"),
         ])
     else:
         activities.append(discord.Game("월드보스 처치 완료 · 다음 재앙 대기"))
@@ -5206,8 +5220,8 @@ register_v610_digging_treasure(bot, get_user, check_registered, save_data)
 from apocalypse_bot.commands.v620_dialogue_memory import register_v620_dialogue_memory
 register_v620_dialogue_memory(bot, world_data, save_data)
 
-# V6.3.0: 기존 월드보스 하이브리드 명령 callback 통합 + 다중 보스 6종·기여도·수동 보상·이미지
-# 기존 최상위 슬래시 이름을 재사용하고 신규 보조 기능은 prefix 전용으로 추가합니다.
+# V7.0.0: 월드보스 실전/테스트 분리 + 안전 보상 큐 + 실제 약점·페이즈·부위 기믹
+# 기존 최상위 슬래시 이름과 v6.5.4 영문 별칭을 보존하며 신규 보조 기능은 prefix 전용으로 추가합니다.
 from apocalypse_bot.commands.v630_world_boss import register_v630_world_boss
 register_v630_world_boss(
     bot, get_user, check_registered, save_data, world_data, calculate_user_power, add_title,
