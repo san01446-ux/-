@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "6.5.1"
+VERSION = "6.5.1a"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-02"
 
@@ -553,7 +553,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v6.5.1 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v6.5.1a 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -567,28 +567,29 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v6.5.1 명령어·가이드·28종 서버 리뉴얼·카드게임·이미지 정책을 읽기 전용으로 검사합니다."
+        previous_test.help = "v6.5.1a 명령어·가이드·28종 서버 리뉴얼·카드게임·비주얼 QA 정책을 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🃏 ABADDON v6.5.1 — 서버 리뉴얼·카드게임",
-                description="28종 서버 테마를 서버리뉴얼 드롭다운과 완전히 연결하고, 포커·원카드·조커잡기를 Discord 참가 버튼과 비공개 패 확인 방식으로 추가했습니다.",
+                title="🖼️ ABADDON v6.5.1a — 홈페이지·기지 비주얼 QA",
+                description="홈페이지에 남아 있던 잘못된 미리보기와 흐릿한 기지·중첩 갈갈이 이미지를 실제 배포 에셋 기준으로 정리했습니다. 서버리뉴얼 28종 테마와 카드게임 기능은 그대로 유지합니다.",
                 color=discord.Color.dark_teal(),
             )
+            embed.add_field(name="🖼️ 비주얼 QA 핫픽스", value="장비·보물 원본 카드 재배치 · 기지 6단계 이미지 교체 · 갈갈이 중첩 스크린샷 제거 · 홈페이지 카드 높이 정렬", inline=False)
             embed.add_field(name="🎨 서버 리뉴얼 최신화", value="28종 테마를 분류→테마 2단 드롭다운으로 선택 · 채널 구조 7종과 자동 매핑 · 브리핑 테마 동기화", inline=False)
             embed.add_field(name="🃏 카드게임", value="포커 2~6명 · 원카드 2~6명 · 조커잡기 2~8명 · 참가 버튼·비공개 패·턴제 선택·시간 초과 환불", inline=False)
             embed.add_field(name="🛠️ 서버 설정 통합", value="서버 브리핑·이벤트 채널·개인 알림·백업·복구·429 상태를 `!서버리뉴얼` 한 화면에서 관리", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 홈페이지·`!명령어`·`!패치노트` 동기화", inline=False)
             embed.add_field(name="💾 안전 정산", value="카드게임 참가비는 시작 시 차감 · 모집 취소는 미차감 · 진행 시간 초과는 전원 환불 · 재시작 잔존 예약 자동 복구", inline=False)
             embed.add_field(name="📚 명령어 드롭다운", value="카드게임/파티 최상위 카테고리 추가 · 안정화/서버 테마에 `!서버리뉴얼` 최신 명령 반영", inline=False)
-            embed.set_footer(text=f"최신 버전 v6.5.1 · {PATCH_DATE} · 카지노만 이미지 미사용")
+            embed.set_footer(text=f"최신 버전 v6.5.1a · {PATCH_DATE} · 카지노만 이미지 미사용")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v6.5.1 서버 리뉴얼 28종 테마·카드게임·명령어 드롭다운 패치 내용을 확인합니다."
+        patch.help = "ABADDON v6.5.1a 홈페이지·기지·갈갈이 비주얼 QA 핫픽스와 서버 리뉴얼·카드게임 유지 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION
