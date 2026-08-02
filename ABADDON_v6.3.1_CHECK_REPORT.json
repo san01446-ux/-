@@ -1,0 +1,180 @@
+{
+  "version": "6.3.1",
+  "ok": true,
+  "checks": [
+    {
+      "name": "Python AST",
+      "ok": true,
+      "detail": "41 files"
+    },
+    {
+      "name": "compileall",
+      "ok": true,
+      "detail": "41 files"
+    },
+    {
+      "name": "version 6.3.1",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "survival_data excluded",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "requirements unchanged",
+      "ok": true,
+      "detail": "0d385406613293607c67e80dcd1afa3ecc26a5321840336f32d953b3c253658e"
+    },
+    {
+      "name": "file change scope",
+      "ok": true,
+      "detail": "changed=['__init__.py', 'commands/v21_reborn.py', 'commands/v37_gambling_experience.py', 'commands/v600_game_center.py', 'commands/v610_digging_treasure.py', 'core/bot.py']; removed=[]; unexpected=[]; added=50"
+    },
+    {
+      "name": "command and alias duplicates",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "hybrid canonical set unchanged",
+      "ok": true,
+      "detail": "base=92 new=92 added=[] removed=[]"
+    },
+    {
+      "name": "new encounter command prefix only",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "slash setup unchanged",
+      "ok": true,
+      "detail": "baseline top-level estimate 39/100; group max 25"
+    },
+    {
+      "name": "game center category count",
+      "ok": true,
+      "detail": "{'survival': 22, 'equipment': 21, 'combat': 19, 'worldboss': 9, 'expedition': 21, 'life': 24, 'digging': 4, 'casino': 25, 'story': 21, 'social': 22, 'pets': 14}"
+    },
+    {
+      "name": "game center select limit",
+      "ok": true,
+      "detail": "max=25"
+    },
+    {
+      "name": "game center action keys unique",
+      "ok": true,
+      "detail": "actions=202 duplicates=[]"
+    },
+    {
+      "name": "encounter codex game-center link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "encounter count",
+      "ok": true,
+      "detail": "Counter({'work': 3, 'digging': 3, 'gathering': 3, 'woodcutting': 3})"
+    },
+    {
+      "name": "encounter safeguards source",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "original work failure wording",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "integration hooks",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "encounter outcome pure simulation",
+      "ok": true,
+      "detail": "success_delta=180; failure_delta=-20"
+    },
+    {
+      "name": "life image count",
+      "ok": true,
+      "detail": "files=48 manifest=48"
+    },
+    {
+      "name": "life image distribution",
+      "ok": true,
+      "detail": "Counter({'work': 12, 'digging': 12, 'gathering': 12, 'woodcutting': 12})"
+    },
+    {
+      "name": "life image state pools",
+      "ok": true,
+      "detail": "{\"work\": {\"success\": 3, \"rare\": 2, \"failure\": 2, \"encounter\": 2, \"encounter_success\": 2, \"encounter_failure\": 1}, \"digging\": {\"success\": 3, \"rare\": 2, \"failure\": 2, \"encounter\": 2, \"encounter_success\": 2, \"encounter_failure\": 1}, \"gathering\": {\"success\": 3, \"rare\": 2, \"failure\": 2, \"encounter\": 2, \"encounter_success\": 2, \"encounter_failure\": 1}, \"woodcutting\": {\"success\": 3, \"rare\": 2, \"failure\": 2, \"encounter\": 2, \"encounter_success\": 2, \"encounter_failure\": 1}}"
+    },
+    {
+      "name": "image decode and resolution",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "image SHA uniqueness",
+      "ok": true,
+      "detail": "unique=48"
+    },
+    {
+      "name": "perceptual duplicate check",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "website HTML parse",
+      "ok": true,
+      "detail": "index.html,commands.html,updates.html"
+    },
+    {
+      "name": "website JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "website asset references",
+      "ok": true,
+      "detail": "refs=10 missing=[]"
+    },
+    {
+      "name": "website life preview assets",
+      "ok": true,
+      "detail": "digging.jpg,gathering.jpg,woodcutting.jpg,work.jpg"
+    },
+    {
+      "name": "website v6.3.1 latest",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "website invite/live feed preserved",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "prototype visual folders excluded",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "summary": {
+    "passed": 32,
+    "total": 32,
+    "python_files": 41,
+    "command_alias_count": 513,
+    "hybrid_commands": 92,
+    "game_categories": 11,
+    "game_actions": 202,
+    "life_images": 48,
+    "encounters": 12,
+    "website_preview_images": 4,
+    "slash_top_level_estimate": 39,
+    "max_slash_group_options": 25
+  }
+}

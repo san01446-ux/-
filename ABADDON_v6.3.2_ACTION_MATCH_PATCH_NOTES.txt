@@ -1,0 +1,9 @@
+ABADDON v6.3.2 ACTION MATCH PATCH
+
+- 생활/인카운트 이미지를 랜덤 풀에서 고정 대표 이미지 방식으로 변경
+- 활동별 대표 이미지를 지정해서 서로 다른 행동의 이미지가 섞여 나오지 않도록 수정
+- 1단계(v631): 알바/땅파기/채집/벌목 각각 전용 대표 이미지로 고정
+- 2단계(v632): 낚시/광산/코인탐색/도박탐색/돈주세요 각각 전용 대표 이미지로 고정
+- 코드 변경 파일:
+  - apocalypse_bot/commands/v631_life_visuals.py
+  - apocalypse_bot/commands/v632_life_visuals.py
