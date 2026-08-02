@@ -5708,6 +5708,13 @@ register_v720_coop_cleanup(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V7.3.0: 스토리 시즌 4 황혼의 종착역 · 엔딩 유산 · 아바돈 1:1 칩/식량 베팅
+from apocalypse_bot.commands.v730_season_story import register_v730_season_story
+register_v730_season_story(
+    bot, get_user, check_registered, save_data, COMMAND_GUIDE_CATEGORIES,
+    add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

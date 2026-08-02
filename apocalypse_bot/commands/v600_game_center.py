@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "7.2.0"
+VERSION = "7.3.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -232,7 +232,8 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
         "참가 버튼과 비공개 패 확인을 사용하는 포커·원카드·조커잡기입니다.",
         (
             _a("card_game_menu", "카드게임 안내", "세 카드게임의 규칙과 시작 명령을 확인합니다.", "카드게임"),
-            _a("abaddon_ai", "아바돈 1:1 게임", "혼자일 때 아바돈과 7종 미니게임을 시작합니다.", "아바돈게임", "선택: 참가비", force_modal=True),
+            _a("abaddon_ai", "아바돈 1:1 게임", "혼자일 때 아바돈과 7종 미니게임을 시작합니다.", "아바돈게임", "예: 식량 5000 또는 1000", force_modal=True),
+            _a("abaddon_wager", "아바돈 선택 베팅", "게임·재화(칩/식량)·금액을 지정해 아바돈과 1:1 대결합니다.", "아바돈내기", "예: 포커 식량 5000", force_modal=True),
             _a("poker", "포커 모집", "2~6명이 참가해 비공개 5장과 1회 교환으로 승부합니다. 혼자라면 아바돈을 초대할 수 있습니다.", "포커", "예: 10000", force_modal=True),
             _a("one_card", "원카드 모집", "2~6명이 같은 무늬·숫자를 내며 먼저 패를 비웁니다.", "원카드", "예: 10000", force_modal=True),
             _a("joker_draw", "조커잡기 모집", "2~8명이 짝을 버리고 마지막 조커를 피합니다.", "조커잡기", "예: 10000", force_modal=True),
@@ -291,6 +292,13 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("story3_choose", "시즌 3 선택", "선택지 번호를 입력합니다.", "시즌3 선택", "예: 1", force_modal=True),
             _a("story3_history", "시즌 3 기록", "시즌 3 선택 기록과 엔딩을 확인합니다.", "시즌3 기록"),
             _a("story3_restart", "시즌 3 재시작", "엔딩·보상 기록을 유지하고 재시작합니다.", "시즌3 재시작"),
+            _a("story4", "시즌 4 · 황혼의 종착역", "황혼선 04의 현재 장면과 선택지를 확인합니다.", "시즌4"),
+            _a("story4_start", "시즌 4 시작", "황혼의 종착역 캠페인을 시작합니다.", "시즌4 시작"),
+            _a("story4_choose", "시즌 4 선택", "선택지 번호를 입력합니다.", "시즌4 선택", "예: 1", force_modal=True),
+            _a("story4_history", "시즌 4 기록", "선택 기록과 발견한 엔딩을 확인합니다.", "시즌4 기록"),
+            _a("story4_restart", "시즌 4 재시작", "엔딩·보상 기록을 유지하고 재시작합니다.", "시즌4 재시작"),
+            _a("story_journey", "시즌 여정", "시즌 1~4 완료와 엔딩 수집 현황을 확인합니다.", "시즌여정"),
+            _a("story_legacy", "시즌 4 유산", "시즌 4 엔딩 수집 단계 보상을 확인하고 받습니다.", "시즌유산"),
             _a("daily_quiz", "오늘의 퀴즈", "오늘의 생존 퀴즈를 확인합니다.", "오늘의퀴즈"),
             _a("quiz_answer", "퀴즈 정답", "답안을 입력합니다.", "정답", "예: 아바돈", force_modal=True),
             _a("quiz_rank", "퀴즈 랭킹", "퀴즈 정답 랭킹을 확인합니다.", "퀴즈랭킹"),
@@ -415,7 +423,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("treasure", "⛏️ 굴착·감정", "땅을 파고 보물을 감정해 보관합니다.", ("dig", "treasure_box", "appraisers", "treasure_appraise")),
     ),
     "card_games": (
-        ("cards", "🃏 카드게임·AI 동료", "로비를 열거나 아바돈과 1:1 게임을 시작합니다.", ("card_game_menu", "abaddon_ai", "poker", "one_card", "joker_draw")),
+        ("cards", "🃏 카드게임·AI 동료", "로비를 열거나 칩·식량을 걸고 아바돈과 1:1 게임을 시작합니다.", ("card_game_menu", "abaddon_ai", "abaddon_wager", "poker", "one_card", "joker_draw")),
     ),
     "casino": (
         ("lobby", "🎰 카지노 로비·보상", "잔액, 환전, VIP, 미션, 상점과 랭킹을 관리합니다.", ("casino", "casino_balance", "casino_history", "casino_rank", "casino_chips", "casino_exchange", "casino_vip", "casino_jackpot", "casino_mission", "casino_mission_reward", "casino_achievement", "casino_shop", "casino_buy", "casino_season_rank")),
@@ -425,6 +433,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("season1", "📻 시즌 1 · 검은 주파수", "첫 번째 메인 스토리를 시작하고 선택·기록을 관리합니다.", ("story1", "story1_start", "story1_choose", "story1_history", "story1_restart")),
         ("season2", "🚢 시즌 2 · 백색 방주", "두 번째 스토리와 장면·엔딩 수집·계승 기록입니다.", ("story2", "story2_start", "story2_choose", "story2_history", "story2_restart", "story2_scene", "story2_collection", "story2_legacy")),
         ("season3", "👑 시즌 3 · 종말의 왕좌", "세 번째 스토리의 시작·선택·기록·재시작입니다.", ("story3", "story3_start", "story3_choose", "story3_history", "story3_restart")),
+        ("season4", "🚂 시즌 4 · 황혼의 종착역", "네 번째 스토리와 시즌 전체 여정·엔딩 유산 보상입니다.", ("story4", "story4_start", "story4_choose", "story4_history", "story4_restart", "story_journey", "story_legacy")),
         ("quiz", "🧠 오늘의 퀴즈", "오늘 문제를 풀고 서버 퀴즈 랭킹을 확인합니다.", ("daily_quiz", "quiz_answer", "quiz_rank")),
     ),
     "social": (

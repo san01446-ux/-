@@ -11,9 +11,59 @@ from discord.ext import commands
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 from apocalypse_bot.commands.v651_card_games import _card_text, _deck, _poker_score
 
-VERSION = "7.2.1"
+VERSION = "7.3.0"
 PATCH_DATE = "2026-08-03"
 MAX_AI_BET = 5_000_000
+MAX_AI_FOOD_BET = 10_000_000
+
+
+
+
+CURRENCY_ALIASES = {
+    "칩": "chips", "카지노칩": "chips", "chip": "chips", "chips": "chips",
+    "식량": "food", "돈": "food", "재화": "food", "food": "food",
+}
+
+
+def _currency_key(value: str) -> Optional[str]:
+    return CURRENCY_ALIASES.get(str(value or "").strip().casefold())
+
+
+def _currency_label(currency: str) -> str:
+    return "칩" if currency == "chips" else "식량"
+
+
+def _currency_balance(user: Dict[str, Any], currency: str) -> int:
+    if currency == "chips":
+        return casino_chips(user)
+    return max(0, int(user.get("balance", 0) or 0))
+
+
+def _add_currency(user: Dict[str, Any], currency: str, amount: int) -> None:
+    amount = int(amount or 0)
+    if currency == "chips":
+        add_casino_chips(user, amount)
+        return
+    before = max(0, int(user.get("balance", 0) or 0))
+    user["balance"] = max(0, before + amount)
+
+
+def _parse_wager(first: str, second: int = 0) -> Tuple[Optional[str], int, Optional[str]]:
+    raw = str(first or "0").strip()
+    try:
+        # 기존 문법: !아바돈게임 1000 / !아바돈초대 포커 1000
+        amount = int(raw.replace(",", ""))
+        return "chips", max(0, amount), None
+    except ValueError:
+        pass
+    currency = _currency_key(raw)
+    if currency is None:
+        return None, 0, "재화는 `칩` 또는 `식량`으로 입력해주세요."
+    amount = max(0, int(second or 0))
+    maximum = MAX_AI_BET if currency == "chips" else MAX_AI_FOOD_BET
+    if amount > maximum:
+        return None, 0, f"최대 베팅은 **{maximum:,}{_currency_label(currency)}**입니다."
+    return currency, amount, None
 
 
 def _root(world_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -33,32 +83,32 @@ def _guild_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any]
 
 def _patch_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="📌 ABADDON v7.2.1 — 서버 채널 가이드",
+        title="🚂 ABADDON v7.3.0 — 황혼의 종착역",
         description=(
-            "공식 서버의 채널 메뉴를 이름별로 인식해 각 공간에 맞는 안내문을 작성·고정합니다. "
-            "기존 관리 메시지는 새로 쌓지 않고 최신 문구로 갱신합니다."
+            "스토리 시즌 4 ‘황혼의 종착역’과 시즌 유산 보상을 추가하고, "
+            "아바돈 1:1 대전에 카지노 칩과 식량 선택 베팅을 지원합니다."
         ),
         colour=discord.Colour.from_rgb(111, 66, 193),
         timestamp=discord.utils.utcnow(),
     )
     embed.add_field(
-        name="🧭 채널별 전용 안내",
-        value="비상 방송·생존 수칙·가입·작전·RPG·정보실·도박·무전·관리 채널에 서로 다른 이용 안내 적용",
+        name="🚂 스토리 시즌 4",
+        value="황혼의 종착역 선택형 캠페인 · 4개 엔딩 · 이전 시즌 계승 문구 · 엔딩 수집 보상",
         inline=False,
     )
     embed.add_field(
-        name="📌 전체 자동 설치",
-        value="`!채널가이드 전체설치` 한 번으로 메뉴 이름이 맞는 채널을 찾아 순차 작성·고정",
+        name="💰 아바돈 1:1 선택 베팅",
+        value="기존 칩 베팅에 식량 베팅 추가 · 무승부/시간초과 환급 · 게임별 배당 표시",
         inline=False,
     )
     embed.add_field(
-        name="♻️ 중복 없는 갱신",
-        value="아바돈이 관리하는 기존 고정 메시지를 찾아 편집하므로 재배포해도 안내문이 쌓이지 않음",
+        name="🏺 시즌 유산",
+        value="시즌 4 엔딩 1·2·3·4종 수집 단계마다 식량·에너지코어·시즌 포인트·칭호 지급",
         inline=False,
     )
     embed.add_field(
         name="🛡️ 기존 기능 유지",
-        value="통합 환영·신규 역할·패치 자동 공지·아바돈 AI 미니게임과 v7.0.2 데이터 보호 유지",
+        value="채널별 고정 안내·통합 환영·패치 자동 공지·v7.0.2 데이터 보호 유지",
         inline=False,
     )
     embed.set_footer(text=f"ABADDON v{VERSION} · {PATCH_DATE} · 신규 이미지 0장")
@@ -106,6 +156,7 @@ def _stats(world_data: Dict[str, Any], user_id: int) -> Dict[str, Any]:
     state.setdefault("draws", 0)
     state.setdefault("losses", 0)
     state.setdefault("games", {})
+    state.setdefault("wager", {})
     return state
 
 
@@ -121,6 +172,7 @@ class AIDuelView(discord.ui.View):
         world_data: Dict[str, Any],
         game_key: str,
         title: str,
+        currency: str = "chips",
         timeout: float = 90,
     ) -> None:
         super().__init__(timeout=timeout)
@@ -131,9 +183,11 @@ class AIDuelView(discord.ui.View):
         self.world_data = world_data
         self.game_key = game_key
         self.title = title
+        self.currency = currency if currency in {"chips", "food"} else "chips"
         self.done = False
         self.message: Optional[discord.Message] = None
         self.lock = asyncio.Lock()
+        self.settle_lock = asyncio.Lock()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) != self.owner_id:
@@ -146,59 +200,65 @@ class AIDuelView(discord.ui.View):
             child.disabled = True
 
     async def finish(self, interaction: discord.Interaction, outcome: str, detail: str) -> None:
-        if self.done:
-            return
-        self.done = True
-        payout = 0
-        if outcome == "win":
-            payout = self.bet * int(self.win_multiplier)
-            if payout:
-                add_casino_chips(self.user, payout)
-        elif outcome == "draw":
-            payout = self.bet
-            if payout:
-                add_casino_chips(self.user, payout)
-        state = _stats(self.world_data, self.owner_id)
-        key = {"win": "wins", "draw": "draws", "lose": "losses"}[outcome]
-        state[key] = int(state.get(key, 0) or 0) + 1
-        games = state.setdefault("games", {})
-        games[self.game_key] = int(games.get(self.game_key, 0) or 0) + 1
-        self.save_data()
-        self._disable()
-        mark = {"win": "🏆 승리", "draw": "🤝 무승부", "lose": "💀 패배"}[outcome]
-        colour = {"win": discord.Colour.gold(), "draw": discord.Colour.blurple(), "lose": discord.Colour.dark_red()}[outcome]
-        embed = discord.Embed(title=f"{self.title} · {mark}", description=detail, colour=colour)
-        if self.bet:
-            net = self.bet if outcome == "win" else (0 if outcome == "draw" else -self.bet)
-            embed.add_field(name="💰 정산", value=f"{net:+,}칩 · 현재 {casino_chips(self.user):,}칩", inline=False)
-        embed.set_footer(text="🤖 아바돈은 서버의 다른 생존자가 없어도 언제든 함께합니다.")
-        if interaction.response.is_done():
-            target = self.message or interaction.message
-            if target:
-                await target.edit(content=None, embed=embed, view=self)
-        else:
-            await interaction.response.edit_message(content=None, embed=embed, view=self)
-            self.message = interaction.message or self.message
-        self.stop()
+        async with self.settle_lock:
+            if self.done:
+                return
+            self.done = True
+            payout = 0
+            if outcome == "win":
+                payout = self.bet * int(self.win_multiplier)
+                if payout:
+                    _add_currency(self.user, self.currency, payout)
+            elif outcome == "draw":
+                payout = self.bet
+                if payout:
+                    _add_currency(self.user, self.currency, payout)
+            state = _stats(self.world_data, self.owner_id)
+            key = {"win": "wins", "draw": "draws", "lose": "losses"}[outcome]
+            state[key] = int(state.get(key, 0) or 0) + 1
+            games = state.setdefault("games", {})
+            games[self.game_key] = int(games.get(self.game_key, 0) or 0) + 1
+            wager_stats = state.setdefault("wager", {}).setdefault(self.currency, {"staked": 0, "returned": 0})
+            wager_stats["staked"] = int(wager_stats.get("staked", 0) or 0) + self.bet
+            wager_stats["returned"] = int(wager_stats.get("returned", 0) or 0) + payout
+            self.save_data()
+            self._disable()
+            mark = {"win": "🏆 승리", "draw": "🤝 무승부", "lose": "💀 패배"}[outcome]
+            colour = {"win": discord.Colour.gold(), "draw": discord.Colour.blurple(), "lose": discord.Colour.dark_red()}[outcome]
+            embed = discord.Embed(title=f"{self.title} · {mark}", description=detail, colour=colour)
+            if self.bet:
+                net = payout - self.bet
+                label = _currency_label(self.currency)
+                embed.add_field(name="💰 정산", value=f"{net:+,}{label} · 현재 {_currency_balance(self.user, self.currency):,}{label}", inline=False)
+            embed.set_footer(text="🤖 아바돈은 서버의 다른 생존자가 없어도 언제든 함께합니다.")
+            if interaction.response.is_done():
+                target = self.message or interaction.message
+                if target:
+                    await target.edit(content=None, embed=embed, view=self)
+            else:
+                await interaction.response.edit_message(content=None, embed=embed, view=self)
+                self.message = interaction.message or self.message
+            self.stop()
 
     async def on_timeout(self) -> None:
-        if self.done:
-            return
-        self.done = True
-        if self.bet:
-            add_casino_chips(self.user, self.bet)
-            self.save_data()
-        self._disable()
-        if self.message:
-            embed = discord.Embed(
-                title=f"{self.title} · ⌛ 종료",
-                description="시간이 지나 대전이 종료됐어요. 참가비는 전액 돌려드렸습니다.",
-                colour=discord.Colour.dark_grey(),
-            )
-            try:
-                await self.message.edit(embed=embed, view=self)
-            except discord.HTTPException:
-                pass
+        async with self.settle_lock:
+            if self.done:
+                return
+            self.done = True
+            if self.bet:
+                _add_currency(self.user, self.currency, self.bet)
+                self.save_data()
+            self._disable()
+            if self.message:
+                embed = discord.Embed(
+                    title=f"{self.title} · ⌛ 종료",
+                    description="시간이 지나 대전이 종료됐어요. 참가비는 전액 돌려드렸습니다.",
+                    colour=discord.Colour.dark_grey(),
+                )
+                try:
+                    await self.message.edit(embed=embed, view=self)
+                except discord.HTTPException:
+                    pass
 
 
 class RPSView(AIDuelView):
@@ -531,9 +591,10 @@ GAME_LABELS = {
 
 
 class AIGameSelect(discord.ui.Select):
-    def __init__(self, starter: Callable[[discord.Interaction, str, int], Any], bet: int) -> None:
+    def __init__(self, starter: Callable[..., Any], bet: int, currency: str) -> None:
         self.starter = starter
         self.bet = int(bet)
+        self.currency = currency
         super().__init__(
             placeholder="아바돈과 할 게임을 골라주세요",
             min_values=1,
@@ -541,7 +602,7 @@ class AIGameSelect(discord.ui.Select):
             options=[
                 discord.SelectOption(label="가위바위보", value="rps", emoji="✊", description="빠른 1판 승부"),
                 discord.SelectOption(label="홀짝 대결", value="odd", emoji="🎲", description="주사위 홀수/짝수 예측"),
-                discord.SelectOption(label="숫자결투", value="number", emoji="🔢", description="1~5 중 높은 숫자 승리"),
+                discord.SelectOption(label="숫자결투", value="number", emoji="🔢", description="1~5 숨은 숫자 맞히기"),
                 discord.SelectOption(label="1:1 포커", value="poker", emoji="♠️", description="5장 족보와 한 장 교환"),
                 discord.SelectOption(label="간편 원카드", value="onecard", emoji="🎴", description="같은 숫자/무늬 빠른 대전"),
                 discord.SelectOption(label="조커 추적", value="joker", emoji="🃏", description="세 카드 중 조커 피하기"),
@@ -550,13 +611,13 @@ class AIGameSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await self.starter(interaction, self.values[0], self.bet)
+        await self.starter(interaction, self.values[0], self.bet, currency=self.currency)
 
 
 class AIGameMenuView(discord.ui.View):
-    def __init__(self, starter: Callable[[discord.Interaction, str, int], Any], bet: int) -> None:
+    def __init__(self, starter: Callable[..., Any], bet: int, currency: str) -> None:
         super().__init__(timeout=180)
-        self.add_item(AIGameSelect(starter, bet))
+        self.add_item(AIGameSelect(starter, bet, currency))
 
 
 def register_v720_coop_cleanup(
@@ -580,6 +641,7 @@ def register_v720_coop_cleanup(
             "!아바돈게임 [참가비] — 혼자일 때 아바돈과 1:1 미니게임 7종",
             "!아바돈초대 게임이름 [참가비] — 가위바위보/홀짝/숫자/포커/원카드/조커/신호",
             "!아바돈전적 — 아바돈 상대 승/무/패 기록",
+            "!아바돈내기 게임 재화 금액 — 칩 또는 식량을 걸고 아바돈과 1:1",
         ):
             if row.split()[0] not in existing:
                 interactive.setdefault("commands", []).append(row)
@@ -596,7 +658,7 @@ def register_v720_coop_cleanup(
                 server.setdefault("commands", []).append(row)
                 existing += "\n" + row
 
-    async def start_ai_game(interaction: discord.Interaction, kind: str, bet: int, *, replace_message: bool = True) -> None:
+    async def start_ai_game(interaction: discord.Interaction, kind: str, bet: int, *, currency: str = "chips", replace_message: bool = True) -> None:
         uid = int(interaction.user.id)
         if not _registered(user_data, uid):
             if interaction.response.is_done():
@@ -611,19 +673,22 @@ def register_v720_coop_cleanup(
             else:
                 await interaction.response.send_message("지원하지 않는 게임입니다.", ephemeral=True)
             return
-        bet = max(0, min(MAX_AI_BET, int(bet or 0)))
+        currency = currency if currency in {"chips", "food"} else "chips"
+        maximum = MAX_AI_BET if currency == "chips" else MAX_AI_FOOD_BET
+        bet = max(0, min(maximum, int(bet or 0)))
         user = get_user(uid)
-        if bet and casino_chips(user) < bet:
-            message = f"참가비가 부족해요. 현재 **{casino_chips(user):,}칩**"
+        if bet and _currency_balance(user, currency) < bet:
+            label = _currency_label(currency)
+            message = f"참가비가 부족해요. 현재 **{_currency_balance(user, currency):,}{label}**"
             if interaction.response.is_done():
                 await interaction.followup.send(message, ephemeral=True)
             else:
                 await interaction.response.send_message(message, ephemeral=True)
             return
         if bet:
-            add_casino_chips(user, -bet)
+            _add_currency(user, currency, -bet)
             save_data()
-        kwargs = dict(owner_id=uid, user=user, bet=bet, save_data=save_data, world_data=world_data, game_key=kind, title=GAME_LABELS[kind])
+        kwargs = dict(owner_id=uid, user=user, bet=bet, save_data=save_data, world_data=world_data, game_key=kind, title=GAME_LABELS[kind], currency=currency)
         if kind == "rps": view: AIDuelView = RPSView(**kwargs)
         elif kind == "odd": view = OddEvenView(**kwargs)
         elif kind == "number": view = NumberDuelView(**kwargs)
@@ -649,7 +714,7 @@ def register_v720_coop_cleanup(
                     view.message = await interaction.original_response()
         except Exception:
             if bet:
-                add_casino_chips(user, bet)
+                _add_currency(user, currency, bet)
                 save_data()
             raise
 
@@ -658,38 +723,46 @@ def register_v720_coop_cleanup(
         await start_ai_game(interaction, mapping.get(kind, "rps"), bet, replace_message=True)
 
     @bot.command(name="아바돈게임", aliases=["봇대전", "혼자게임", "AI게임"], help="혼자서 아바돈과 1:1 미니게임을 즐깁니다.")
-    async def ai_game_menu(ctx: commands.Context, 참가비: int = 0) -> None:
+    async def ai_game_menu(ctx: commands.Context, 재화또는금액: str = "0", 금액: int = 0) -> None:
         if not await check_registered(ctx):
             return
-        참가비 = max(0, min(MAX_AI_BET, int(참가비 or 0)))
+        currency, 참가비, error = _parse_wager(재화또는금액, 금액)
+        if error or currency is None:
+            await ctx.send(f"⚠️ {error}\n예: `!아바돈게임 1000` · `!아바돈게임 식량 5000`")
+            return
         embed = discord.Embed(
             title="🤖 아바돈 1:1 미니게임",
             description="같이 할 사람이 없어도 괜찮아요. 아래에서 게임을 고르면 아바돈이 바로 참가합니다.",
             colour=discord.Colour.purple(),
         )
         embed.add_field(name="🎮 게임 7종", value="가위바위보 · 홀짝 · 숫자결투 · 포커 · 원카드 · 조커 추적 · 신호 예측", inline=False)
-        embed.add_field(name="💰 참가비", value=f"{참가비:,}칩" if 참가비 else "무료 친선전", inline=True)
-        embed.set_footer(text="멀티 카드게임 모집방과 생존자 레이스에서도 🤖 아바돈 초대 버튼을 사용할 수 있습니다.")
-        await ctx.send(embed=embed, view=AIGameMenuView(start_ai_game, 참가비))
+        label = _currency_label(currency)
+        embed.add_field(name="💰 참가비", value=f"{참가비:,}{label}" if 참가비 else "무료 친선전", inline=True)
+        embed.add_field(name="📈 배당", value="일반 2배 · 숫자결투 5배 · 신호예측 4배 · 무승부 전액 환급", inline=False)
+        embed.set_footer(text="기존 `!아바돈게임 1000`은 칩 베팅 · 식량은 `!아바돈게임 식량 5000`")
+        await ctx.send(embed=embed, view=AIGameMenuView(start_ai_game, 참가비, currency))
 
     @bot.command(name="아바돈초대", aliases=["봇초대", "AI초대"], help="지정한 게임에 아바돈을 초대합니다.")
-    async def invite_abaddon(ctx: commands.Context, 게임: str = "가위바위보", 참가비: int = 0) -> None:
+    async def invite_abaddon(ctx: commands.Context, 게임: str = "가위바위보", 재화또는금액: str = "0", 금액: int = 0) -> None:
         if not await check_registered(ctx):
             return
         kind = GAME_ALIASES.get(str(게임).casefold())
         if kind is None:
             await ctx.send("게임 이름: `가위바위보`, `홀짝`, `숫자`, `포커`, `원카드`, `조커`, `신호`")
             return
-        # Context 명령을 Interaction 실행 함수와 동일한 안전 경로로 연결합니다.
+        currency, 참가비, error = _parse_wager(재화또는금액, 금액)
+        if error or currency is None:
+            await ctx.send(f"⚠️ {error}\n예: `!아바돈초대 포커 1000` · `!아바돈초대 포커 식량 5000`")
+            return
         user = get_user(ctx.author.id)
-        참가비 = max(0, min(MAX_AI_BET, int(참가비 or 0)))
-        if 참가비 and casino_chips(user) < 참가비:
-            await ctx.send(f"참가비가 부족해요. 현재 **{casino_chips(user):,}칩**")
+        if 참가비 and _currency_balance(user, currency) < 참가비:
+            label = _currency_label(currency)
+            await ctx.send(f"참가비가 부족해요. 현재 **{_currency_balance(user, currency):,}{label}**")
             return
         if 참가비:
-            add_casino_chips(user, -참가비)
+            _add_currency(user, currency, -참가비)
             save_data()
-        kwargs = dict(owner_id=ctx.author.id, user=user, bet=참가비, save_data=save_data, world_data=world_data, game_key=kind, title=GAME_LABELS[kind])
+        kwargs = dict(owner_id=ctx.author.id, user=user, bet=참가비, save_data=save_data, world_data=world_data, game_key=kind, title=GAME_LABELS[kind], currency=currency)
         if kind == "rps": view: AIDuelView = RPSView(**kwargs)
         elif kind == "odd": view = OddEvenView(**kwargs)
         elif kind == "number": view = NumberDuelView(**kwargs)
@@ -697,7 +770,17 @@ def register_v720_coop_cleanup(
         elif kind == "onecard": view = OneCardDuelView(**kwargs)
         elif kind == "joker": view = JokerGuessView(**kwargs)
         else: view = SignalDuelView(**kwargs)
-        view.message = await ctx.send(embed=view.embed(), view=view)  # type: ignore[attr-defined]
+        try:
+            view.message = await ctx.send(embed=view.embed(), view=view)  # type: ignore[attr-defined]
+        except Exception:
+            if 참가비:
+                _add_currency(user, currency, 참가비)
+                save_data()
+            raise
+
+    @bot.command(name="아바돈내기", aliases=["AI내기", "봇내기"], help="아바돈과 게임 내 칩 또는 식량을 걸고 1:1 대결합니다.")
+    async def abaddon_wager(ctx: commands.Context, 게임: str = "가위바위보", 재화: str = "칩", 금액: int = 1000) -> None:
+        await invite_abaddon.callback(ctx, 게임, 재화, 금액)
 
     @bot.command(name="아바돈전적", aliases=["봇전적", "AI전적"], help="아바돈과의 1:1 미니게임 전적을 확인합니다.")
     async def ai_record(ctx: commands.Context) -> None:
@@ -707,6 +790,16 @@ def register_v720_coop_cleanup(
         embed = discord.Embed(title="🤖 아바돈 대전 기록", colour=discord.Colour.purple())
         embed.add_field(name="전체", value=f"🏆 {state['wins']}승 · 🤝 {state['draws']}무 · 💀 {state['losses']}패", inline=False)
         embed.add_field(name="게임별", value="\n".join(rows[:12]) or "아직 대전 기록이 없어요.", inline=False)
+        wager = state.get("wager", {})
+        wager_rows = []
+        for currency in ("chips", "food"):
+            info = wager.get(currency, {}) if isinstance(wager, dict) else {}
+            staked = int(info.get("staked", 0) or 0)
+            returned = int(info.get("returned", 0) or 0)
+            if staked or returned:
+                label = _currency_label(currency)
+                wager_rows.append(f"{label} · 누적 베팅 {staked:,} · 회수 {returned:,} · 순손익 {returned - staked:+,}")
+        embed.add_field(name="💰 1:1 베팅 기록", value="\n".join(wager_rows) or "아직 유료 대전 기록이 없어요.", inline=False)
         await ctx.send(embed=embed)
 
     @bot.command(name="패치채널", aliases=["업데이트채널"], help="패치 자동 공지가 올라갈 채널을 지정합니다.")
@@ -801,4 +894,4 @@ def register_v720_coop_cleanup(
     bot.v720_start_ai_game = start_ai_game  # type: ignore[attr-defined]
     bot.v720_patch_embed = _patch_embed  # type: ignore[attr-defined]
     bot._abaddon_v720_registered = True  # type: ignore[attr-defined]
-    print("[V7.2.1 CHANNEL GUIDE] 채널별 고정 안내·전체 자동 설치·기존 협동 기능 등록 완료", flush=True)
+    print("[V7.3.0 STORY/WAGER] 시즌 4·선택형 AI 베팅·기존 협동 기능 등록 완료", flush=True)

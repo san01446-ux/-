@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "7.2.1"
+VERSION = "7.3.0"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-03"
 
@@ -623,7 +623,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v7.2.1 채널 가이드 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v7.3.0 시즌·베팅 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -637,28 +637,28 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v7.2.1 채널별 고정 가이드·전체설치와 기존 통합 환영·AI 동료전·데이터 보호를 읽기 전용으로 검사합니다."
+        previous_test.help = "v7.3.0 시즌 4·칩/식량 AI 베팅과 기존 채널 가이드·통합 환영·데이터 보호를 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="📌 ABADDON v7.2.1 — 서버 채널 가이드",
-                description="공식 서버 채널 이름을 인식해 각 공간에 맞는 안내문을 작성·고정하고, 기존 관리 메시지는 중복 없이 갱신합니다.",
+                title="🚂 ABADDON v7.3.0 — 황혼의 종착역",
+                description="스토리 시즌 4 황혼의 종착역과 엔딩 유산을 추가하고, 아바돈 1:1 게임에서 칩 또는 식량을 선택해 베팅할 수 있습니다.",
                 color=0x6F42C1,
             )
-            embed.add_field(name="🧭 채널별 전용 안내", value="비상 방송·생존 수칙·가입·작전·RPG·정보실·도박·무전·관리 채널을 이름별로 구분", inline=False)
-            embed.add_field(name="📌 전체 자동 설치", value="`!채널가이드 전체설치`로 서버 메뉴에 맞는 채널을 찾아 순차 작성·고정", inline=False)
-            embed.add_field(name="♻️ 중복 없는 갱신", value="기존 아바돈 관리 메시지를 편집해 다시 설치해도 고정 안내가 쌓이지 않음", inline=False)
-            embed.add_field(name="🎙️ 음성 채널 채팅 안내", value="공용 무전·분대 통신·음성 I·II·무전 대기의 채팅 안내도 지원 가능한 환경에서 고정", inline=False)
+            embed.add_field(name="🚂 시즌 4", value="황혼선 04 선택형 캠페인 · 4개 엔딩 · 시즌 1~3 계승 현황", inline=False)
+            embed.add_field(name="💰 1:1 선택 베팅", value="`!아바돈게임 식량 5000` 또는 `!아바돈내기 포커 칩 1000`", inline=False)
+            embed.add_field(name="🏺 시즌 유산", value="엔딩 1·2·3·4종 수집 단계마다 식량·에너지코어·시즌 포인트·칭호", inline=False)
+            embed.add_field(name="🛡️ 정산 안전", value="참가비 선차감 · 무승부/시간초과 환급 · 시작 실패 자동 복구 · 중복 정산 차단", inline=False)
             embed.add_field(name="🛡️ 기존 시스템 유지", value="통합 환영·역할·패치 자동 공지·아바돈 AI 미니게임·데이터 보호 유지", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 신규 이미지 0장", inline=False)
-            embed.set_footer(text=f"최신 버전 v7.2.1 · {PATCH_DATE}")
+            embed.set_footer(text=f"최신 버전 v7.3.0 · {PATCH_DATE}")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v7.2.1 채널별 고정 가이드와 전체 자동 설치 내용을 확인합니다."
+        patch.help = "ABADDON v7.3.0 시즌 4와 아바돈 선택형 베팅 패치 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION
