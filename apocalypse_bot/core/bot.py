@@ -5702,7 +5702,7 @@ register_v710_growth_loop(
 from apocalypse_bot.commands.v711_cute_interactions import register_v711_cute_interactions
 register_v711_cute_interactions(bot, world_data, save_data, COMMAND_GUIDE_CATEGORIES)
 
-# V7.2.0: 환영/역할 중복 통합 · 패치 자동 공지 · 아바돈 AI 동료 미니게임
+# V7.2.1: 채널별 전용 고정 가이드 · 전체 자동 설치 · v7.2.0 협동 기능 유지
 from apocalypse_bot.commands.v720_coop_cleanup import register_v720_coop_cleanup
 register_v720_coop_cleanup(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,

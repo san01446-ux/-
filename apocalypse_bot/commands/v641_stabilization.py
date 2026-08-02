@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "7.2.0"
+VERSION = "7.2.1"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-03"
 
@@ -109,6 +109,8 @@ EXPECTED_RECENT_COMMANDS: Tuple[str, ...] = (
     "귀여운메뉴", "새싹설정", "환영테마", "새싹역할설치", "새싹정리",
     # v7.2.0
     "아바돈게임", "아바돈초대", "아바돈전적", "패치채널", "패치자동공지", "패치공지상태", "패치공지게시",
+    # v7.2.1
+    "채널규칙",
 )
 
 VISUAL_MODULES: Tuple[str, ...] = (
@@ -591,6 +593,9 @@ def register_v641_stabilization(
             checks.append(("환영/역할 단일 처리", unified_listener, "SERVER GUARD 입장 리스너 1곳에서 통합 핸들러 호출" if unified_listener else "통합 환영 핸들러 누락"))
             patch_auto = all(bot.get_command(name) is not None for name in ("패치채널", "패치자동공지", "패치공지상태", "패치공지게시"))
             checks.append(("패치 자동 공지", patch_auto, "버전당 1회 게시·채널 자동 감지·수동 게시" if patch_auto else "패치 공지 명령 누락"))
+            channel_rule = bot.get_command("채널규칙")
+            channel_guide_ok = channel_rule is not None and channel_rule.get_command("전체설치") is not None
+            checks.append(("채널별 고정 가이드", channel_guide_ok, "공식 채널명 전용 안내·전체설치·기존 메시지 갱신" if channel_guide_ok else "채널가이드 전체설치 등록 누락"))
 
             english_aliases = getattr(bot, "v652_english_aliases", {})
             english_skipped = getattr(bot, "v652_english_alias_skipped", {})
@@ -618,7 +623,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v7.2.0 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v7.2.1 채널 가이드 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -632,29 +637,28 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v7.2.0 통합 환영·AI 동료전·패치 자동 공지와 기존 데이터 보호를 읽기 전용으로 검사합니다."
+        previous_test.help = "v7.2.1 채널별 고정 가이드·전체설치와 기존 통합 환영·AI 동료전·데이터 보호를 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🧩 ABADDON v7.2.0 — 통합 환영 · 아바돈 동료전",
-                description="겹치던 신규 멤버 메시지와 역할 지급을 하나로 합치고, 패치 자동 공지와 혼자 즐기는 아바돈 AI 미니게임을 추가했습니다.",
+                title="📌 ABADDON v7.2.1 — 서버 채널 가이드",
+                description="공식 서버 채널 이름을 인식해 각 공간에 맞는 안내문을 작성·고정하고, 기존 관리 메시지는 중복 없이 갱신합니다.",
                 color=0x6F42C1,
             )
-            embed.add_field(name="👋 환영 시스템 통합", value="기존 공지·규칙·가입 안내 + 선택형 테마 + 시작 버튼을 하나의 환영 카드에 표시", inline=False)
-            embed.add_field(name="🏷️ 신규 역할 통합", value="기존 `!자동역할`과 새싹 역할을 하나의 설정으로 연결 · 임시/영구 모드 지원", inline=False)
-            embed.add_field(name="📣 패치 자동 공지", value="`!패치채널` 지정 후 새 버전 내용을 버전당 한 번만 자동 게시", inline=False)
-            embed.add_field(name="🤖 아바돈 1:1 게임 7종", value="가위바위보 · 홀짝 · 숫자결투 · 포커 · 간편 원카드 · 조커 추적 · 신호 예측", inline=False)
-            embed.add_field(name="🏁 멀티게임 AI 초대", value="생존자 레이스와 카드게임 모집방에서 사람이 부족하면 **아바돈 초대**", inline=False)
-            embed.add_field(name="🛡️ 안정화 검수", value="명령/별칭 충돌 · 중복 입장 이벤트 · 저장/정산 · 드롭다운 25개 제한 · ZIP 구조 재검사", inline=False)
+            embed.add_field(name="🧭 채널별 전용 안내", value="비상 방송·생존 수칙·가입·작전·RPG·정보실·도박·무전·관리 채널을 이름별로 구분", inline=False)
+            embed.add_field(name="📌 전체 자동 설치", value="`!채널가이드 전체설치`로 서버 메뉴에 맞는 채널을 찾아 순차 작성·고정", inline=False)
+            embed.add_field(name="♻️ 중복 없는 갱신", value="기존 아바돈 관리 메시지를 편집해 다시 설치해도 고정 안내가 쌓이지 않음", inline=False)
+            embed.add_field(name="🎙️ 음성 채널 채팅 안내", value="공용 무전·분대 통신·음성 I·II·무전 대기의 채팅 안내도 지원 가능한 환경에서 고정", inline=False)
+            embed.add_field(name="🛡️ 기존 시스템 유지", value="통합 환영·역할·패치 자동 공지·아바돈 AI 미니게임·데이터 보호 유지", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 신규 이미지 0장", inline=False)
-            embed.set_footer(text=f"최신 버전 v7.2.0 · {PATCH_DATE}")
+            embed.set_footer(text=f"최신 버전 v7.2.1 · {PATCH_DATE}")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v7.2.0 통합 환영, 패치 자동 공지와 아바돈 AI 동료전 내용을 확인합니다."
+        patch.help = "ABADDON v7.2.1 채널별 고정 가이드와 전체 자동 설치 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION

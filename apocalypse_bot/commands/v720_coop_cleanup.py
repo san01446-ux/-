@@ -11,7 +11,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 from apocalypse_bot.commands.v651_card_games import _card_text, _deck, _poker_score
 
-VERSION = "7.2.0"
+VERSION = "7.2.1"
 PATCH_DATE = "2026-08-03"
 MAX_AI_BET = 5_000_000
 
@@ -33,32 +33,32 @@ def _guild_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any]
 
 def _patch_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="🧩 ABADDON v7.2.0 — 통합 환영 · 아바돈 동료전",
+        title="📌 ABADDON v7.2.1 — 서버 채널 가이드",
         description=(
-            "겹치던 신규 멤버 환영 메시지와 역할 지급을 하나로 합치고, "
-            "혼자서도 아바돈을 초대해 미니게임을 즐길 수 있도록 확장했습니다."
+            "공식 서버의 채널 메뉴를 이름별로 인식해 각 공간에 맞는 안내문을 작성·고정합니다. "
+            "기존 관리 메시지는 새로 쌓지 않고 최신 문구로 갱신합니다."
         ),
         colour=discord.Colour.from_rgb(111, 66, 193),
         timestamp=discord.utils.utcnow(),
     )
     embed.add_field(
-        name="👋 환영 시스템 통합",
-        value="입장 메시지 1개 · 신규 역할 1개 · 기존 공지/규칙/가입 안내와 선택 테마를 한 카드에 표시",
+        name="🧭 채널별 전용 안내",
+        value="비상 방송·생존 수칙·가입·작전·RPG·정보실·도박·무전·관리 채널에 서로 다른 이용 안내 적용",
         inline=False,
     )
     embed.add_field(
-        name="📣 패치 자동 공지",
-        value="지정한 패치 채널에 새 버전 내용을 버전당 한 번만 자동 게시",
+        name="📌 전체 자동 설치",
+        value="`!채널가이드 전체설치` 한 번으로 메뉴 이름이 맞는 채널을 찾아 순차 작성·고정",
         inline=False,
     )
     embed.add_field(
-        name="🤖 아바돈 초대",
-        value="가위바위보 · 홀짝 · 숫자결투 · 포커 · 간편 원카드 · 조커 추적 · 신호 예측",
+        name="♻️ 중복 없는 갱신",
+        value="아바돈이 관리하는 기존 고정 메시지를 찾아 편집하므로 재배포해도 안내문이 쌓이지 않음",
         inline=False,
     )
     embed.add_field(
-        name="🛡️ 안정화 검수",
-        value="명령어/별칭 충돌, 중복 입장 이벤트, 데이터 저장, 드롭다운 제한, ZIP 구조 재검사",
+        name="🛡️ 기존 기능 유지",
+        value="통합 환영·신규 역할·패치 자동 공지·아바돈 AI 미니게임과 v7.0.2 데이터 보호 유지",
         inline=False,
     )
     embed.set_footer(text=f"ABADDON v{VERSION} · {PATCH_DATE} · 신규 이미지 0장")
@@ -801,4 +801,4 @@ def register_v720_coop_cleanup(
     bot.v720_start_ai_game = start_ai_game  # type: ignore[attr-defined]
     bot.v720_patch_embed = _patch_embed  # type: ignore[attr-defined]
     bot._abaddon_v720_registered = True  # type: ignore[attr-defined]
-    print("[V7.2.0 COOP CLEANUP] 통합 환영·패치 자동공지·아바돈 동료전 등록 완료", flush=True)
+    print("[V7.2.1 CHANNEL GUIDE] 채널별 고정 안내·전체 자동 설치·기존 협동 기능 등록 완료", flush=True)
