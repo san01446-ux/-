@@ -1,0 +1,11 @@
+{
+  "version": "6.5.1b",
+  "patch_date": "2026-08-02",
+  "python_source_files": 55,
+  "python_compile_errors": [],
+  "invalid_card_symbol_remaining": false,
+  "invalid_chess_symbol_remaining": false,
+  "poker_select_uses_safe_emoji": true,
+  "server_renewal_uses_safe_emoji": true,
+  "card_games_commands_preserved": true
+}

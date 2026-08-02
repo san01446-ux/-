@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "6.5.1a"
+VERSION = "6.5.1b"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-02"
 
@@ -33,7 +33,7 @@ THEMES: Dict[str, Dict[str, Any]] = {
     "신호관측소": {"group":"아포칼립스","emoji":"📡","title":"신호 관측소","color":0x486D91,"tagline":"날씨와 통신 교란을 감시하는 고지대 관측 거점","briefing":"날씨 변화·SOS·서버 이벤트의 남은 시간을 신호 분석표처럼 표시합니다."},
 
     # 깔끔 / 고딕
-    "깔끔고딕": {"group":"깔끔고딕","emoji":"♜","title":"깔끔 고딕","color":0x4B4458,"tagline":"장식을 덜어낸 흑백 고딕 성역","briefing":"검정·회색·은색 중심의 정돈된 문장과 최소한의 장식으로 브리핑합니다."},
+    "깔끔고딕": {"group":"깔끔고딕","emoji":"🏰","title":"깔끔 고딕","color":0x4B4458,"tagline":"장식을 덜어낸 흑백 고딕 성역","briefing":"검정·회색·은색 중심의 정돈된 문장과 최소한의 장식으로 브리핑합니다."},
     "순백성당": {"group":"깔끔고딕","emoji":"🤍","title":"순백 성당","color":0xB8B7C8,"tagline":"밝은 석조와 은빛 유리의 깨끗한 성역","briefing":"경고는 선명하게, 일반 안내는 밝고 차분한 문구로 표시합니다."},
     "은빛도서관": {"group":"깔끔고딕","emoji":"📖","title":"은빛 도서관","color":0x7D8397,"tagline":"차가운 은색과 잉크색 기록실","briefing":"임무·기록·도감 정보를 서고 색인처럼 정갈하게 정리합니다."},
     "왕실무도회": {"group":"깔끔고딕","emoji":"👑","title":"왕실 무도회","color":0x8B658B,"tagline":"보랏빛 벨벳과 금장 장식의 우아한 성역","briefing":"서버 이벤트와 보상을 초대장·연회 공지처럼 표현합니다."},
@@ -275,7 +275,7 @@ def register_v641_stabilization(
     async def stabilization_status(ctx: commands.Context) -> None:
         key, theme = _theme(world_data, _guild_id(ctx))
         embed = discord.Embed(
-            title="🌍 ABADDON v6.5.1 서버 리뉴얼·카드게임 상태",
+            title="🌍 ABADDON v6.5.1b 서버 리뉴얼·카드게임 상태",
             description="카지노 이미지만 비활성화하고 생활·장비·보물·제작·펫·기지·갈갈이·월드보스 이미지는 유지합니다.",
             color=int(theme["color"]),
         )
@@ -396,7 +396,7 @@ def register_v641_stabilization(
             description=f"현재 테마: {current['emoji']} **{current['title']}** (`{current_key}`)\n분류: `전체` `아포칼립스` `깔끔고딕` `화사자연` `모던판타지`",
             color=int(current["color"]),
         )
-        group_icons = {"아포칼립스":"☣️", "깔끔고딕":"♜", "화사자연":"🌸", "모던판타지":"🔮"}
+        group_icons = {"아포칼립스":"☣️", "깔끔고딕":"🏰", "화사자연":"🌸", "모던판타지":"🔮"}
         for group_name, keys in groups.items():
             rows=[]
             for key in keys:
@@ -550,10 +550,14 @@ def register_v641_stabilization(
             card_commands = tuple(getattr(bot, "v651_card_game_commands", ()))
             checks.append(("카드게임 등록", set(card_commands) == {"카드게임", "포커", "원카드", "조커잡기"}, "포커·원카드·조커잡기" if card_commands else "등록 누락"))
 
+            component_sources = (modules_dir / "v651_card_games.py").read_text(encoding="utf-8") + (modules_dir / "v651_server_renewal.py").read_text(encoding="utf-8")
+            invalid_component_emoji = [token for token in ("🂡", "♜") if token in component_sources]
+            checks.append(("Discord 컴포넌트 이모지", not invalid_component_emoji, "표준 이모지 ♠️·🏰 사용" if not invalid_component_emoji else f"유효하지 않은 이모지 잔존: {', '.join(invalid_component_emoji)}"))
+
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v6.5.1a 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v6.5.1b 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -567,29 +571,29 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v6.5.1a 명령어·가이드·28종 서버 리뉴얼·카드게임·비주얼 QA 정책을 읽기 전용으로 검사합니다."
+        previous_test.help = "v6.5.1b 명령어·가이드·28종 서버 리뉴얼·카드게임·비주얼 QA 정책을 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🖼️ ABADDON v6.5.1a — 홈페이지·기지 비주얼 QA",
-                description="홈페이지에 남아 있던 잘못된 미리보기와 흐릿한 기지·중첩 갈갈이 이미지를 실제 배포 에셋 기준으로 정리했습니다. 서버리뉴얼 28종 테마와 카드게임 기능은 그대로 유지합니다.",
+                title="🃏 ABADDON v6.5.1b — 카드게임 컴포넌트 이모지 핫픽스",
+                description="Discord가 거부하던 카드게임 드롭다운 이모지를 표준 이모지로 교체하고, 서버리뉴얼 분류 이모지도 함께 안전화했습니다. 기존 비주얼 QA와 28종 테마·카드게임 기능은 그대로 유지합니다.",
                 color=discord.Color.dark_teal(),
             )
-            embed.add_field(name="🖼️ 비주얼 QA 핫픽스", value="장비·보물 원본 카드 재배치 · 기지 6단계 이미지 교체 · 갈갈이 중첩 스크린샷 제거 · 홈페이지 카드 높이 정렬", inline=False)
-            embed.add_field(name="🎨 서버 리뉴얼 최신화", value="28종 테마를 분류→테마 2단 드롭다운으로 선택 · 채널 구조 7종과 자동 매핑 · 브리핑 테마 동기화", inline=False)
+            embed.add_field(name="🃏 카드게임 오류 수정", value="포커 선택지의 비표준 카드 문자 `🂡`를 Discord가 허용하는 `♠️`로 교체 · `!카드게임` 400 Invalid Form Body 수정", inline=False)
+            embed.add_field(name="🎨 서버리뉴얼 이모지 안전화", value="깔끔·고딕 분류의 텍스트 기호 `♜`를 표준 이모지 `🏰`로 교체 · 28종 테마와 2단 드롭다운 유지", inline=False)
             embed.add_field(name="🃏 카드게임", value="포커 2~6명 · 원카드 2~6명 · 조커잡기 2~8명 · 참가 버튼·비공개 패·턴제 선택·시간 초과 환불", inline=False)
             embed.add_field(name="🛠️ 서버 설정 통합", value="서버 브리핑·이벤트 채널·개인 알림·백업·복구·429 상태를 `!서버리뉴얼` 한 화면에서 관리", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 홈페이지·`!명령어`·`!패치노트` 동기화", inline=False)
             embed.add_field(name="💾 안전 정산", value="카드게임 참가비는 시작 시 차감 · 모집 취소는 미차감 · 진행 시간 초과는 전원 환불 · 재시작 잔존 예약 자동 복구", inline=False)
             embed.add_field(name="📚 명령어 드롭다운", value="카드게임/파티 최상위 카테고리 추가 · 안정화/서버 테마에 `!서버리뉴얼` 최신 명령 반영", inline=False)
-            embed.set_footer(text=f"최신 버전 v6.5.1a · {PATCH_DATE} · 카지노만 이미지 미사용")
+            embed.set_footer(text=f"최신 버전 v6.5.1b · {PATCH_DATE} · 카지노만 이미지 미사용")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v6.5.1a 홈페이지·기지·갈갈이 비주얼 QA 핫픽스와 서버 리뉴얼·카드게임 유지 내용을 확인합니다."
+        patch.help = "ABADDON v6.5.1b 카드게임·서버리뉴얼 드롭다운 이모지 핫픽스 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION

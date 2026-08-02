@@ -9,7 +9,7 @@ from discord.ext import commands
 from apocalypse_bot.commands import v433_voice_sanctuary as renewal
 from apocalypse_bot.commands.v641_stabilization import THEMES, THEME_GROUPS
 
-VERSION = "6.5.1"
+VERSION = "6.5.1b"
 PATCH_DATE = "2026-08-02"
 
 THEME_TO_STYLE: Dict[str, str] = {}
@@ -197,7 +197,7 @@ def register_v651_server_renewal(
                 description="28종 테마는 브리핑 색상·문구와 채널 구조 스타일을 함께 연결합니다. 기존 7개 구조 스타일은 호환용으로 계속 사용할 수 있습니다.",
                 color=0x6D2335,
             )
-            icons = {"아포칼립스":"☣️", "깔끔고딕":"♜", "화사자연":"🌸", "모던판타지":"🔮"}
+            icons = {"아포칼립스":"☣️", "깔끔고딕":"🏰", "화사자연":"🌸", "모던판타지":"🔮"}
             for group_name, keys in THEME_GROUPS.items():
                 rows = []
                 for key in keys:
@@ -296,7 +296,7 @@ def register_v651_server_renewal(
                 self.mode = mode
                 options = [
                     discord.SelectOption(label="아포칼립스 12종", value="아포칼립스", emoji="☣️", description="생존·폐허·방어 중심"),
-                    discord.SelectOption(label="깔끔·고딕 4종", value="깔끔고딕", emoji="♜", description="깔끔·성당·도서관·왕실"),
+                    discord.SelectOption(label="깔끔·고딕 4종", value="깔끔고딕", emoji="🏰", description="깔끔·성당·도서관·왕실"),
                     discord.SelectOption(label="화사·자연 6종", value="화사자연", emoji="🌸", description="정원·온실·해변·들판"),
                     discord.SelectOption(label="모던·판타지 6종", value="모던판타지", emoji="🔮", description="네온·도시·학원·서재"),
                 ]
@@ -370,7 +370,7 @@ def register_v651_server_renewal(
                 self.add_item(RenewalMenu())
 
         embed = _theme_summary_embed(world_data, guild)
-        embed.title = "🕯️ ABADDON 서버 리뉴얼 제어실 v6.5.1"
+        embed.title = "🕯️ ABADDON 서버 리뉴얼 제어실 v6.5.1b"
         embed.description = (
             "아래 드롭다운에서 **28종 테마·채널 구조·게임 구역·알림·이벤트 채널·백업·복구**를 관리하세요.\n"
             "테마 적용은 브리핑 테마를 동기화하고, 실제 채널 변경은 기존처럼 안전 계획을 거쳐 한 단계씩 진행합니다."

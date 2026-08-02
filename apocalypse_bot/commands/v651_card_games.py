@@ -12,7 +12,7 @@ from discord.ext import commands
 
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 
-VERSION = "6.5.1"
+VERSION = "6.5.1b"
 MIN_BET = 10_000
 MAX_BET = 20_000_000
 
@@ -404,7 +404,7 @@ class PokerSession(BaseCardSession):
 
     def embed(self, final: Optional[str] = None) -> discord.Embed:
         embed = discord.Embed(
-            title="🂡 생존자 포커 · 5장 승부",
+            title="♠️ 생존자 포커 · 5장 승부",
             description=final or "`내 패 보기`로 비공개 패를 확인하고, 필요하면 **한 장만 교환**한 뒤 준비를 누르세요.",
             color=discord.Color.gold(),
         )
@@ -840,7 +840,7 @@ class CardGameSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="생존자 포커", value="포커", emoji="🂡", description="2~6명 · 한 장 교환 후 족보 승부"),
+                discord.SelectOption(label="생존자 포커", value="포커", emoji="♠️", description="2~6명 · 한 장 교환 후 족보 승부"),
                 discord.SelectOption(label="원카드", value="원카드", emoji="🎴", description="2~6명 · 턴제 카드 내기"),
                 discord.SelectOption(label="조커잡기", value="조커잡기", emoji="🃏", description="2~8명 · 마지막 조커 피하기"),
             ],
@@ -951,7 +951,7 @@ def register_v651_card_games(
             description="드롭다운에서 게임을 고르고 참가비를 입력하면 모집방이 열립니다. 참가비는 **게임 시작 시점**에만 차감됩니다.",
             color=discord.Color.dark_purple(),
         )
-        embed.add_field(name="🂡 포커", value="비공개 5장 · 한 장 교환 · 족보 승부", inline=False)
+        embed.add_field(name="♠️ 포커", value="비공개 5장 · 한 장 교환 · 족보 승부", inline=False)
         embed.add_field(name="🎴 원카드", value="턴제 선택 · 같은 무늬/숫자 · 특수 카드", inline=False)
         embed.add_field(name="🃏 조커잡기", value="짝 자동 제거 · 옆 사람 패에서 뽑기 · 마지막 조커 패배", inline=False)
         embed.set_footer(text=f"참가비 {MIN_BET:,}~{MAX_BET:,}칩 · 진행 중 시간 초과 시 전원 환불")
