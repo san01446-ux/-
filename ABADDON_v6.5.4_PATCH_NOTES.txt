@@ -1,0 +1,22 @@
+ABADDON v6.5.4 — English Help Localization
+Patch date: 2026-08-02
+
+1. Fully English help interface
+- !help, !commands, !english, !enhelp, !englishhelp, and !guide now open the same English-only command browser.
+- Embed titles, descriptions, category dropdowns, option descriptions, buttons, search modal, search results, errors, and footers are displayed only in English.
+- English keyword search is supported: !help base, !help pet, !help equipment, !help dungeon.
+
+2. Korean help preserved
+- !명령어 keeps the existing Korean dropdown command browser.
+- !도움말 keeps the existing Korean category help.
+- Existing Korean commands were not removed or renamed.
+
+3. Compatibility
+- 131 English aliases remain connected to the original Korean command callbacks.
+- Balances, cooldowns, permissions, economy values, and save data were not changed.
+- No image assets were changed in this patch.
+- Bot source contains no active "공식 승인 봇" or equivalent approval wording.
+
+4. Diagnostics
+- !테스트 상세 now checks that the English help command is separated from the Korean help commands.
+- It verifies that !help, !commands, !english, and !enhelp point to the same English interface.

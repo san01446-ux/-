@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "6.5.3"
+VERSION = "6.5.4"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-02"
 
@@ -573,8 +573,21 @@ def register_v641_stabilization(
             english_aliases = getattr(bot, "v652_english_aliases", {})
             english_skipped = getattr(bot, "v652_english_alias_skipped", {})
             english_total = sum(len(v) for v in english_aliases.values())
-            english_ok = english_total >= 120 and bot.get_command("english") is not None and bot.get_command("commands") is not None
-            checks.append(("영어 명령어 호환", english_ok, f"등록 {english_total}개 · 건너뜀 {len(english_skipped)}개 · 한국어 원본 유지"))
+            english_help = bot.get_command("help")
+            english_help_names = (bot.get_command("commands"), bot.get_command("english"), bot.get_command("enhelp"))
+            english_help_separated = (
+                english_help is not None
+                and all(command is english_help for command in english_help_names)
+                and english_help is not bot.get_command("명령어")
+                and english_help is not bot.get_command("도움말")
+                and int(getattr(bot, "v654_english_help_categories", 0) or 0) >= 13
+            )
+            english_ok = english_total >= 120 and english_help_separated
+            checks.append((
+                "영어 도움말 완전 분리",
+                english_ok,
+                f"영문 별칭 {english_total}개 · 영어 카테고리 {getattr(bot, 'v654_english_help_categories', 0)}개 · help/commands/english 동일 화면 · 한국어 브라우저 분리",
+            ))
 
             component_sources = (modules_dir / "v651_card_games.py").read_text(encoding="utf-8") + (modules_dir / "v651_server_renewal.py").read_text(encoding="utf-8")
             invalid_component_emoji = [token for token in ("🂡", "♜") if token in component_sources]
@@ -583,7 +596,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v6.5.3 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v6.5.4 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -597,7 +610,7 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v6.5.3 명령어·가이드·28종 서버 리뉴얼·카드게임·활동 이미지 갤러리를 읽기 전용으로 검사합니다."
+        previous_test.help = "v6.5.4 한국어·영어 도움말 분리, 명령어 별칭, 28종 서버 테마와 주요 시스템을 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
