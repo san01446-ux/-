@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "7.6.0"
+VERSION = "7.7.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -191,6 +191,27 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("mine", "광산", "광석과 고철을 채굴합니다.", "광산"),
             _a("resources", "자원 현황", "보유 생활 자원을 확인합니다.", "자원"),
             _a("encounter_codex", "인카운트 도감", "알바·땅파기·채집·벌목 중 발견한 조우 기록을 확인합니다.", "인카운트도감"),
+            _a("farming_menu", "폐허 파밍", "지역을 고르고 물자 회수 또는 랜덤 인카운트를 진행합니다.", "파밍"),
+            _a("farming_regions", "파밍 지역", "레벨·위험도·주요 회수 물자를 확인합니다.", "파밍지역"),
+            _a("farming_start", "파밍 출발", "마트·주거구역·화물역·격리구역 중 하나로 출발합니다.", "파밍출발", "예: 화물역", force_modal=True),
+            _a("farming_choice", "인카운트 선택", "전투·회피·구조·추가 탐색 중 현장 행동을 선택합니다.", "파밍선택", "예: 추가탐색", force_modal=True),
+            _a("farming_history", "파밍 기록", "회수 결과와 인카운트 선택 기록을 확인합니다.", "파밍기록"),
+            _a("workshop", "폐허 복구 공방", "미감정 폐품과 감정 완료 폐품을 확인합니다.", "공방"),
+            _a("scrap_identify", "폐품 감정", "미감정 폐품을 분석해 복구 대상을 확인합니다.", "폐품감정", "선택: 폐품 ID", force_modal=False),
+            _a("scrap_dismantle", "폐품 분해", "감정 완료 폐품을 분해해 생활 재료를 회수합니다.", "폐품분해", "선택: 폐품 ID", force_modal=False),
+            _a("scrap_repair", "폐품 수리", "감정 완료 폐품을 복구해 완제품 정산을 시도합니다.", "폐품수리", "선택: 폐품 ID", force_modal=False),
+            _a("signal_search_v770", "전파 탐색", "폐허 신호 퍼즐을 찾아 해독 대기 상태로 저장합니다.", "전파탐색"),
+            _a("signal_decode_v770", "신호 해독", "수신 후보 번호를 선택해 신호를 해독합니다.", "신호해독", "예: 3", force_modal=True),
+            _a("signal_history_v770", "주파수 기록", "해독 기록과 연구 자료를 확인합니다.", "주파수기록"),
+            _a("contract_board", "의뢰 게시판", "매일 바뀌는 생존 물자 납품 계약을 확인합니다.", "의뢰게시판"),
+            _a("contract_accept", "계약 수락", "오늘의 계약 번호 하나를 선택합니다.", "계약수락", "예: 2", force_modal=True),
+            _a("contract_deliver", "계약 납품", "수락한 계약의 자원을 제출하고 정산합니다.", "납품"),
+            _a("contract_status", "계약 현황", "오늘 완료·수락 중인 계약을 확인합니다.", "계약현황"),
+            _a("laboratory", "생활 연구소", "연구 자료·설계도 조각과 생활 기술을 확인합니다.", "연구소"),
+            _a("research_start", "연구 시작", "생활 기술 하나를 선택해 연구를 시작합니다.", "연구시작", "예: 폐품회수", force_modal=True),
+            _a("research_progress", "연구 진행", "진행 중 연구의 남은 시간과 완료 상태를 확인합니다.", "연구진행"),
+            _a("blueprints", "생활 설계도", "해금한 생활 기술과 잠긴 설계도를 확인합니다.", "설계도"),
+            _a("v770_stability", "v7.7 생활 안정화 검수", "파밍·인카운트·공방·계약·연구 저장 구조를 읽기 전용 검사합니다.", "770안정화검수"),
             _a("base", "기지 현황", "기지 레벨과 저장량을 확인합니다.", "기지"),
             _a("base_build", "기지 건설", "기지가 없다면 새로 건설합니다.", "기지건설"),
             _a("base_upgrade", "기지 강화", "재료를 사용해 기지를 강화합니다.", "기지강화"),
@@ -478,6 +499,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
     ),
     "life": (
         ("activities", "🌲 생활 활동", "알바와 채집 활동, 자원·인카운트 기록입니다.", ("work", "coin", "gather", "fish", "lumber", "mine", "resources", "encounter_codex")),
+        ("ruin_farming", "🧭 폐허 파밍·생활 기술", "지역 파밍, 인카운트, 폐품 공방, 전파 해독, 납품과 연구를 실행합니다.", ("farming_menu", "farming_regions", "farming_start", "farming_choice", "farming_history", "workshop", "scrap_identify", "scrap_dismantle", "scrap_repair", "signal_search_v770", "signal_decode_v770", "signal_history_v770", "contract_board", "contract_accept", "contract_deliver", "contract_status", "laboratory", "research_start", "research_progress", "blueprints", "v770_stability")),
         ("base", "🏕️ 기지·세계 이벤트", "기지 성장, 날씨, 운세, 무전과 방어전입니다.", ("base", "base_build", "base_upgrade", "base_collect", "weather", "daily_fortune", "radio_signal", "hazard_zone", "random_box", "base_defense", "base_defense_attack")),
         ("market", "📦 자원 시장", "자원을 사고팔거나 기지 칩으로 교환합니다.", ("resource_market", "resource_buy", "resource_sell", "base_chip_exchange")),
         ("bank", "🏦 은행", "입출금, 대출, 상환, 이자와 신용 기록입니다.", ("bank", "deposit", "withdraw", "loan", "repay", "bank_interest", "credit", "bank_history")),
@@ -525,7 +547,7 @@ QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
     "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·성장 보드·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "tutorial", "growth_board", "catchup_support_v710", "shop", "inventory", "equipment", "training")),
     "grow": ("📈 강해지고 싶어요", "성장 보드에서 목표를 확인하고 프리셋·강화·미션 보상으로 성장합니다.", ("growth_board", "mission_reward_v710", "info", "shop", "inventory", "equipment", "equipment_preset_v710", "equip", "enhance", "season_pass", "achievements")),
     "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "region_list", "region_explore", "raid", "worldboss_status")),
-    "earn": ("🥫 식량과 자원이 필요해요", "지원금·알바·채집·굴착과 자원 시장으로 재화를 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "dig", "treasure_appraise", "resource_market")),
+    "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 자원 시장으로 재화를 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "dig", "treasure_appraise", "resource_market")),
     "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·퀴즈 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "expedition", "exp_start", "relic", "daily_quiz")),
     "community": ("🤝 같이 놀고 싶어요", "길드·공동 기지·레이드·파티·카드게임·거래로 이동합니다.", ("guild_dashboard", "guild_base", "guild_raid", "party_create", "card_game_menu", "market", "transfer")),
 }

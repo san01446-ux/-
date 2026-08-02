@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "7.6.0"
+VERSION = "7.7.0"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-03"
 
@@ -619,10 +619,19 @@ def register_v641_stabilization(
                 guild_audit = {"critical": 1, "warning": 0, "error": f"{type(exc).__name__}: {exc}"}
             guild_ok = not missing_guild and callable(guild_audit_fn) and int(guild_audit.get("critical", 1) or 0) == 0
             checks.append((
-                "v7.6.0 길드 통합·전술·파견",
+                "v7.7.0 길드·생활 통합",
                 guild_ok,
-                "기지·금고·레이드·전술실·협동 파견·감사 명령 정상" if guild_ok else f"누락 {', '.join(missing_guild) or '-'} · 치명 {guild_audit.get('critical', '?')}",
+                "길드·파견 명령 정상" if guild_ok else f"누락 {', '.join(missing_guild) or '-'} · 치명 {guild_audit.get('critical', '?')}",
             ))
+            life_commands = (
+                "파밍", "파밍지역", "파밍출발", "파밍선택", "파밍기록",
+                "공방", "폐품감정", "폐품분해", "폐품수리",
+                "전파탐색", "신호해독", "주파수기록",
+                "의뢰게시판", "계약수락", "납품", "계약현황",
+                "연구소", "연구시작", "연구진행", "설계도", "770안정화검수",
+            )
+            missing_life = [name for name in life_commands if bot.get_command(name) is None]
+            checks.append(("v7.7 생활 기능 등록", not missing_life, "파밍·인카운트·공방·신호·계약·연구 정상" if not missing_life else f"누락 {', '.join(missing_life)}"))
             checks.append(("길드 폐기 안전", int(guild_audit.get("deletions", 0) or 0) == 0, "자동 삭제·비활성화 0건 · 휴면 보존"))
 
             english_aliases = getattr(bot, "v652_english_aliases", {})
@@ -651,7 +660,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v7.6.0 길드 파견·회귀 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v7.7.0 생활 확장·회귀 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -665,28 +674,28 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v7.6.0 게임센터 연결, 길드 레이드·협동 파견과 기존 중복·스토리·데이터 보호를 읽기 전용으로 검사합니다."
+        previous_test.help = "v7.7.0 게임센터 연결, 길드·파밍·인카운트·생활 기술과 기존 데이터 보호를 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🧭 ABADDON v7.6.0 — 길드 협동 파견·안정화",
-                description="역할을 나눠 길드 파견대를 편성하고, 복귀 뒤 길드 금고와 개인 보상을 중복 없이 정산하는 협동 콘텐츠를 추가했습니다.",
-                color=0x267F78,
+                title="🧭 ABADDON v7.7.0 — 폐허 파밍·생활 기술",
+                description="지역 선택형 파밍과 랜덤 인카운트, 폐품 공방, 전파 해독, 납품 계약과 생활 연구를 추가했습니다.",
+                color=0x307E62,
             )
-            embed.add_field(name="🗺️ 파견 4지역", value="폐허 보급로 · 침수 산업지대 · 격리연구소 외곽 · 황혼 철도 종착지", inline=False)
-            embed.add_field(name="👥 역할 편성", value="선봉·기술·의무·보급 · 역할 다양성에 따라 파견 점수와 보상 보정", inline=False)
-            embed.add_field(name="🏦 안전 정산", value="출발 비용 원자적 차감 · 결과 1회 정산 · 개인 보상 claim key 중복 수령 방지", inline=False)
-            embed.add_field(name="🧪 모의 계산", value="`!길드파견모의 지역 역할`은 실제 금고·기록·재화를 변경하지 않습니다.", inline=False)
-            embed.add_field(name="🧹 중복·폐기 안전", value="기존 명령·길드·스토리 데이터 유지 · 삭제·비활성화 **0건**", inline=False)
+            embed.add_field(name="🗺️ 폐허 파밍", value="마트·주거구역·화물역·격리구역 · 전투·회피·구조·추가 탐색 선택", inline=False)
+            embed.add_field(name="💎 회수 물자", value="식량·생활 재료·보물 파편·미감정 보물·미감정 폐품", inline=False)
+            embed.add_field(name="🔧 생활 기술", value="폐품 감정·분해·수리 · 전파 해독 · 일일 납품 · 연구소와 설계도", inline=False)
+            embed.add_field(name="🛡️ 안전 정산", value="사용자별 잠금 · 재접속 복구 · 인카운트·계약·폐품 보상 중복 지급 방지", inline=False)
+            embed.add_field(name="🧹 중복·폐기 안전", value="채집·광산·벌목·굴착·길드 파견과 역할 분리 · 삭제·비활성화 **0건**", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 신규 이미지 0장", inline=False)
-            embed.set_footer(text=f"최신 버전 v7.6.0 · {PATCH_DATE}")
+            embed.set_footer(text=f"최신 버전 v7.7.0 · {PATCH_DATE}")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v7.6.0 길드 협동 파견·안정화 패치 내용을 확인합니다."
+        patch.help = "ABADDON v7.7.0 폐허 파밍·생활 기술 패치 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION

@@ -5653,6 +5653,14 @@ register_v760_guild_dispatch(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V7.7.0: 지역 선택형 폐허 파밍 · 랜덤 인카운트 · 폐품 공방 · 전파 해독 · 일일 납품 · 생활 연구
+# 공개 화면에는 획득 비율을 노출하지 않고, 연타·재접속·중복 정산을 사용자별 잠금과 고유 ID로 보호합니다.
+from apocalypse_bot.commands.v770_ruin_farming import register_v770_ruin_farming
+register_v770_ruin_farming(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

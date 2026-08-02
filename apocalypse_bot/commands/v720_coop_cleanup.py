@@ -11,7 +11,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 from apocalypse_bot.commands.v651_card_games import _card_text, _deck, _poker_score
 
-VERSION = "7.6.0"
+VERSION = "7.7.0"
 PATCH_DATE = "2026-08-03"
 MAX_AI_BET = 5_000_000
 MAX_AI_FOOD_BET = 10_000_000
@@ -83,37 +83,37 @@ def _guild_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any]
 
 def _patch_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="🧭 ABADDON v7.6.0 — 길드 협동 파견·안정화",
+        title="🧭 ABADDON v7.7.0 — 폐허 파밍·생활 기술",
         description=(
-            "길드원이 역할을 나눠 비동기 파견대를 편성하고, 복귀 후 길드 금고와 개인 보상을 안전하게 정산합니다. "
-            "v7.5.1 실서버 부팅 검증 결과를 바탕으로 메뉴·명령·보상 중복 검사를 다시 강화했습니다."
+            "지역 선택형 파밍과 랜덤 인카운트, 폐품 복구 공방, 전파 해독, 일일 납품 계약과 생활 연구를 추가했습니다. "
+            "기존 생활 기능과 역할을 분리하고 현장 선택과 회수품 처리 과정을 하나의 생활 루프로 연결했습니다."
         ),
-        colour=discord.Colour.from_rgb(38, 132, 126),
+        colour=discord.Colour.from_rgb(48, 126, 98),
         timestamp=discord.utils.utcnow(),
     )
     embed.add_field(
-        name="🗺️ 협동 파견 4지역",
-        value="폐허 보급로 · 침수 산업지대 · 격리연구소 외곽 · 황혼 철도 종착지",
+        name="🗺️ 지역 파밍·랜덤 인카운트",
+        value="마트·주거구역·화물역·격리구역에서 물자를 회수하고 전투·회피·구조·추가 탐색을 선택",
         inline=False,
     )
     embed.add_field(
-        name="👥 역할 편성",
-        value="선봉·기술·의무·보급 역할을 선택해 참가 · 역할 다양성에 따라 성공 점수와 보상 보정",
+        name="💎 보물·폐품 처리",
+        value="식량·자원·보물 파편·미감정 보물·미감정 폐품을 회수 · 보물감정소와 폐허 공방으로 연결",
         inline=False,
     )
     embed.add_field(
-        name="🏦 안전 정산",
-        value="출발 비용 원자적 차감 · 복귀 결과 1회 정산 · 개인 claim key 중복 수령 방지 · 창고 한도 초과량 명시",
+        name="📡 신호·계약·연구",
+        value="전파 퍼즐 해독 · 하루 한정 납품 계약 · 설계도 조각과 연구 자료를 사용하는 생활 기술",
         inline=False,
     )
     embed.add_field(
-        name="🧪 무변경 모의 계산",
-        value="`!길드파견모의 지역 역할`로 실제 금고·기록·보상에 영향 없이 1인 결과를 예측",
+        name="🛡️ 안전 정산",
+        value="사용자별 잠금 · 고유 인카운트 ID · 재접속 후 명령 복구 · 계약·폐품·보상 이중 지급 방지",
         inline=False,
     )
     embed.add_field(
-        name="🛡️ 안정화 원칙",
-        value="게임센터 연결·명령 별칭·길드 잠금·스토리 순차 해금 회귀 검사 · 기존 기능·데이터 폐기 0건",
+        name="🧹 중복 검수",
+        value="채집·광산·벌목·굴착·길드 파견과 역할을 분리 · 기존 기능·데이터 폐기 0건",
         inline=False,
     )
     embed.set_footer(text=f"ABADDON v{VERSION} · {PATCH_DATE} · 기존 이미지 변경 0장")
@@ -899,4 +899,4 @@ def register_v720_coop_cleanup(
     bot.v720_start_ai_game = start_ai_game  # type: ignore[attr-defined]
     bot.v720_patch_embed = _patch_embed  # type: ignore[attr-defined]
     bot._abaddon_v720_registered = True  # type: ignore[attr-defined]
-    print("[V7.6.0 GUILD DISPATCH] 길드 협동 파견·안전 정산·기존 협동 기능 등록 완료", flush=True)
+    print("[V7.7.0 RUIN FARMING] 폐허 파밍·생활 기술·기존 협동 기능 등록 완료", flush=True)
