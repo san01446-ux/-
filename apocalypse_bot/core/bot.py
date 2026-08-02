@@ -5669,6 +5669,14 @@ register_v780_server_disaster(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V7.9.0: 운영·알림·임시 음성·우클릭·하이라이트 + 자동 공동 재난/기상/버튼 참여 확장
+# 기존 문의·점검·통계·개별 알림은 삭제하지 않고 통합 진입점에서 재사용합니다.
+from apocalypse_bot.commands.v790_operations_disaster import register_v790_operations_disaster
+register_v790_operations_disaster(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

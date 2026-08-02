@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "7.8.0"
+VERSION = "7.9.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -420,6 +420,38 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("transfer", "송금", "대상 멘션/ID와 금액을 입력합니다.", "송금", "예: @상대 1000", force_modal=True),
         ),
     ),
+    "community_ops": (
+        "🛡️ 운영·알림·커뮤니티",
+        "통합 운영센터, 자동 재난 감시, 개인 알림, 공개 건의, 임시 음성방과 하이라이트를 관리합니다.",
+        (
+            _a("disaster_forecast_v790", "재난 예보", "자동 공동 재난의 다음 감시 일정과 채널을 확인합니다.", "재난예보"),
+            _a("disaster_weather_v790", "재난 기상", "현재 공동 재난에 결합된 환경 상태를 확인합니다.", "재난날씨"),
+            _a("disaster_history_v790", "재난 기록", "최근 공동 재난과 기상 결과를 확인합니다.", "재난기록", "선택: 페이지", force_modal=False),
+            _a("disaster_auto_v790", "재난 자동 설정", "관리자가 자동 발생을 켜거나 끕니다.", "재난자동", "예: 켜기", force_modal=True),
+            _a("disaster_channel_v790", "재난 공지 채널", "자동 공동 재난 게시 채널을 지정합니다.", "재난채널", "선택: #채널", force_modal=False),
+            _a("notification_center_v790", "통합 알림센터", "패치·재난·시장·길드 알림을 선택합니다.", "알림센터"),
+            _a("my_notifications_v790", "내 알림", "현재 통합 알림 설정을 확인합니다.", "내알림"),
+            _a("suggestion_panel_v790", "공개 건의", "버튼과 모달로 공개 건의를 등록합니다.", "건의"),
+            _a("suggestion_list_v790", "건의 목록", "투표와 검토 상태를 확인합니다.", "건의목록", "선택: 페이지", force_modal=False),
+            _a("suggestion_status_v790", "건의 상태 변경", "관리자가 건의의 개발 상태를 변경합니다.", "건의상태", "예: SG-0001 진행중", force_modal=True),
+            _a("roadmap_v790", "공개 로드맵", "개발 예정·진행 중·완료 건의를 확인합니다.", "로드맵"),
+            _a("operations_hub_v790", "통합 운영센터", "문의·점검·통계·알림·재난 진입점을 엽니다.", "운영통합센터"),
+            _a("operations_analytics_v790", "운영 분석", "실제 재화·콘텐츠·오류 누적 결과를 집계합니다.", "운영분석"),
+            _a("temp_voice_setup_v790", "임시 분대 음성방 설치", "입장 시 자동 생성되는 분대 음성방 로비를 설치합니다.", "분대음성설정"),
+            _a("temp_voice_name_v790", "분대방 이름", "자신이 만든 임시 분대방 이름을 바꿉니다.", "분대방이름", "예: 철도 원정대", force_modal=True),
+            _a("temp_voice_lock_v790", "분대방 잠금", "임시 분대방 공개 입장을 전환합니다.", "분대방잠금"),
+            _a("temp_voice_invite_v790", "분대방 초대", "잠긴 분대방에 사용자를 초대합니다.", "분대방초대", "예: @생존자", force_modal=True),
+            _a("temp_voice_limit_v790", "분대방 인원", "임시 분대방 최대 인원을 설정합니다.", "분대방인원", "예: 5", force_modal=True),
+            _a("temp_voice_transfer_v790", "분대방 방장 위임", "같은 방의 사용자에게 방장을 넘깁니다.", "분대방방장", "예: @생존자", force_modal=True),
+            _a("highlight_setup_v790", "하이라이트 설정", "반응이 모인 메시지를 보관할 채널과 기준을 설정합니다.", "하이라이트설정", "예: #현장-사진 ⭐ 3", force_modal=True),
+            _a("highlight_status_v790", "하이라이트 상태", "현재 하이라이트 보드 설정을 확인합니다.", "하이라이트상태"),
+            _a("highlight_add_v790", "하이라이트 수동 추가", "현재 채널 메시지 ID를 하이라이트에 추가합니다.", "하이라이트추가", "예: 메시지ID", force_modal=True),
+            _a("highlight_remove_v790", "하이라이트 제거", "원본 메시지 ID의 하이라이트 연결을 제거합니다.", "하이라이트제거", "예: 메시지ID", force_modal=True),
+            _a("guild_invite_accept_v790", "길드 초대 수락", "우클릭으로 받은 최근 길드 초대를 수락합니다.", "길드초대수락"),
+            _a("v790_stability", "v7.9 안정화 검수", "자동 재난·버튼·운영·알림·음성·우클릭을 읽기 전용 검사합니다.", "790안정화검수"),
+            _a("channel_rules_existing", "채널 규칙", "현재 채널의 전용 규칙·가이드를 설치하거나 갱신합니다.", "채널규칙", "선택: 자동/갱신", force_modal=False),
+        ),
+    ),
     "pets": (
         "🐾 펫·도감",
         "펫 상점, 성장, 모험과 통합 도감 기능을 사용합니다.",
@@ -547,6 +579,14 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
     "social": (
         ("party", "👥 파티", "파티 생성·가입·정보·사냥·탈퇴입니다.", ("party_create", "party_join", "party_info", "party_hunt", "party_leave")),
         ("trade", "💰 거래·경매", "개인 송금, 거래소 판매·구매와 경매를 관리합니다.", ("market", "sell", "market_buy", "sell_cancel", "auction_search", "auction_register", "auction_bid", "auction_finish", "auction_history", "transfer")),
+    ),
+    "community_ops": (
+        ("disaster_auto", "🚨 자동 재난·기상", "재난 예보·기상·기록과 관리자 자동 발생 설정입니다.", ("disaster_forecast_v790", "disaster_weather_v790", "disaster_history_v790", "disaster_auto_v790", "disaster_channel_v790")),
+        ("notifications", "🔔 통합 알림·운영", "개인 알림 설정과 기존 운영 기능의 통합 진입점·분석입니다.", ("notification_center_v790", "my_notifications_v790", "operations_hub_v790", "operations_analytics_v790", "v790_stability")),
+        ("suggestions", "💡 공개 건의·로드맵", "건의 등록·투표·상태 변경과 개발 로드맵입니다.", ("suggestion_panel_v790", "suggestion_list_v790", "suggestion_status_v790", "roadmap_v790", "guild_invite_accept_v790")),
+        ("temp_voice", "🎙️ 임시 분대 음성방", "입장 자동 생성과 방장 이름·잠금·초대·인원·위임 기능입니다.", ("temp_voice_setup_v790", "temp_voice_name_v790", "temp_voice_lock_v790", "temp_voice_invite_v790", "temp_voice_limit_v790", "temp_voice_transfer_v790")),
+        ("highlights", "⭐ 서버 하이라이트", "반응 기준 하이라이트 보드 설정·확인·수동 추가·제거입니다.", ("highlight_setup_v790", "highlight_status_v790", "highlight_add_v790", "highlight_remove_v790")),
+        ("channel_guides", "📌 채널 안내", "기존 채널별 규칙과 가이드 설치 기능을 연결합니다.", ("channel_rules_existing",)),
     ),
     "pets": (
         ("growth", "🐾 펫 성장", "펫을 구매하고 장착·훈련·먹이·모험·진화합니다.", ("pet_shop", "pet_buy", "pet_info", "pet_train", "pet_list", "pet_equip", "pet_feed", "pet_adventure", "pet_evolve")),
