@@ -12,7 +12,7 @@ from discord.ext import commands
 
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 
-VERSION = "6.5.1b"
+VERSION = "6.5.1c"
 MIN_BET = 10_000
 MAX_BET = 20_000_000
 

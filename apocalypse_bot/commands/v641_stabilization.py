@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "6.5.1b"
+VERSION = "6.5.1c"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-02"
 
@@ -78,6 +78,7 @@ STABILITY_GUIDE = {
         "!서버리뉴얼 테마목록 — 최신 테마와 채널 구조 매핑 확인",
         "!데이터백업 — 관리자가 현재 생존 데이터를 수동 백업",
         "!테스트 상세 — 명령어·가이드·데이터·이미지 정책 통합 진단",
+        "!봇소개 — 공식 승인 봇 소개와 핵심 기능·빠른 시작 확인",
     ],
 }
 
@@ -97,7 +98,7 @@ EXPECTED_RECENT_COMMANDS: Tuple[str, ...] = (
     # v6.4.1
     "안정화상태", "오늘할일", "서버브리핑", "서버테마", "서버테마미리보기", "서버테마설정", "데이터백업",
     # v6.5.1
-    "카드게임", "포커", "원카드", "조커잡기", "서버리뉴얼",
+    "카드게임", "포커", "원카드", "조커잡기", "서버리뉴얼", "봇소개",
 )
 
 VISUAL_MODULES: Tuple[str, ...] = (
@@ -275,7 +276,7 @@ def register_v641_stabilization(
     async def stabilization_status(ctx: commands.Context) -> None:
         key, theme = _theme(world_data, _guild_id(ctx))
         embed = discord.Embed(
-            title="🌍 ABADDON v6.5.1b 서버 리뉴얼·카드게임 상태",
+            title="🌍 ABADDON v6.5.1c 서버 리뉴얼·카드게임 상태",
             description="카지노 이미지만 비활성화하고 생활·장비·보물·제작·펫·기지·갈갈이·월드보스 이미지는 유지합니다.",
             color=int(theme["color"]),
         )
@@ -284,6 +285,25 @@ def register_v641_stabilization(
         embed.add_field(name="데이터", value=f"생존자 **{len(user_data):,}명** · 원자적 저장/백업 보호", inline=True)
         embed.add_field(name="빠른 진단", value="`!테스트 상세`", inline=False)
         embed.set_footer(text="이미지 정책: 카지노만 미사용 · 진행 상태는 이모지 바와 퍼센트로 보강")
+        await ctx.send(embed=embed)
+
+    @bot.command(name="봇소개", aliases=["아바돈소개", "공식봇소개"])
+    async def bot_introduction(ctx: commands.Context) -> None:
+        embed = discord.Embed(
+            title="✅ 공식 승인 Discord 봇 · ABADDON",
+            description=(
+                "ABADDON은 공식 승인을 받은 종말 생존 RPG 봇입니다. "
+                "성장·스토리·던전·월드보스·장비·보물·펫·기지·생활·거래·카드게임과 "
+                "서버 리뉴얼·운영 기능을 버튼·드롭다운·모달로 제공합니다."
+            ),
+            color=0xC8AA62,
+        )
+        embed.add_field(name="⚔️ 생존 RPG", value="스토리 분기 · 자동/전술 던전 · 원정 · 레이드 · 월드보스", inline=False)
+        embed.add_field(name="🧰 성장과 수집", value="장비 강화·개조 · 보물 감정 · 펫 성장·진화 · 기지 5단계", inline=False)
+        embed.add_field(name="🎮 커뮤니티 콘텐츠", value="생활·거래·미니게임·포커·원카드·조커잡기 · 28종 서버 테마", inline=False)
+        embed.add_field(name="🛡️ 안전 설계", value="원자적 저장·백업·복구 · 정산 보호 · 오류 사건 번호 · 읽기 전용 `!테스트 상세`", inline=False)
+        embed.add_field(name="🚀 빠른 시작", value="`!명령어` → `!시작` → `!오늘할일` → `!스토리` 또는 `!던전 약함`", inline=False)
+        embed.set_footer(text=f"ABADDON v{VERSION} · 공식 승인 봇 · 패치 {PATCH_DATE}")
         await ctx.send(embed=embed)
 
     @bot.command(name="오늘할일", aliases=["오늘뭐하지", "일일체크"])
@@ -557,7 +577,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v6.5.1b 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v6.5.1c 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -571,29 +591,31 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v6.5.1b 명령어·가이드·28종 서버 리뉴얼·카드게임·비주얼 QA 정책을 읽기 전용으로 검사합니다."
+        previous_test.help = "v6.5.1c 명령어·가이드·28종 서버 리뉴얼·카드게임·비주얼 QA 정책을 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🃏 ABADDON v6.5.1b — 카드게임 컴포넌트 이모지 핫픽스",
-                description="Discord가 거부하던 카드게임 드롭다운 이모지를 표준 이모지로 교체하고, 서버리뉴얼 분류 이모지도 함께 안전화했습니다. 기존 비주얼 QA와 28종 테마·카드게임 기능은 그대로 유지합니다.",
+                title="🌐 ABADDON v6.5.1c — 공식 봇 소개·홈페이지 고화질 핫픽스",
+                description="공식 승인 봇 소개와 `!봇소개`를 추가하고, 홈페이지의 기지 방어·자원 시장·강화 미리보기를 고화질 신규 파일로 교체했습니다. 카드게임 이모지 수정과 28종 서버 테마는 그대로 유지합니다.",
                 color=discord.Color.dark_teal(),
             )
             embed.add_field(name="🃏 카드게임 오류 수정", value="포커 선택지의 비표준 카드 문자 `🂡`를 Discord가 허용하는 `♠️`로 교체 · `!카드게임` 400 Invalid Form Body 수정", inline=False)
             embed.add_field(name="🎨 서버리뉴얼 이모지 안전화", value="깔끔·고딕 분류의 텍스트 기호 `♜`를 표준 이모지 `🏰`로 교체 · 28종 테마와 2단 드롭다운 유지", inline=False)
             embed.add_field(name="🃏 카드게임", value="포커 2~6명 · 원카드 2~6명 · 조커잡기 2~8명 · 참가 버튼·비공개 패·턴제 선택·시간 초과 환불", inline=False)
             embed.add_field(name="🛠️ 서버 설정 통합", value="서버 브리핑·이벤트 채널·개인 알림·백업·복구·429 상태를 `!서버리뉴얼` 한 화면에서 관리", inline=False)
+            embed.add_field(name="🌐 홈페이지 품질", value="기지 방어·변동 자원 시장·강화 5단계 이미지를 새 경로로 교체 · CSS/JS/이미지 캐시 우회 · 기지 단계 재보정", inline=False)
+            embed.add_field(name="✅ 공식 승인 봇 소개", value="`!봇소개`에서 핵심 콘텐츠·안전 설계·빠른 시작을 확인 · 공식 사이트와 배포용 소개 문안 동기화", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 홈페이지·`!명령어`·`!패치노트` 동기화", inline=False)
             embed.add_field(name="💾 안전 정산", value="카드게임 참가비는 시작 시 차감 · 모집 취소는 미차감 · 진행 시간 초과는 전원 환불 · 재시작 잔존 예약 자동 복구", inline=False)
             embed.add_field(name="📚 명령어 드롭다운", value="카드게임/파티 최상위 카테고리 추가 · 안정화/서버 테마에 `!서버리뉴얼` 최신 명령 반영", inline=False)
-            embed.set_footer(text=f"최신 버전 v6.5.1b · {PATCH_DATE} · 카지노만 이미지 미사용")
+            embed.set_footer(text=f"최신 버전 v6.5.1c · {PATCH_DATE} · 카지노만 이미지 미사용")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v6.5.1b 카드게임·서버리뉴얼 드롭다운 이모지 핫픽스 내용을 확인합니다."
+        patch.help = "ABADDON v6.5.1c 공식 승인 봇 소개·홈페이지 고화질·카드게임 이모지 핫픽스를 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION

@@ -1547,7 +1547,7 @@ async def bot_presence():
     market_count = len(world_data.get("market", {}))
     guilds = len(world_data.get("guilds", {}))
     activities = [
-        discord.Game("!명령어 | 종말에서 생존하기"),
+        discord.Game("공식 승인 봇 · !명령어"),
         discord.Game("!대화 | 기억 공방과 오늘의 질문"),
         discord.Game("!던전 약함 | 감염자 사냥"),
         discord.Game("!심층던전 | 100층에 도전"),
