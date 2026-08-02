@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "7.1.0"
+VERSION = "7.1.2"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -521,6 +521,23 @@ class _SyntheticMessage:
     async def add_reaction(self, _emoji: Any) -> None:
         return None
 
+    async def delete(self, **_kwargs: Any) -> None:
+        # 메뉴에서 실행된 합성 메시지는 실제 사용자 메시지가 아니므로 안전하게 무시합니다.
+        return None
+
+    async def edit(self, **_kwargs: Any) -> None:
+        return None
+
+    async def pin(self, **_kwargs: Any) -> None:
+        return None
+
+    async def unpin(self, **_kwargs: Any) -> None:
+        return None
+
+    @property
+    def jump_url(self) -> str:
+        return str(getattr(getattr(self, "interaction", None), "message", "") or "")
+
 
 class InteractionCommandContext:
     """기존 prefix 명령 callback을 Discord 드롭다운에서도 안전하게 재사용하는 최소 Context입니다."""
@@ -542,6 +559,10 @@ class InteractionCommandContext:
         self.args: List[Any] = []
         self.kwargs: Dict[str, Any] = {}
         self.message = _SyntheticMessage(interaction, f"!{command.qualified_name} {raw}".strip())
+        self.message.interaction = interaction
+        self.cog = command.cog
+        self.current_parameter = None
+        self.current_argument = None
 
     @property
     def me(self) -> Optional[discord.Member]:
@@ -591,6 +612,22 @@ class InteractionCommandContext:
 
     async def send_help(self, *_args: Any, **_kwargs: Any) -> None:
         await self.send(f"ℹ️ `{self.clean_prefix}{self.command.qualified_name}` 명령의 기존 도움말을 확인해주세요.")
+
+    async def invoke(self, command: commands.Command, /, *args: Any, **kwargs: Any) -> Any:
+        previous = self.command
+        try:
+            self.command = command
+            if command.cog is not None:
+                return await command.callback(command.cog, self, *args, **kwargs)
+            return await command.callback(self, *args, **kwargs)
+        finally:
+            self.command = previous
+
+    async def reinvoke(self, *, call_hooks: bool = False, restart: bool = True) -> Any:
+        del call_hooks, restart
+        if self.command is None:
+            return None
+        return await self.invoke(self.command, *self.args, **self.kwargs)
 
 
 class GameBridgeError(RuntimeError):
@@ -777,6 +814,9 @@ async def _invoke_command(
         return False
 
     ctx = InteractionCommandContext(bot, interaction, command, raw)
+    hook_attempted = False
+    succeeded = False
+    bot.dispatch("command", ctx)
     try:
         can_run = await command.can_run(ctx)  # type: ignore[arg-type]
         if not can_run:
@@ -787,32 +827,60 @@ async def _invoke_command(
         args, kwargs = await _parse_arguments(ctx, command, raw)
         ctx.args = args
         ctx.kwargs = kwargs
+
+        # 일반 prefix 명령과 같은 전역/코그/명령 훅을 거쳐
+        # v7.0.2 사용자 잠금·운영 통계가 버튼 실행에서도 유지되게 합니다.
+        hook_attempted = True
+        await command.call_before_hooks(ctx)  # type: ignore[arg-type]
         if command.cog is not None:
             await command.callback(command.cog, ctx, *args, **kwargs)
         else:
             await command.callback(ctx, *args, **kwargs)
-        return True
+        succeeded = True
     except commands.CommandOnCooldown as exc:
+        ctx.command_failed = True
         await interaction.followup.send(f"⏳ 재사용 대기 중입니다. **{exc.retry_after:.1f}초** 뒤 다시 시도해주세요.", ephemeral=True)
     except commands.MissingPermissions as exc:
+        ctx.command_failed = True
         missing = ", ".join(exc.missing_permissions)
         await interaction.followup.send(f"🔒 필요한 권한이 없습니다: `{missing}`", ephemeral=True)
     except commands.CheckFailure:
+        ctx.command_failed = True
         await interaction.followup.send("🔒 이 명령을 실행할 권한이나 조건이 충족되지 않았습니다.", ephemeral=True)
     except GameBridgeError as exc:
+        ctx.command_failed = True
         await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
     except TypeError as exc:
+        ctx.command_failed = True
+        print(f"[버튼 명령 입력 오류] command={command_name} {type(exc).__name__}: {exc}", flush=True)
         await interaction.followup.send(
-            f"⚠️ 입력값 형식이 맞지 않습니다. `{command_name}` 기존 사용법을 확인해주세요.\n`{type(exc).__name__}: {str(exc)[:160]}`",
+            f"🫧 입력값 모양이 맞지 않아요. `!{command_name} {command.signature}` 사용법을 확인해주세요.",
             ephemeral=True,
         )
     except Exception as exc:
+        ctx.command_failed = True
+        incident = f"UI-{int(interaction.id) % 100000000:08d}"
+        print(f"[버튼 명령 오류:{incident}] command={command_name} {type(exc).__name__}: {exc}", flush=True)
         await interaction.followup.send(
-            f"❌ 게임 메뉴 실행 중 오류가 발생했습니다. 기존 `!{command_name}` 명령으로도 확인해주세요.\n"
-            f"`{type(exc).__name__}: {str(exc)[:180]}`",
+            f"🫧 버튼 실행 중 문제가 생겼어요. 기존 `!{command_name}` 방식도 사용할 수 있어요.\n"
+            f"사건 번호: `{incident}`",
             ephemeral=True,
         )
-    return False
+    finally:
+        if hook_attempted:
+            try:
+                await command.call_after_hooks(ctx)  # type: ignore[arg-type]
+            except Exception as hook_error:
+                ctx.command_failed = True
+                print(
+                    f"[버튼 명령 종료 훅 오류] command={command_name} "
+                    f"{type(hook_error).__name__}: {hook_error}",
+                    flush=True,
+                )
+        if succeeded and not ctx.command_failed:
+            # v7.1.0 성장 활동 집계 등 on_command_completion 기반 기능도 동일하게 작동합니다.
+            bot.dispatch("command_completion", ctx)
+    return succeeded and not ctx.command_failed
 
 
 # =========================================================

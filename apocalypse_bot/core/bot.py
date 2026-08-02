@@ -1792,33 +1792,55 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, ConcurrentOperation):
         _release_command_lock(ctx)
-        await ctx.send("⏳ 이전 명령을 저장하고 있습니다. 잠시 뒤 다시 실행해 주세요.")
+        view_factory = getattr(bot, "v711_error_view_factory", None)
+        view = view_factory(ctx.author.id, ctx.command) if callable(view_factory) else None
+        await ctx.send("🫧 앞선 명령을 안전하게 저장하는 중이에요. 잠깐만 기다렸다가 다시 눌러주세요!", view=view)
         return
     if isinstance(error, commands.CommandNotFound):
         raw = str(getattr(ctx.message, "content", "")).lstrip("!").split(maxsplit=1)[0]
         candidates = sorted({name for name in bot.all_commands if not str(name).startswith("_")})
         matches = difflib.get_close_matches(raw, candidates, n=3, cutoff=0.72) if len(raw) >= 2 else []
+        view_factory = getattr(bot, "v711_error_view_factory", None)
+        view = view_factory(ctx.author.id, None) if callable(view_factory) else None
         if matches:
             suggestions = " · ".join(f"`!{name}`" for name in matches)
-            await ctx.send(f"🔎 **`!{raw}`** 명령을 찾지 못했습니다. 비슷한 명령: {suggestions}\n전체 목록: `!명령어`")
+            await ctx.send(
+                f"🍃 **`!{raw}`** 명령은 아직 못 찾았어요. 혹시 이 명령인가요? {suggestions}\n"
+                "아래 **명령어 찾기** 버튼으로 전체 도감을 열 수도 있어요. 🌱",
+                view=view,
+            )
         else:
-            await ctx.send(f"🔎 **`!{raw or '?'}`** 명령을 찾지 못했습니다. `!명령어`에서 카테고리를 선택하거나 `!명령어 검색어`로 찾아보세요.")
+            await ctx.send(
+                f"🍃 **`!{raw or '?'}`** 명령은 보이지 않아요. 철자 대신 아래 버튼으로 찾아볼까요? 🫧",
+                view=view,
+            )
         return
     if isinstance(error, commands.MissingRequiredArgument):
         command = ctx.command
         signature = f"!{command.qualified_name} {command.signature}".strip() if command else "!명령어"
         help_text = str(getattr(command, "help", "") or getattr(command, "description", "") or "필요한 값을 입력하세요.")
-        await ctx.send(f"⚠️ **필수 입력값이 빠졌습니다.**\n사용법: `{signature}`\n{help_text[:500]}")
+        view_factory = getattr(bot, "v711_error_view_factory", None)
+        view = view_factory(ctx.author.id, command) if callable(view_factory) else None
+        await ctx.send(
+            f"📝 **입력값이 하나 빠졌어요!**\n사용법: `{signature}`\n{help_text[:500]}\n"
+            "아래 버튼을 누르면 입력창으로 다시 실행할 수 있어요. ✨",
+            view=view,
+        )
         return
     if isinstance(error, commands.BadArgument):
         command = ctx.command
         signature = f"!{command.qualified_name} {command.signature}".strip() if command else "!명령어"
-        await ctx.send(f"⚠️ 유저, 숫자 또는 입력값 형식이 잘못됐습니다.\n사용법: `{signature}`")
+        view_factory = getattr(bot, "v711_error_view_factory", None)
+        view = view_factory(ctx.author.id, command) if callable(view_factory) else None
+        await ctx.send(
+            f"🫧 입력값 모양이 조금 달라요. 멘션·숫자·이름을 다시 확인해주세요.\n사용법: `{signature}`",
+            view=view,
+        )
         return
     if isinstance(error, commands.CommandOnCooldown):
         remaining = max(1, int(error.retry_after))
         mins, secs = divmod(remaining, 60)
-        await ctx.send(f"⏳ 쿨타임이 남았습니다: **{mins}분 {secs}초**")
+        await ctx.send(f"⏳ 아직 숨을 고르는 중이에요… **{mins}분 {secs}초** 뒤에 다시 만나요! 🌿")
         return
 
     original = getattr(error, "original", error)
@@ -1835,9 +1857,12 @@ async def on_command_error(ctx, error):
     )
     traceback.print_exception(type(original), original, original.__traceback__)
     try:
+        view_factory = getattr(bot, "v711_error_view_factory", None)
+        view = view_factory(ctx.author.id, ctx.command) if callable(view_factory) else None
         await ctx.send(
-            "❌ 명령어 처리 중 오류가 발생했습니다. 재화 차감 여부를 확인한 뒤 관리자에게 아래 사건 번호를 알려주세요.\n"
-            f"사건 번호: `{incident_id}` · 명령: `{getattr(ctx.command, 'qualified_name', '알 수 없음')}`"
+            "🫧 명령어가 잠깐 길을 잃었어요. 재화가 바뀌었는지 확인한 뒤, 계속되면 관리자에게 사건 번호를 알려주세요.\n"
+            f"사건 번호: `{incident_id}` · 명령: `{getattr(ctx.command, 'qualified_name', '알 수 없음')}`",
+            view=view,
         )
     except (discord.NotFound, discord.Forbidden, discord.HTTPException) as notify_exc:
         print(
@@ -5671,6 +5696,11 @@ register_v710_growth_loop(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
     add_title, add_season_points,
 )
+
+# V7.1.2: 새싹 역할 아이콘·귀여운 환영 패널·전체 명령어 버튼 실행·입력 모달
+# 기존 prefix/slash 명령은 유지하고 !명령어/!처음 화면만 더 쉽게 연결합니다.
+from apocalypse_bot.commands.v711_cute_interactions import register_v711_cute_interactions
+register_v711_cute_interactions(bot, world_data, save_data, COMMAND_GUIDE_CATEGORIES)
 
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)

@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "7.1.0"
+VERSION = "7.1.2"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-03"
 
@@ -105,6 +105,8 @@ EXPECTED_RECENT_COMMANDS: Tuple[str, ...] = (
     "시스템점검", "오류현황", "운영통계", "백업목록", "백업생성", "백업검증", "복구미리보기",
     # v7.1.0
     "성장보드", "미션보상", "누적보상", "장비프리셋", "월드보스주간랭킹", "월드보스주간보상", "복귀보급",
+    # v7.1.2
+    "귀여운메뉴", "새싹설정", "환영테마", "새싹역할설치", "새싹정리",
 )
 
 VISUAL_MODULES: Tuple[str, ...] = (
@@ -282,15 +284,15 @@ def register_v641_stabilization(
     async def stabilization_status(ctx: commands.Context) -> None:
         key, theme = _theme(world_data, _guild_id(ctx))
         embed = discord.Embed(
-            title="🌱 ABADDON v7.1.0 성장 루프·운영 상태",
-            description="일일·주간 성장 루프와 운영 안정화를 적용하고, 진행 상태는 이모지 게이지로 명확하게 표시합니다.",
+            title="🎨 ABADDON v7.1.2 환영 테마·운영 상태",
+            description="환영 테마 6종, 명령어 버튼 UI와 기존 성장 루프·운영 안정화를 함께 적용했습니다.",
             color=int(theme["color"]),
         )
         embed.add_field(name="서버 테마", value=f"{theme['emoji']} **{theme['title']}** (`{key}`)", inline=True)
         embed.add_field(name="명령어", value=f"등록 **{len(list(bot.walk_commands()))}개** · 가이드 **{len(guide)}/25**", inline=True)
         embed.add_field(name="데이터", value=f"생존자 **{len(user_data):,}명** · 원자적 저장/백업 보호", inline=True)
         embed.add_field(name="빠른 진단", value="`!테스트 상세`", inline=False)
-        embed.set_footer(text="v7.1.0 정책: 신규 이미지는 추가하지 않고 이모지·게이지·버튼형 안내를 우선")
+        embed.set_footer(text="v7.1.2 정책: 환영 테마 선택 · 신규 이미지 0장 · 중복 별칭 시작 오류 수정")
         await ctx.send(embed=embed)
 
     @bot.command(name="봇소개", aliases=["아바돈소개", "봇정보"])
@@ -608,7 +610,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v7.1.0 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v7.1.2 통합 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -622,29 +624,32 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v7.1.0 성장 루프, v7.0.2 데이터 보호, 한국어·영어 도움말 분리와 주요 시스템을 읽기 전용으로 검사합니다."
+        previous_test.help = "v7.1.2 귀여운 인터랙션, v7.1.0 성장 루프, v7.0.2 데이터 보호와 주요 시스템을 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🌱 ABADDON v7.1.0 — 성장 루프 패치",
-                description="출석·퀘스트·생활·전투·성장·월드보스를 하나의 작전 보드로 연결했습니다. 신규 이미지는 추가하지 않고 표준 이모지와 게이지로 진행·완료·보상 상태를 표시합니다.",
-                color=0x63C174,
+                title="🎨 ABADDON v7.1.2 — 환영 테마·시작 오류 핫픽스",
+                description="신규 멤버 환영 패널에 선택형 테마 6종을 추가하고, Render 시작을 막던 `데이터백업` 중복 별칭을 제거했습니다. 신규 이미지는 추가하지 않았습니다.",
+                color=0xD6563F,
             )
-            embed.add_field(name="📋 통합 작전 보드", value="`!오늘할일` · `!성장보드`에서 일일 6개·주간 6개 목표, 다음 추천 행동, 연속 완주와 누적 참여를 확인", inline=False)
-            embed.add_field(name="🎁 미션 정산", value="일일 6개 중 5개 완주 · `!미션보상`에서 일일 보상과 주간 2/4/6단계 보상을 통합 수령", inline=False)
-            embed.add_field(name="🏅 장기 성장", value="`!누적보상` 참여 이정표 · 성장 인장 · 신규/14일 복귀 생존자 `!복귀보급`", inline=False)
-            embed.add_field(name="🎒 장비 프리셋", value="레이드·생활·탐색용 현재 장비 구성을 최대 3개 저장·적용·삭제", inline=False)
-            embed.add_field(name="🌋 월드보스 주간전", value="`!월드보스주간랭킹` · `!월드보스주간보상`으로 주차별 피해·공격 횟수와 지난주 보상 정산", inline=False)
-            embed.add_field(name="🛡️ 기반 유지", value="v7.0.2 검증 저장·자동 복구·명령 잠금과 v7.0.1 초보자 UX, v7.0.0 월드보스 기믹을 그대로 유지", inline=False)
+            embed.add_field(name="🎨 환영 테마 6종", value="🌱 새싹 정원 · 🌸 벚꽃 피크닉 · 🫧 말랑 버블 · 🌙 별빛 탐험대 · 🐾 동물 친구 · ☣️ 아포칼립스 생존구역", inline=False)
+            embed.add_field(name="☣️ 아포칼립스 테마", value="폐허 통신·오염 경보·생존 지침 분위기의 전용 문구, 색상과 역할 아이콘을 사용", inline=False)
+            embed.add_field(name="🛠️ Render 시작 오류 수정", value="`!백업생성`의 중복 별칭 `데이터백업`을 제거하고 `즉시백업`으로 교체", inline=False)
+            embed.add_field(name="🌱 신규 생존자 표식", value="선택한 테마의 역할 아이콘과 색상을 적용하고 기본 7일 뒤 자동 정리", inline=False)
+            embed.add_field(name="🫧 시작 버튼 패널", value="가입·정보·출석·오늘할일·게임센터·명령어 도감을 버튼으로 바로 실행", inline=False)
+            embed.add_field(name="📚 전체 명령어 클릭 실행", value="등록된 모든 prefix 명령을 카테고리/검색/페이지로 선택 · 입력값이 필요하면 모달 실행", inline=False)
+            embed.add_field(name="🧯 오류 UX 보강", value="잘못된 명령·누락 입력·형식 오류·쿨타임·UI 예외에 복구 버튼과 사건 번호 제공", inline=False)
+            embed.add_field(name="🌿 기존 성장 루프 유지", value="v7.1.0 일일·주간 성장 보드, 누적 보상, 프리셋, 월드보스 주간 랭킹 유지", inline=False)
+            embed.add_field(name="🛡️ 기반 유지", value="v7.0.2 검증 저장·자동 복구·명령 잠금과 v7.0.0 월드보스 기믹을 그대로 유지", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 봇·홈페이지·명령어 검색 동기화", inline=False)
-            embed.set_footer(text=f"최신 버전 v7.1.0 · {PATCH_DATE} · 신규 이미지 0장")
+            embed.set_footer(text=f"최신 버전 v7.1.2 · {PATCH_DATE} · 신규 이미지 0장")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v7.1.0 성장 루프와 이모지 진행 상황 패치 내용을 확인합니다."
+        patch.help = "ABADDON v7.1.2 환영 테마 선택과 Render 시작 오류 수정 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION

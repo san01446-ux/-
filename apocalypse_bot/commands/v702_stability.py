@@ -302,7 +302,7 @@ def register_v702_stability(
             )
         await ctx.send("🗄️ **[데이터 백업 목록]**\n" + "\n".join(lines))
 
-    @bot.command(name="백업생성", aliases=["데이터백업", "backupnow"])
+    @bot.command(name="백업생성", aliases=["즉시백업", "backupnow"])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     async def backup_now(ctx: commands.Context) -> None:
         if not await require_admin(ctx):
