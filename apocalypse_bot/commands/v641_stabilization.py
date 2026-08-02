@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "7.7.0"
+VERSION = "7.8.0"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-03"
 

@@ -5661,6 +5661,14 @@ register_v770_ruin_farming(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V7.8.0: 서버 공동 재난 · 파밍 진행 루트 연출 · 시스템점검/최신패치 테스트 핫픽스
+# !테스트 상세는 이번 패치부터 직전 버전에서 추가·수정된 기능만 검사합니다.
+from apocalypse_bot.commands.v780_server_disaster import register_v780_server_disaster
+register_v780_server_disaster(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

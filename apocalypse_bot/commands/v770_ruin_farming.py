@@ -20,7 +20,7 @@ from apocalypse_bot.commands.v610_digging_treasure import (
     _ensure_profile as _ensure_treasure_profile,
 )
 
-VERSION = "7.7.0"
+VERSION = "7.8.0"
 SCHEMA_VERSION = 1
 KST = timezone(timedelta(hours=9))
 FARM_DAILY_LIMIT = 16
@@ -672,6 +672,40 @@ def register_v770_ruin_farming(
             return None, None
         return user, ensure_v770_profile(user)
 
+    async def show_farming_route(ctx: commands.Context, region_key: str, *, encounter: bool) -> None:
+        region = FARM_REGIONS[region_key]
+        danger = {
+            "market": "🟢 경계 안정",
+            "residential": "🟡 잔해 위험",
+            "freight": "🟠 신호 불안정",
+            "quarantine": "🔴 오염 경보",
+        }[region_key]
+        stages = (
+            ("🚪 출발", f"{region['emoji']} **{region['name']}** 방향으로 이동을 시작합니다.\n`🚪 출발 ━━━ 🗺️ 이동 ··· 📡 탐색 ··· 📦 복귀`"),
+            ("🗺️ 이동 중", f"{danger} · 폐허 통로를 확인하고 안전 루트를 갱신합니다.\n`🚪 출발 ━━━ 🗺️ 이동 ━━━ 📡 스캔 ··· 📦 복귀`"),
+            (("🚨 위험 신호" if encounter else "✨ 발견 신호"), (
+                "주변에서 움직임과 구조 신호가 동시에 포착됐습니다. 선택이 필요합니다."
+                if encounter else "회수 가능한 물자 반응을 확인했습니다. 복귀 경로를 확보합니다."
+            ) + "\n`🚪 출발 ━━━ 🗺️ 이동 ━━━ 📡 탐지 ━━━ " + ("⚠️ 판단" if encounter else "📦 회수") + "`"),
+        )
+        message = None
+        for index, (title, description) in enumerate(stages):
+            embed = discord.Embed(
+                title=f"{region['emoji']} 파밍 작전 진행 · {title}",
+                description=description,
+                colour=discord.Colour.orange() if encounter and index == 2 else discord.Colour.dark_teal(),
+            )
+            embed.set_footer(text="현장 정산은 서버에 한 번만 기록됩니다")
+            try:
+                if message is None:
+                    message = await ctx.send(embed=embed)
+                else:
+                    await message.edit(embed=embed)
+            except (discord.HTTPException, discord.Forbidden, AttributeError, TypeError):
+                return
+            if index < len(stages) - 1:
+                await asyncio.sleep(0.65)
+
     async def send_encounter(ctx: commands.Context, pending: Mapping[str, Any]) -> None:
         region_key = _region_key(pending.get("region")) or "market"
         region = FARM_REGIONS[region_key]
@@ -683,6 +717,7 @@ def register_v770_ruin_farming(
             description=str(encounter["description"]),
             colour=discord.Colour.orange(),
         )
+        embed.add_field(name="진행 루트", value="`🚪 출발 → 🗺️ 이동 → 📡 위험 감지 → ⚠️ 현장 판단`", inline=False)
         embed.add_field(name="현재 지역", value=f"**{region['name']}** · 위험도 {region['danger']}", inline=False)
         embed.add_field(
             name="선택",
@@ -736,6 +771,16 @@ def register_v770_ruin_farming(
             rng = random.Random(int(hashlib.sha256(f"grant:{seed}:{action}".encode("utf-8")).hexdigest()[:16], 16))
             lines = _grant_rewards(user, profile, rewards, rng)
             region_key = _region_key(pending.get("region")) or "market"
+            hook_note = ""
+            disaster_hook = getattr(bot, "v780_on_farming_result", None)
+            if callable(disaster_hook):
+                hook_result = disaster_hook(
+                    int(ctx.guild.id) if ctx.guild else 0, ctx.author.id, user, profile,
+                    region_key, action, tuple(lines),
+                )
+                if asyncio.iscoroutine(hook_result):
+                    hook_result = await hook_result
+                hook_note = str(hook_result or "")
             profile["history"].append({
                 "id": str(pending.get("id") or ""), "region": region_key, "action": action,
                 "auto": False, "rewards": list(lines), "resolved_at": _iso(), "hp_loss": hp_loss,
@@ -747,7 +792,10 @@ def register_v770_ruin_farming(
                 add_title(user, "폐허의 현장 판단관")
             save_data()
         embed = discord.Embed(title=f"{ACTION_LABELS[action]} · 인카운트 정산", description=story, colour=discord.Colour.dark_teal())
+        embed.add_field(name="진행 루트", value=f"`🚪 출발 → 🗺️ 이동 → 🚨 인카운트 → {ACTION_LABELS[action]} → 📦 복귀`", inline=False)
         embed.add_field(name="회수 결과", value="\n".join(f"• {line}" for line in lines) or "• 확보한 물자 없음", inline=False)
+        if hook_note:
+            embed.add_field(name="서버 공동 대응", value=hook_note, inline=False)
         if hp_loss:
             embed.add_field(name="부상", value=f"HP -{hp_loss} · 현재 HP {max(1, _safe_int(user.get('hp'), 1))}", inline=False)
         embed.set_footer(text="같은 인카운트는 한 번만 정산됩니다")
@@ -812,21 +860,37 @@ def register_v770_ruin_farming(
                 if rng.randrange(100) < 18:
                     rewards.append({"kind": "research", "key": "연구 자료", "amount": rng.randint(1, 3), "region": region_key})
                 lines = _grant_rewards(user, profile, rewards, rng)
+                hook_note = ""
+                disaster_hook = getattr(bot, "v780_on_farming_result", None)
+                if callable(disaster_hook):
+                    hook_result = disaster_hook(
+                        int(ctx.guild.id) if ctx.guild else 0, ctx.author.id, user, profile,
+                        region_key, "normal", tuple(lines),
+                    )
+                    if asyncio.iscoroutine(hook_result):
+                        hook_result = await hook_result
+                    hook_note = str(hook_result or "")
                 profile["history"].append({
                     "id": f"FR-{secrets.token_hex(4).upper()}", "region": region_key, "action": "normal",
                     "auto": False, "rewards": list(lines), "resolved_at": _iso(), "hp_loss": 0,
                 })
                 add_season_points(user, 1)
                 save_data()
+        await show_farming_route(ctx, region_key, encounter=encounter)
         if encounter:
             await send_encounter(ctx, pending)
             return
         embed = discord.Embed(
             title=f"{region['emoji']} {region['name']} 파밍 완료",
-            description="현장을 빠르게 훑고 안전한 회수 경로로 복귀했습니다.",
+            description=(
+                "✨ 회수 신호를 따라 물자를 확보하고 복귀 지점까지 안전하게 돌아왔습니다.\n\n"
+                "`🚪 출발 → 🗺️ 이동 → 📡 발견 → 📦 회수 → 🏠 복귀`"
+            ),
             colour=discord.Colour.dark_green(),
         )
-        embed.add_field(name="회수 결과", value="\n".join(f"• {line}" for line in lines) or "• 확보한 물자 없음", inline=False)
+        embed.add_field(name="✨ 발견·회수 결과", value="\n".join(f"• {line}" for line in lines) or "• 확보한 물자 없음", inline=False)
+        if hook_note:
+            embed.add_field(name="🚨 서버 공동 대응", value=hook_note, inline=False)
         embed.add_field(name="오늘 기록", value=f"{profile['attempts']}/{FARM_DAILY_LIMIT}", inline=True)
         embed.add_field(name="남은 스태미나", value=str(max(0, _safe_int(user.get("stamina"), 0))), inline=True)
         embed.set_footer(text="보물과 폐품은 각각 !보물감정 · !공방에서 이어서 처리합니다")
@@ -1392,7 +1456,7 @@ def register_v770_ruin_farming(
         lines = [f"{'✅' if key in unlocked else '🔒'} **{tech['name']}** — {tech['description']}" for key, tech in _RESEARCH.items()]
         await ctx.send("📐 **생활 기술 설계도**\n" + "\n".join(lines))
 
-    @bot.command(name="770안정화검수", aliases=["파밍검수", "생활기술검수", "v770검수"], help="v7.7 생활 시스템 저장 구조를 읽기 전용 검사합니다.")
+    @bot.command(name="770안정화검수", aliases=["파밍검수", "생활기술검수", "v770검수"], help="v7.8 파밍·생활 저장 구조를 읽기 전용 검사합니다.")
     @commands.has_permissions(administrator=True)
     async def v770_audit(ctx: commands.Context) -> None:
         issues: List[str] = []
@@ -1433,7 +1497,7 @@ def register_v770_ruin_farming(
             issues.append(f"폐품 ID 중복 {len(duplicates)}건")
         if duplicate_encounters:
             issues.append(f"인카운트 ID 중복 {len(duplicate_encounters)}건")
-        embed = discord.Embed(title="🛡️ ABADDON v7.7.0 생활 시스템 안정화 검수", colour=discord.Colour.green() if not issues else discord.Colour.orange())
+        embed = discord.Embed(title="🛡️ ABADDON v7.8.0 파밍 연출·생활 시스템 안정화 검수", colour=discord.Colour.green() if not issues else discord.Colour.orange())
         embed.add_field(name="검사 생존자", value=str(checked), inline=True)
         embed.add_field(name="대기 인카운트", value=str(pending_count), inline=True)
         embed.add_field(name="발견 항목", value=str(len(issues)), inline=True)
@@ -1463,6 +1527,7 @@ def register_v770_ruin_farming(
             flush=True,
         )
 
+    bot.v770_farming_fx_version = VERSION
     bot._abaddon_v770_registered = True
     print(
         f"[ABADDON v{VERSION}] 폐허 파밍·공방·전파·계약·연구 등록 완료: "

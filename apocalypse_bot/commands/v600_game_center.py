@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "7.7.0"
+VERSION = "7.8.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -211,7 +211,17 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("research_start", "연구 시작", "생활 기술 하나를 선택해 연구를 시작합니다.", "연구시작", "예: 폐품회수", force_modal=True),
             _a("research_progress", "연구 진행", "진행 중 연구의 남은 시간과 완료 상태를 확인합니다.", "연구진행"),
             _a("blueprints", "생활 설계도", "해금한 생활 기술과 잠긴 설계도를 확인합니다.", "설계도"),
-            _a("v770_stability", "v7.7 생활 안정화 검수", "파밍·인카운트·공방·계약·연구 저장 구조를 읽기 전용 검사합니다.", "770안정화검수"),
+            _a("v770_stability", "v7.8 파밍 안정화 검수", "파밍·인카운트·공방·계약·연구 저장 구조와 진행 연출을 읽기 전용 검사합니다.", "770안정화검수"),
+            _a("disaster_status", "서버 공동 재난", "현재 서버 재난과 공동 대응 진행도를 확인합니다.", "재난상황"),
+            _a("disaster_missions", "재난 대응 임무", "현장 역할과 납품 가능한 물자를 확인합니다.", "재난임무"),
+            _a("disaster_join", "재난 현장 참여", "정찰·구조·수리·방어 역할로 현장 대응에 참여합니다.", "재난참여", "예: 구조", force_modal=True),
+            _a("disaster_deliver", "재난 물자 납품", "재난 대응에 필요한 자원과 수량을 납품합니다.", "재난납품", "예: 고철 20", force_modal=True),
+            _a("disaster_ranking", "재난 기여도", "현재 또는 최근 공동 재난의 기여 순위를 확인합니다.", "재난기여도"),
+            _a("disaster_reward", "재난 개인 보상", "성공한 공동 재난의 개인 기여 보상을 수령합니다.", "재난보상"),
+            _a("disaster_buff", "재난 성공 버프", "공동 재난 해결로 활성화된 서버 버프를 확인합니다.", "재난버프"),
+            _a("disaster_spawn", "관리자 재난 발생", "관리자가 공동 재난 종류를 선택해 즉시 시작합니다.", "재난발생", "예: 정전", force_modal=True),
+            _a("disaster_settle", "관리자 재난 정산", "목표 달성 또는 만료된 공동 재난을 안전하게 정산합니다.", "재난정산"),
+            _a("v780_stability", "v7.8 신규 기능 검수", "v7.8에서 추가·수정된 기능만 읽기 전용 검사합니다.", "780안정화검수"),
             _a("base", "기지 현황", "기지 레벨과 저장량을 확인합니다.", "기지"),
             _a("base_build", "기지 건설", "기지가 없다면 새로 건설합니다.", "기지건설"),
             _a("base_upgrade", "기지 강화", "재료를 사용해 기지를 강화합니다.", "기지강화"),
@@ -500,6 +510,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
     "life": (
         ("activities", "🌲 생활 활동", "알바와 채집 활동, 자원·인카운트 기록입니다.", ("work", "coin", "gather", "fish", "lumber", "mine", "resources", "encounter_codex")),
         ("ruin_farming", "🧭 폐허 파밍·생활 기술", "지역 파밍, 인카운트, 폐품 공방, 전파 해독, 납품과 연구를 실행합니다.", ("farming_menu", "farming_regions", "farming_start", "farming_choice", "farming_history", "workshop", "scrap_identify", "scrap_dismantle", "scrap_repair", "signal_search_v770", "signal_decode_v770", "signal_history_v770", "contract_board", "contract_accept", "contract_deliver", "contract_status", "laboratory", "research_start", "research_progress", "blueprints", "v770_stability")),
+        ("server_disaster", "🚨 서버 공동 재난", "서버 전체가 현장 역할과 자원 납품으로 재난을 해결하고 기여 보상·버프를 받습니다.", ("disaster_status", "disaster_missions", "disaster_join", "disaster_deliver", "disaster_ranking", "disaster_reward", "disaster_buff", "disaster_spawn", "disaster_settle", "v780_stability")),
         ("base", "🏕️ 기지·세계 이벤트", "기지 성장, 날씨, 운세, 무전과 방어전입니다.", ("base", "base_build", "base_upgrade", "base_collect", "weather", "daily_fortune", "radio_signal", "hazard_zone", "random_box", "base_defense", "base_defense_attack")),
         ("market", "📦 자원 시장", "자원을 사고팔거나 기지 칩으로 교환합니다.", ("resource_market", "resource_buy", "resource_sell", "base_chip_exchange")),
         ("bank", "🏦 은행", "입출금, 대출, 상환, 이자와 신용 기록입니다.", ("bank", "deposit", "withdraw", "loan", "repay", "bank_interest", "credit", "bank_history")),
@@ -547,7 +558,7 @@ QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
     "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·성장 보드·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "tutorial", "growth_board", "catchup_support_v710", "shop", "inventory", "equipment", "training")),
     "grow": ("📈 강해지고 싶어요", "성장 보드에서 목표를 확인하고 프리셋·강화·미션 보상으로 성장합니다.", ("growth_board", "mission_reward_v710", "info", "shop", "inventory", "equipment", "equipment_preset_v710", "equip", "enhance", "season_pass", "achievements")),
     "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "region_list", "region_explore", "raid", "worldboss_status")),
-    "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 자원 시장으로 재화를 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "dig", "treasure_appraise", "resource_market")),
+    "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 공동 재난으로 재화와 기여 보상을 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "disaster_status", "disaster_join", "dig", "treasure_appraise", "resource_market")),
     "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·퀴즈 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "expedition", "exp_start", "relic", "daily_quiz")),
     "community": ("🤝 같이 놀고 싶어요", "길드·공동 기지·레이드·파티·카드게임·거래로 이동합니다.", ("guild_dashboard", "guild_base", "guild_raid", "party_create", "card_game_menu", "market", "transfer")),
 }
