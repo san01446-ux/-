@@ -21,7 +21,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-VERSION = "6.1.0"
+VERSION = "6.5.1"
 TTS_MAX_TEXT = 450
 TTS_CHUNK_LENGTH = 180
 TTS_CACHE_TTL = 21600

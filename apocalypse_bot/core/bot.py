@@ -5287,6 +5287,15 @@ register_v641_stabilization(
     data_file=DATA_FILE,
 )
 
+# V6.5.1: 28종 서버 리뉴얼 통합 드롭다운 · 포커/원카드/조커잡기
+from apocalypse_bot.commands.v651_card_games import register_v651_card_games
+register_v651_card_games(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+from apocalypse_bot.commands.v651_server_renewal import register_v651_server_renewal
+register_v651_server_renewal(bot, world_data, save_data)
+
 # 모든 기존 !명령어에 대응하는 / 슬래시 명령어 등록
 # Discord의 최상위 명령어 100개 제한 때문에 확장 명령어는 카테고리 그룹으로 묶습니다.
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands

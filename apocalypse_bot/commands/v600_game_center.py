@@ -13,7 +13,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "6.4.0"
+VERSION = "6.5.1"
 MENU_TIMEOUT = 300
 STORY3_START_NODE = "eclipse_signal"
 
@@ -214,6 +214,16 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("treasure_box", "보물함", "남은 굴착 횟수, 미감정 보물과 감정 기록을 확인합니다.", "보물함"),
             _a("appraisers", "감정사 목록", "감정사 4명의 비용·매입 배율·등급 상승 확률을 확인합니다.", "감정사"),
             _a("treasure_appraise", "보물 감정", "감정사를 드롭다운에서 선택해 가장 오래된 미감정 보물을 감정합니다.", "보물감정"),
+        ),
+    ),
+    "card_games": (
+        "🃏 카드게임·파티",
+        "참가 버튼과 비공개 패 확인을 사용하는 포커·원카드·조커잡기입니다.",
+        (
+            _a("card_game_menu", "카드게임 안내", "세 카드게임의 규칙과 시작 명령을 확인합니다.", "카드게임"),
+            _a("poker", "포커 모집", "2~6명이 참가해 비공개 5장과 1회 교환으로 승부합니다.", "포커", "예: 10000", force_modal=True),
+            _a("one_card", "원카드 모집", "2~6명이 같은 무늬·숫자를 내며 먼저 패를 비웁니다.", "원카드", "예: 10000", force_modal=True),
+            _a("joker_draw", "조커잡기 모집", "2~8명이 짝을 버리고 마지막 조커를 피합니다.", "조커잡기", "예: 10000", force_modal=True),
         ),
     ),
     "casino": (
