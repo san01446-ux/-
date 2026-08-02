@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "7.5.1"
+VERSION = "7.6.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -357,6 +357,15 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("guild_audit", "길드 데이터 검수", "길드·금고·레이드 데이터를 읽기 전용으로 검사합니다.", "길드검수"),
             _a("guild_repair_preview", "복구 미리보기", "변경 없이 안전 복구 후보만 표시합니다.", "길드복구미리보기"),
             _a("v750_stability", "v7.5 안정화 검수", "명령 충돌·잠금·중복 정산·삭제 여부를 검사합니다.", "750안정화검수"),
+            _a("guild_dispatch", "길드 파견 지휘소", "협동 파견 지역·모집·진행 상태를 확인합니다.", "길드파견"),
+            _a("guild_dispatch_open", "길드 파견 모집", "지역을 선택해 길드 파견 모집을 엽니다.", "길드파견모집", "예: 연구소", force_modal=True),
+            _a("guild_dispatch_join", "길드 파견 참가", "선봉·기술·의무·보급 역할로 참가합니다.", "길드파견참가", "예: 기술", force_modal=True),
+            _a("guild_dispatch_start", "길드 파견 출발", "모집한 파견대를 출발시키고 금고 비용을 차감합니다.", "길드파견출발"),
+            _a("guild_dispatch_settle", "길드 파견 정산", "복귀한 파견의 길드 보상을 한 번만 정산합니다.", "길드파견정산"),
+            _a("guild_dispatch_reward", "길드 파견 개인 보상", "완료된 파견의 개인 보상을 수령합니다.", "길드파견보상"),
+            _a("guild_dispatch_history", "길드 파견 기록", "완료된 파견 기록을 페이지로 확인합니다.", "길드파견기록", "예: 1", force_modal=False),
+            _a("guild_dispatch_practice", "길드 파견 모의", "금고·기록 변경 없이 1인 파견 결과를 예측합니다.", "길드파견모의", "예: 연구소 기술", force_modal=True),
+            _a("v760_stability", "v7.6 파견 안정화 검수", "파견 중복 정산·보상 키·저장 구조를 읽기 전용 검사합니다.", "760안정화검수"),
         ),
     ),
     "social": (
@@ -500,6 +509,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("vault_admin", "🧾 금고 승인·감사", "출금 승인·거절과 거래 기록을 확인합니다.", ("guild_withdraw_approve", "guild_withdraw_reject", "guild_transactions")),
         ("raid", "👹 주간 길드 레이드", "전술 프리셋·연습·기록·부위 파괴·기여도·개인 보상입니다.", ("guild_raid", "guild_raid_ready", "guild_raid_preset", "guild_raid_practice", "guild_raid_history", "guild_raid_attack", "guild_raid_reward", "guild_raid_ranking", "guild_overall_ranking")),
         ("audit", "🛡️ 길드 안정화", "읽기 전용 감사·복구 미리보기·v7.5 안정화 검사입니다.", ("guild_audit", "guild_repair_preview", "v750_stability")),
+        ("dispatch", "🧭 길드 협동 파견", "모집·역할 편성·출발·정산·개인 보상과 무변경 모의 계산입니다.", ("guild_dispatch", "guild_dispatch_open", "guild_dispatch_join", "guild_dispatch_start", "guild_dispatch_settle", "guild_dispatch_reward", "guild_dispatch_history", "guild_dispatch_practice", "v760_stability")),
     ),
     "social": (
         ("party", "👥 파티", "파티 생성·가입·정보·사냥·탈퇴입니다.", ("party_create", "party_join", "party_info", "party_hunt", "party_leave")),

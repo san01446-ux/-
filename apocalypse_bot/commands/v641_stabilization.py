@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
-VERSION = "7.5.1"
+VERSION = "7.6.0"
 KST = timezone(timedelta(hours=9))
 PATCH_DATE = "2026-08-03"
 
@@ -608,6 +608,8 @@ def register_v641_stabilization(
                 "길드출금요청", "길드출금승인", "길드레이드", "길드레이드공격",
                 "길드레이드준비", "길드전술설정", "길드레이드연습", "길드레이드기록",
                 "길드레이드보상", "길드검수", "750안정화검수",
+                "길드파견", "길드파견모집", "길드파견참가", "길드파견출발",
+                "길드파견정산", "길드파견보상", "길드파견기록", "길드파견모의", "760안정화검수",
             )
             missing_guild = [name for name in guild_commands if bot.get_command(name) is None]
             guild_audit_fn = getattr(bot, "v750_audit_guilds", None)
@@ -617,9 +619,9 @@ def register_v641_stabilization(
                 guild_audit = {"critical": 1, "warning": 0, "error": f"{type(exc).__name__}: {exc}"}
             guild_ok = not missing_guild and callable(guild_audit_fn) and int(guild_audit.get("critical", 1) or 0) == 0
             checks.append((
-                "v7.5.1 길드 통합·전술실",
+                "v7.6.0 길드 통합·전술·파견",
                 guild_ok,
-                "기지·금고·레이드·전술 프리셋·연습·기록·감사 명령 정상" if guild_ok else f"누락 {', '.join(missing_guild) or '-'} · 치명 {guild_audit.get('critical', '?')}",
+                "기지·금고·레이드·전술실·협동 파견·감사 명령 정상" if guild_ok else f"누락 {', '.join(missing_guild) or '-'} · 치명 {guild_audit.get('critical', '?')}",
             ))
             checks.append(("길드 폐기 안전", int(guild_audit.get("deletions", 0) or 0) == 0, "자동 삭제·비활성화 0건 · 휴면 보존"))
 
@@ -649,7 +651,7 @@ def register_v641_stabilization(
             failed = sum(1 for _, ok, _ in checks if not ok)
             passed = len(checks) - failed
             embed = discord.Embed(
-                title=f"🧪 ABADDON v7.5.1 부팅·길드 전술 안정화 테스트 · {passed}/{len(checks)} 통과",
+                title=f"🧪 ABADDON v7.6.0 길드 파견·회귀 안정화 테스트 · {passed}/{len(checks)} 통과",
                 description="재화·전투·인벤토리를 변경하지 않는 읽기 전용 검사입니다.",
                 color=discord.Color.green() if failed == 0 else discord.Color.orange(),
             )
@@ -663,29 +665,28 @@ def register_v641_stabilization(
             await ctx.send(embed=embed)
 
         previous_test.callback = v641_test
-        previous_test.help = "v7.5.1 게임센터 부팅 연결, 길드 레이드 전술실과 기존 중복·스토리·데이터 보호를 읽기 전용으로 검사합니다."
+        previous_test.help = "v7.6.0 게임센터 연결, 길드 레이드·협동 파견과 기존 중복·스토리·데이터 보호를 읽기 전용으로 검사합니다."
         previous_test.description = previous_test.help
 
     patch = bot.get_command("패치노트")
     if patch is not None:
         async def v641_patch_notes(ctx: commands.Context) -> None:
             embed = discord.Embed(
-                title="🛠️ ABADDON v7.5.1 — 부팅 핫픽스·길드 레이드 전술실",
-                description="Render 부팅을 막던 게임센터 길드 메뉴 중복 연결을 수정하고, 길드 레이드 전술 프리셋·연습·준비·기록 기능을 추가했습니다.",
-                color=0x8B5A2B,
+                title="🧭 ABADDON v7.6.0 — 길드 협동 파견·안정화",
+                description="역할을 나눠 길드 파견대를 편성하고, 복귀 뒤 길드 금고와 개인 보상을 중복 없이 정산하는 협동 콘텐츠를 추가했습니다.",
+                color=0x267F78,
             )
-            embed.add_field(name="🚑 부팅 복구", value="`guild_donate`·`guild_upgrade` 게임센터 연결을 각각 한 곳으로 통합하고 검증 오류에 위치를 표시합니다.", inline=False)
-            embed.add_field(name="🎯 전술 프리셋", value="돌격·지원·의무와 기본 부위를 저장하고 인자 없는 공격에 자동 적용합니다.", inline=False)
-            embed.add_field(name="🧪 무보상 연습전", value="복제 상태에서만 계산해 실전 HP·쿨다운·보상·기여도를 변경하지 않습니다.", inline=False)
-            embed.add_field(name="📚 준비·기록", value="쿨다운·시설 보정·추천 목표와 현재·과거 레이드 기록을 확인합니다.", inline=False)
-            embed.add_field(name="🧹 중복·폐기 안전", value="기존 명령 호환 · 구버전 기금 자동 미러 · 삭제·비활성화 **0건**", inline=False)
-            embed.add_field(name="🛡️ 안정화", value="길드별 상태 잠금 · 중복 정산 방지 · 데이터 감사·복구 미리보기", inline=False)
+            embed.add_field(name="🗺️ 파견 4지역", value="폐허 보급로 · 침수 산업지대 · 격리연구소 외곽 · 황혼 철도 종착지", inline=False)
+            embed.add_field(name="👥 역할 편성", value="선봉·기술·의무·보급 · 역할 다양성에 따라 파견 점수와 보상 보정", inline=False)
+            embed.add_field(name="🏦 안전 정산", value="출발 비용 원자적 차감 · 결과 1회 정산 · 개인 보상 claim key 중복 수령 방지", inline=False)
+            embed.add_field(name="🧪 모의 계산", value="`!길드파견모의 지역 역할`은 실제 금고·기록·재화를 변경하지 않습니다.", inline=False)
+            embed.add_field(name="🧹 중복·폐기 안전", value="기존 명령·길드·스토리 데이터 유지 · 삭제·비활성화 **0건**", inline=False)
             embed.add_field(name="📅 패치 날짜", value=f"**{PATCH_DATE}** · 신규 이미지 0장", inline=False)
-            embed.set_footer(text=f"최신 버전 v7.5.1 · {PATCH_DATE}")
+            embed.set_footer(text=f"최신 버전 v7.6.0 · {PATCH_DATE}")
             await ctx.send(embed=embed)
 
         patch.callback = v641_patch_notes
-        patch.help = "ABADDON v7.5.1 부팅 핫픽스·길드 레이드 전술실 패치 내용을 확인합니다."
+        patch.help = "ABADDON v7.6.0 길드 협동 파견·안정화 패치 내용을 확인합니다."
         patch.description = patch.help
 
     bot.v641_version = VERSION

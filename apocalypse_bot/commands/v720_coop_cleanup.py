@@ -11,7 +11,7 @@ from discord.ext import commands
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 from apocalypse_bot.commands.v651_card_games import _card_text, _deck, _poker_score
 
-VERSION = "7.5.1"
+VERSION = "7.6.0"
 PATCH_DATE = "2026-08-03"
 MAX_AI_BET = 5_000_000
 MAX_AI_FOOD_BET = 10_000_000
@@ -83,37 +83,37 @@ def _guild_settings(world_data: Dict[str, Any], guild_id: int) -> Dict[str, Any]
 
 def _patch_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="🛠️ ABADDON v7.5.1 — 부팅 핫픽스·길드 레이드 전술실",
+        title="🧭 ABADDON v7.6.0 — 길드 협동 파견·안정화",
         description=(
-            "게임센터 길드 메뉴의 중복 연결로 Render 부팅이 중단되던 문제를 수정했습니다. "
-            "길드 레이드 전술 프리셋, 준비 점검, 무보상 연습전과 기록 조회를 추가했습니다."
+            "길드원이 역할을 나눠 비동기 파견대를 편성하고, 복귀 후 길드 금고와 개인 보상을 안전하게 정산합니다. "
+            "v7.5.1 실서버 부팅 검증 결과를 바탕으로 메뉴·명령·보상 중복 검사를 다시 강화했습니다."
         ),
-        colour=discord.Colour.from_rgb(111, 66, 193),
+        colour=discord.Colour.from_rgb(38, 132, 126),
         timestamp=discord.utils.utcnow(),
     )
     embed.add_field(
-        name="🚑 Render 부팅 복구",
-        value="게임센터의 `guild_donate`·`guild_upgrade` 연결을 각각 한 곳으로 통합 · 중복/누락 위치를 함께 출력하는 검증기 강화",
+        name="🗺️ 협동 파견 4지역",
+        value="폐허 보급로 · 침수 산업지대 · 격리연구소 외곽 · 황혼 철도 종착지",
         inline=False,
     )
     embed.add_field(
-        name="🎯 개인 전술 프리셋",
-        value="`!길드전술설정`으로 돌격·지원·의무와 기본 공격 부위를 저장 · 공격 인자 생략 시 자동 적용",
+        name="👥 역할 편성",
+        value="선봉·기술·의무·보급 역할을 선택해 참가 · 역할 다양성에 따라 성공 점수와 보상 보정",
         inline=False,
     )
     embed.add_field(
-        name="🧪 안전 연습전",
-        value="실전 길드 데이터를 복제한 뒤 계산해 HP·쿨다운·보상·기여도에 영향을 주지 않는 모의 공격",
+        name="🏦 안전 정산",
+        value="출발 비용 원자적 차감 · 복귀 결과 1회 정산 · 개인 claim key 중복 수령 방지 · 창고 한도 초과량 명시",
         inline=False,
     )
     embed.add_field(
-        name="📚 준비·기록",
-        value="개인 쿨다운·시설 효과·추천 부위 점검 · 현재와 과거 길드 레이드 기록 페이지 조회",
+        name="🧪 무변경 모의 계산",
+        value="`!길드파견모의 지역 역할`로 실제 금고·기록·보상에 영향 없이 1인 결과를 예측",
         inline=False,
     )
     embed.add_field(
         name="🛡️ 안정화 원칙",
-        value="명령·별칭·게임센터 연결 전수 검사 · 기존 기능·데이터 폐기 0건",
+        value="게임센터 연결·명령 별칭·길드 잠금·스토리 순차 해금 회귀 검사 · 기존 기능·데이터 폐기 0건",
         inline=False,
     )
     embed.set_footer(text=f"ABADDON v{VERSION} · {PATCH_DATE} · 기존 이미지 변경 0장")
@@ -899,4 +899,4 @@ def register_v720_coop_cleanup(
     bot.v720_start_ai_game = start_ai_game  # type: ignore[attr-defined]
     bot.v720_patch_embed = _patch_embed  # type: ignore[attr-defined]
     bot._abaddon_v720_registered = True  # type: ignore[attr-defined]
-    print("[V7.5.1 RUNTIME/RAID TACTICS] 게임센터 부팅 핫픽스·길드 레이드 전술실·기존 협동 기능 등록 완료", flush=True)
+    print("[V7.6.0 GUILD DISPATCH] 길드 협동 파견·안전 정산·기존 협동 기능 등록 완료", flush=True)

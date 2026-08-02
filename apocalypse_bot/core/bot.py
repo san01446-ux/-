@@ -5645,6 +5645,14 @@ register_v750_guild_raid(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V7.6.0: 길드 비동기 협동 파견 · 모집/역할/출발/정산/개인 보상 · 강한 중복 정산 보호
+# 기존 개인 원정과 분리된 길드 금고 기반 콘텐츠이며, 신규 명령은 prefix 전용입니다.
+from apocalypse_bot.commands.v760_guild_dispatch import register_v760_guild_dispatch
+register_v760_guild_dispatch(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
