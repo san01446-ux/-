@@ -13,8 +13,9 @@ from discord.ext import commands
 from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 
 
-VERSION = "6.5.1"
+VERSION = "7.0.1"
 MENU_TIMEOUT = 300
+SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
 
 
@@ -360,6 +361,134 @@ RISKY_ACTION_KEYS = {
     "sell", "market_buy", "sell_cancel", "auction_register", "auction_bid",
     "auction_finish", "transfer", "pet_buy",
 }
+
+
+# =========================================================
+# V7.0.1 명령어 가시성 패치
+# 한 카테고리에 기능이 25개를 넘으면 Discord Select 제한에 걸리므로
+# 목적별 기능군으로 먼저 묶고, 각 기능군 안에서 최대 25개씩 표시합니다.
+# 기존 prefix 명령은 삭제하지 않고 그대로 유지합니다.
+# =========================================================
+GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
+    "survival": (
+        ("basics", "🧾 기본 생존", "정보·출석·상태·튜토리얼처럼 가장 먼저 쓰는 기능입니다.", ("info", "wallet", "attendance", "attendance_reward", "support", "status", "rest", "tutorial")),
+        ("jobs", "🧑‍🔧 직업", "직업을 살펴보고 선택하거나 변경합니다.", ("jobs", "job_choose", "job_info", "job_change")),
+        ("quests", "🎯 퀘스트·시즌", "일일·주간 임무, 시즌 패스, 업적과 칭호를 관리합니다.", ("daily_quest", "daily_reward", "weekly_quest", "weekly_reward", "season_pass", "season_reward", "achievements", "titles", "title_set", "ranking")),
+    ),
+    "equipment": (
+        ("manage", "🎒 상점·보유·장착", "장비를 사고 확인하고 장착하는 기본 흐름입니다.", ("shop", "equipment_list", "buy", "inventory", "equipment", "equip", "unequip", "discard", "identify", "new_gear")),
+        ("enhance", "✨ 강화·옵션", "강화, 보호 강화, 옵션, 세트 효과와 랭킹입니다.", ("enhance", "enhance_info", "protected_enhance", "equipment_option", "reroll_option", "set_effect", "enhance_rank")),
+        ("craft", "🛠️ 제작·수리·개조", "재료 확인부터 제작, 수리, 무기 개조까지 이어집니다.", ("materials", "craft_list", "craft", "durability", "repair_weapon", "mod_list", "craft_mod", "install_mod", "economy_balance")),
+    ),
+    "combat": (
+        ("dungeon", "⚔️ 훈련·던전·레이드", "전투 연습, 던전, 레이드와 PVP를 진행합니다.", ("training", "monsters", "dungeon", "deep_dungeon", "dungeon_record", "boss_codex", "raid", "raid_attack", "pvp")),
+        ("region", "🗺️ 지역 탐험", "지역 정보·이동·탐색과 좀비 도감을 확인합니다.", ("region_list", "region_info", "region_move", "region_explore", "zombie_codex")),
+        ("invasion", "🚨 서버 침공", "서버 공동 침공 참가, 공격, 랭킹과 상점입니다.", ("invasion", "invasion_join", "invasion_attack", "invasion_rank", "invasion_shop")),
+    ),
+    "worldboss": (
+        ("battle", "🌋 전투·기여·보상", "현재 보스를 확인하고 공격한 뒤 기여도와 보상을 관리합니다.", ("worldboss_status", "worldboss_attack_v630", "worldboss_contribution", "worldboss_ranking_v630", "worldboss_reward", "worldboss_reward_list")),
+        ("records", "📚 목록·도감", "보스 6종과 개인 누적 기록을 확인합니다.", ("worldboss_list", "worldboss_codex_v630")),
+        ("admin", "🧪 관리자 테스트", "실전과 분리된 샌드박스 보스를 소환하고 점검합니다.", ("worldboss_spawn_admin", "worldboss_test_admin", "worldboss_test_status", "worldboss_test_attack")),
+    ),
+    "expedition": (
+        ("adventure", "🧭 원정 진행", "원정 출발과 턴제 행동, 전술 전투, 보급을 진행합니다.", ("expedition", "exp_help", "exp_list", "exp_start", "exp_action", "tactical_combat", "tactical_dungeon", "exp_abandon", "exp_supply")),
+        ("records", "📋 원정 관리", "유물 발견, 기록, 랭킹, 장비와 임무를 확인합니다.", ("exp_relic", "exp_record", "exp_rank", "exp_gear", "exp_mission", "exp_mission_reward", "exp_recovery")),
+        ("relic", "🔮 유물·숙련", "유물 장착·강화·분해와 생활 숙련도를 관리합니다.", ("relic", "relic_equip", "relic_unequip", "relic_enhance", "relic_dismantle", "life_mastery", "overall_rank")),
+    ),
+    "life": (
+        ("activities", "🌲 생활 활동", "알바와 채집 활동, 자원·인카운트 기록입니다.", ("work", "coin", "gather", "fish", "lumber", "mine", "resources", "encounter_codex")),
+        ("base", "🏕️ 기지·세계 이벤트", "기지 성장, 날씨, 운세, 무전과 방어전입니다.", ("base", "base_build", "base_upgrade", "base_collect", "weather", "daily_fortune", "radio_signal", "hazard_zone", "random_box", "base_defense", "base_defense_attack")),
+        ("market", "📦 자원 시장", "자원을 사고팔거나 기지 칩으로 교환합니다.", ("resource_market", "resource_buy", "resource_sell", "base_chip_exchange")),
+        ("bank", "🏦 은행", "입출금, 대출, 상환, 이자와 신용 기록입니다.", ("bank", "deposit", "withdraw", "loan", "repay", "bank_interest", "credit", "bank_history")),
+        ("shark", "🦈 사채", "고위험 사채 대출과 상환·추심 상태입니다.", ("loan_shark", "shark_borrow", "shark_repay", "shark_collection")),
+    ),
+    "digging": (
+        ("treasure", "⛏️ 굴착·감정", "땅을 파고 보물을 감정해 보관합니다.", ("dig", "treasure_box", "appraisers", "treasure_appraise")),
+    ),
+    "card_games": (
+        ("cards", "🃏 카드게임", "로비를 확인하거나 포커·원카드·조커잡기 모집을 엽니다.", ("card_game_menu", "poker", "one_card", "joker_draw")),
+    ),
+    "casino": (
+        ("lobby", "🎰 카지노 로비·보상", "잔액, 환전, VIP, 미션, 상점과 랭킹을 관리합니다.", ("casino", "casino_balance", "casino_history", "casino_rank", "casino_chips", "casino_exchange", "casino_vip", "casino_jackpot", "casino_mission", "casino_mission_reward", "casino_achievement", "casino_shop", "casino_buy", "casino_season_rank")),
+        ("games", "🎲 카지노 게임", "식량 또는 칩을 사용하는 도박 게임입니다. 실행 전 금액을 꼭 확인하세요.", ("blackjack", "highlow", "slots", "dice", "baccarat", "roulette", "frequency", "gamble_explore", "lucky_wheel", "coinflip", "allin")),
+    ),
+    "story": (
+        ("season1", "📻 시즌 1 · 검은 주파수", "첫 번째 메인 스토리를 시작하고 선택·기록을 관리합니다.", ("story1", "story1_start", "story1_choose", "story1_history", "story1_restart")),
+        ("season2", "🚢 시즌 2 · 백색 방주", "두 번째 스토리와 장면·엔딩 수집·계승 기록입니다.", ("story2", "story2_start", "story2_choose", "story2_history", "story2_restart", "story2_scene", "story2_collection", "story2_legacy")),
+        ("season3", "👑 시즌 3 · 종말의 왕좌", "세 번째 스토리의 시작·선택·기록·재시작입니다.", ("story3", "story3_start", "story3_choose", "story3_history", "story3_restart")),
+        ("quiz", "🧠 오늘의 퀴즈", "오늘 문제를 풀고 서버 퀴즈 랭킹을 확인합니다.", ("daily_quiz", "quiz_answer", "quiz_rank")),
+    ),
+    "social": (
+        ("guild", "🛡️ 길드", "길드 목록·생성·가입·기부·강화·탈퇴입니다.", ("guild_list", "guild_create", "guild_join", "guild_info", "guild_donate", "guild_upgrade", "guild_leave")),
+        ("party", "👥 파티", "파티 생성·가입·정보·사냥·탈퇴입니다.", ("party_create", "party_join", "party_info", "party_hunt", "party_leave")),
+        ("trade", "💰 거래·경매", "개인 송금, 거래소 판매·구매와 경매를 관리합니다.", ("market", "sell", "market_buy", "sell_cancel", "auction_search", "auction_register", "auction_bid", "auction_finish", "auction_history", "transfer")),
+    ),
+    "pets": (
+        ("growth", "🐾 펫 성장", "펫을 구매하고 장착·훈련·먹이·모험·진화합니다.", ("pet_shop", "pet_buy", "pet_info", "pet_train", "pet_list", "pet_equip", "pet_feed", "pet_adventure", "pet_evolve")),
+        ("codex", "📖 통합 도감", "장비·펫·몬스터 수집과 도감 보상을 확인합니다.", ("codex", "codex_gear", "codex_pet", "codex_monster", "codex_reward")),
+    ),
+}
+
+QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
+    "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·튜토리얼·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "tutorial", "daily_quest", "shop", "inventory", "equipment", "training")),
+    "grow": ("📈 강해지고 싶어요", "장비를 갖추고 강화하며 퀘스트·시즌 보상으로 성장합니다.", ("info", "shop", "inventory", "equipment", "equip", "enhance", "daily_quest", "weekly_quest", "season_pass", "achievements")),
+    "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "region_list", "region_explore", "raid", "worldboss_status")),
+    "earn": ("🥫 식량과 자원이 필요해요", "지원금·알바·채집·굴착과 자원 시장으로 재화를 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "dig", "treasure_appraise", "resource_market")),
+    "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·퀴즈 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "expedition", "exp_start", "relic", "daily_quiz")),
+    "community": ("🤝 같이 놀고 싶어요", "길드·파티·카드게임·거래와 송금을 확인합니다.", ("guild_list", "guild_create", "party_create", "card_game_menu", "market", "transfer")),
+}
+
+
+def _section_entry(category_key: str, section_key: str) -> Optional[Tuple[str, str, str, Sequence[str]]]:
+    return next((item for item in GAME_SECTIONS.get(category_key, ()) if item[0] == section_key), None)
+
+
+def _section_specs(category_key: str, section_key: str) -> List[ActionSpec]:
+    entry = _section_entry(category_key, section_key)
+    if entry is None:
+        return []
+    return [ACTION_INDEX[key] for key in entry[3] if key in ACTION_INDEX]
+
+
+def _quick_path_specs(path_key: str) -> List[ActionSpec]:
+    entry = QUICK_PATHS.get(path_key)
+    if entry is None:
+        return []
+    return [ACTION_INDEX[key] for key in entry[2] if key in ACTION_INDEX]
+
+
+def _today_specs(user: Dict[str, Any]) -> List[ActionSpec]:
+    # 매일 반복 가치가 높은 기능을 먼저 제시하고, 상태에 따라 회복·직업 선택을 앞에 붙입니다.
+    keys: List[str] = []
+    if not user.get("job"):
+        keys.extend(("jobs", "job_choose"))
+    if int(user.get("hp", 100) or 0) < 60 or int(user.get("stamina", 100) or 0) < 40:
+        keys.extend(("status", "rest"))
+    keys.extend(("attendance", "daily_quest", "daily_reward", "weekly_quest", "season_pass", "daily_quiz", "daily_fortune", "weather", "work", "worldboss_status"))
+    result: List[ActionSpec] = []
+    for key in keys:
+        spec = ACTION_INDEX.get(key)
+        if spec is not None and spec not in result:
+            result.append(spec)
+    return result[:20]
+
+
+def _validate_game_sections() -> None:
+    expected = set(ACTION_INDEX)
+    assigned: List[str] = []
+    for category_key, sections in GAME_SECTIONS.items():
+        for _section_key, _title, _description, keys in sections:
+            if len(keys) > SELECT_PAGE_SIZE:
+                raise RuntimeError(f"게임 기능군이 Discord 선택 제한을 초과했습니다: {category_key}")
+            assigned.extend(str(key) for key in keys)
+    missing = expected.difference(assigned)
+    duplicated = {key for key in assigned if assigned.count(key) > 1}
+    unknown = set(assigned).difference(expected)
+    if missing or duplicated or unknown:
+        raise RuntimeError(f"게임 기능군 연결 오류: missing={sorted(missing)}, duplicated={sorted(duplicated)}, unknown={sorted(unknown)}")
+
+
+_validate_game_sections()
 
 
 # =========================================================
@@ -748,27 +877,68 @@ def _main_embed(user: Optional[Dict[str, Any]] = None) -> discord.Embed:
     embed = discord.Embed(
         title=f"🎮 ABADDON v{VERSION} 게임 제어실",
         description=(
-            f"카테고리에서 기능을 고르면 **실행 전 미리보기**가 열립니다.\n"
-            f"즐겨찾기·최근 실행·검색으로 **{total_actions}개 기능**을 빠르게 찾을 수 있으며 기존 `!명령어`도 유지됩니다."
+            "**처음이라면 `🌱 처음 시작`부터 누르세요.** 무엇을 하고 싶은지 고르면 필요한 기능만 순서대로 보여줍니다.\n"
+            "익숙한 생존자는 카테고리 → 기능군 → 기능 순서로 선택하거나 검색·즐겨찾기를 사용할 수 있습니다."
         ),
         color=discord.Color.dark_red(),
+    )
+    embed.add_field(
+        name="🌱 초보 추천 순서",
+        value="`정보 확인` → `직업 선택` → `출석` → `튜토리얼` → `첫 전투`",
+        inline=False,
     )
     embed.add_field(name="카테고리", value=f"**{len(GAME_CATEGORIES)}개**", inline=True)
     embed.add_field(name="연결 기능", value=f"**{total_actions}개**", inline=True)
     embed.add_field(name="즐겨찾기", value=f"**{len(state['favorites'])}/{MAX_GAME_FAVORITES}**", inline=True)
-    embed.add_field(name="최근 실행", value=f"**{len(state['recent'])}/{MAX_GAME_RECENT}**", inline=True)
-    embed.add_field(name="안전 실행", value="선택 → 미리보기 → 실행", inline=True)
-    embed.add_field(name="슬래시 증가", value="**0개** · prefix 전용", inline=True)
-    embed.set_footer(text="본인만 조작할 수 있습니다 · 제한시간 5분")
+    embed.add_field(name="사용 흐름", value="카테고리 → 기능군 → 미리보기 → 실행", inline=False)
+    embed.add_field(name="기존 명령어", value="전부 유지 · 기존 `!명령어` 그대로 사용 가능", inline=False)
+    embed.set_footer(text="본인만 조작할 수 있습니다 · 제한시간 5분 · 드롭다운 25개 제한 자동 분할")
     return embed
 
 
 def _category_embed(category_key: str) -> discord.Embed:
     title, description, actions = GAME_CATEGORIES[category_key]
+    sections = GAME_SECTIONS.get(category_key, ())
     embed = discord.Embed(title=title, description=description, color=discord.Color.dark_teal())
-    embed.add_field(name="선택 가능한 기능", value=f"**{len(actions)}개**", inline=True)
-    embed.add_field(name="새 실행 방식", value="기능 선택 후 미리보기", inline=True)
-    embed.set_footer(text="입력이 필요한 기능은 실행 버튼을 누른 뒤 모달 창으로 이어집니다.")
+    embed.add_field(name="전체 기능", value=f"**{len(actions)}개**", inline=True)
+    embed.add_field(name="기능군", value=f"**{len(sections)}개**", inline=True)
+    if sections:
+        lines = [f"**{section_title}** · {section_description}" for _key, section_title, section_description, _keys in sections]
+        embed.add_field(name="무엇을 할지 먼저 고르세요", value="\n".join(lines)[:1024], inline=False)
+    embed.set_footer(text="비슷한 명령은 기능군 안에 함께 묶었습니다. 기존 직접 명령은 삭제되지 않았습니다.")
+    return embed
+
+
+def _section_embed(category_key: str, section_key: str, page: int = 0) -> discord.Embed:
+    entry = _section_entry(category_key, section_key)
+    if entry is None:
+        return _category_embed(category_key)
+    _key, title, description, _keys = entry
+    specs = _section_specs(category_key, section_key)
+    page_count = max(1, (len(specs) - 1) // SELECT_PAGE_SIZE + 1)
+    page = max(0, min(page, page_count - 1))
+    visible = specs[page * SELECT_PAGE_SIZE:(page + 1) * SELECT_PAGE_SIZE]
+    embed = discord.Embed(title=title, description=description, color=discord.Color.dark_teal())
+    if visible:
+        preview = "\n".join(f"• **{spec.label}** — {spec.description}" for spec in visible[:8])
+        if len(visible) > 8:
+            preview += f"\n• 그 외 **{len(visible) - 8}개** 기능"
+        embed.add_field(name=f"이 기능군에서 할 수 있는 일 · {len(specs)}개", value=preview[:1024], inline=False)
+    embed.add_field(name="선택 방법", value="아래 드롭다운에서 기능을 고르면 실행 전 설명과 입력 예시가 열립니다.", inline=False)
+    embed.set_footer(text=f"{page + 1}/{page_count} 페이지 · 기존 !명령어 직접 입력도 계속 지원")
+    return embed
+
+
+def _quick_path_embed(path_key: str) -> discord.Embed:
+    title, description, _keys = QUICK_PATHS[path_key]
+    specs = _quick_path_specs(path_key)
+    embed = discord.Embed(title=title, description=description, color=discord.Color.green())
+    embed.add_field(
+        name="추천 순서",
+        value="\n".join(f"**{index}. {spec.label}** · {spec.description}" for index, spec in enumerate(specs, 1))[:1024],
+        inline=False,
+    )
+    embed.set_footer(text="아래 목록에서 하나를 고르면 실행 전 미리보기가 열립니다.")
     return embed
 
 
@@ -779,26 +949,30 @@ def _action_embed(bot: commands.Bot, spec: ActionSpec, user: Dict[str, Any]) -> 
     risky = spec.key in RISKY_ACTION_KEYS
     embed = discord.Embed(
         title=f"{'⚠️' if risky else '🎮'} {spec.label}",
-        description=spec.description,
+        description=f"**무엇을 하나요?**\n{spec.description}",
         color=discord.Color.gold() if risky else discord.Color.dark_teal(),
     )
     category_key = ACTION_CATEGORY.get(spec.key, "")
     category_title = GAME_CATEGORIES.get(category_key, ("기타", "", ()))[0]
-    embed.add_field(name="카테고리", value=category_title, inline=True)
-    embed.add_field(name="기존 명령", value=f"`!{spec.command}`", inline=True)
-    embed.add_field(name="추가 입력", value="필요" if requires_input else "없음", inline=True)
-    embed.add_field(name="즐겨찾기", value="⭐ 등록됨" if spec.key in state["favorites"] else "☆ 미등록", inline=True)
+    embed.add_field(name="분류", value=category_title, inline=True)
+    embed.add_field(name="입력", value="실행 후 입력창이 열림" if requires_input else "버튼 한 번으로 실행", inline=True)
+    embed.add_field(name="기존 직접 명령", value=f"`!{spec.command}`", inline=False)
     if spec.example:
         embed.add_field(name="입력 예시", value=spec.example, inline=False)
+    embed.add_field(
+        name="사용 순서",
+        value="1. 아래 **실행하기** 선택\n2. 필요한 값 입력\n3. 결과 확인" if requires_input else "아래 **실행하기** 버튼을 누르면 바로 결과가 표시됩니다.",
+        inline=False,
+    )
+    embed.add_field(name="즐겨찾기", value="⭐ 등록됨" if spec.key in state["favorites"] else "☆ 미등록", inline=True)
     if risky:
         embed.add_field(
-            name="주의",
-            value="식량·아이템·칩·길드 상태 등에 영향을 줄 수 있습니다. 내용을 확인한 뒤 실행하세요.",
+            name="실행 전 확인",
+            value="식량·아이템·칩·길드 상태가 실제로 변경될 수 있습니다. 금액과 대상을 다시 확인하세요.",
             inline=False,
         )
-    embed.set_footer(text="아래 실행 버튼을 눌러야 실제 명령이 실행됩니다.")
+    embed.set_footer(text="기존 명령어는 그대로 유지됩니다. 메뉴는 명령을 대신 찾아주는 안전한 실행 도구입니다.")
     return embed
-
 
 def _list_embed(title: str, description: str, specs: Sequence[ActionSpec]) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, color=discord.Color.dark_teal())
@@ -878,28 +1052,48 @@ class GameSearchModal(discord.ui.Modal):
 
 
 class GameActionSelect(discord.ui.Select):
-    def __init__(self, bot: commands.Bot, owner_id: int, category_key: str, get_user: Any, save_data: Any) -> None:
+    def __init__(
+        self,
+        bot: commands.Bot,
+        owner_id: int,
+        category_key: str,
+        section_key: str,
+        specs: Sequence[ActionSpec],
+        page: int,
+        get_user: Any,
+        save_data: Any,
+    ) -> None:
         self.bot = bot
         self.owner_id = owner_id
         self.category_key = category_key
+        self.section_key = section_key
         self.get_user = get_user
         self.save_data = save_data
-        actions = GAME_CATEGORIES[category_key][2]
+        self.page = max(0, int(page))
+        start = self.page * SELECT_PAGE_SIZE
+        visible = list(specs[start:start + SELECT_PAGE_SIZE])
+        self.specs = {spec.key: spec for spec in visible}
         options = [
             discord.SelectOption(
                 label=spec.label[:100],
                 value=spec.key,
-                description=spec.description[:100],
+                description=f"!{spec.command} · {spec.description}"[:100],
             )
-            for spec in actions
+            for spec in visible
         ]
-        super().__init__(placeholder="미리볼 게임 기능을 선택하세요", min_values=1, max_values=1, options=options)
+        end = start + len(visible)
+        super().__init__(
+            placeholder=f"기능 선택 · {start + 1}-{end}/{len(specs)}",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
             return
-        spec = ACTION_INDEX.get(self.values[0])
+        spec = self.specs.get(self.values[0])
         if spec is None:
             await interaction.response.send_message("⚠️ 선택한 기능을 찾지 못했습니다.", ephemeral=True)
             return
@@ -912,6 +1106,8 @@ class GameActionSelect(discord.ui.Select):
                 self.get_user,
                 self.save_data,
                 self.category_key,
+                self.section_key,
+                self.page,
             ),
         )
 
@@ -922,12 +1118,12 @@ class GameSpecListSelect(discord.ui.Select):
         self.owner_id = owner_id
         self.get_user = get_user
         self.save_data = save_data
-        self.specs = {spec.key: spec for spec in specs[:25]}
+        self.specs = {spec.key: spec for spec in specs[:SELECT_PAGE_SIZE]}
         options = [
             discord.SelectOption(label=spec.label[:100], value=spec.key, description=f"!{spec.command} · {spec.description}"[:100])
-            for spec in specs[:25]
+            for spec in specs[:SELECT_PAGE_SIZE]
         ]
-        super().__init__(placeholder="미리볼 기능을 선택하세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="추천 기능을 선택하세요", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
@@ -939,7 +1135,7 @@ class GameSpecListSelect(discord.ui.Select):
             return
         await interaction.response.edit_message(
             embed=_action_embed(self.bot, spec, self.get_user(interaction.user.id)),
-            view=GameActionDetailView(self.bot, self.owner_id, spec, self.get_user, self.save_data, None),
+            view=GameActionDetailView(self.bot, self.owner_id, spec, self.get_user, self.save_data, None, None, 0),
         )
 
 
@@ -952,6 +1148,8 @@ class GameActionDetailView(discord.ui.View):
         get_user: Any,
         save_data: Any,
         category_key: Optional[str],
+        section_key: Optional[str],
+        page: int,
     ) -> None:
         super().__init__(timeout=MENU_TIMEOUT)
         self.bot = bot
@@ -960,6 +1158,8 @@ class GameActionDetailView(discord.ui.View):
         self.get_user = get_user
         self.save_data = save_data
         self.category_key = category_key
+        self.section_key = section_key
+        self.page = page
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.owner_id:
@@ -967,7 +1167,7 @@ class GameActionDetailView(discord.ui.View):
         await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
         return False
 
-    @discord.ui.button(label="실행", emoji="▶️", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="실행하기", emoji="▶️", style=discord.ButtonStyle.success, row=1)
     async def execute(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         command = self.bot.get_command(self.spec.command)
         if command is None:
@@ -983,22 +1183,24 @@ class GameActionDetailView(discord.ui.View):
         if success:
             _record_recent(self.get_user, self.save_data, interaction.user.id, self.spec)
 
-    @discord.ui.button(label="즐겨찾기 추가/해제", emoji="⭐", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="즐겨찾기", emoji="⭐", style=discord.ButtonStyle.secondary, row=1)
     async def favorite(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         _added, message = _toggle_favorite(self.get_user, self.save_data, interaction.user.id, self.spec)
         await interaction.response.send_message(message, ephemeral=True)
 
     @discord.ui.button(label="이전 목록", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        if self.category_key and self.category_key in GAME_CATEGORIES:
+        if self.category_key and self.section_key:
             await interaction.response.edit_message(
-                embed=_category_embed(self.category_key),
+                embed=_section_embed(self.category_key, self.section_key, self.page),
                 view=GameActionView(
                     self.bot,
                     self.owner_id,
                     self.category_key,
+                    self.section_key,
                     self.get_user,
                     self.save_data,
+                    self.page,
                 ),
             )
             return
@@ -1016,13 +1218,30 @@ class GameActionDetailView(discord.ui.View):
 
 
 class GameActionView(discord.ui.View):
-    def __init__(self, bot: commands.Bot, owner_id: int, category_key: str, get_user: Any, save_data: Any) -> None:
+    def __init__(
+        self,
+        bot: commands.Bot,
+        owner_id: int,
+        category_key: str,
+        section_key: str,
+        get_user: Any,
+        save_data: Any,
+        page: int = 0,
+    ) -> None:
         super().__init__(timeout=MENU_TIMEOUT)
         self.bot = bot
         self.owner_id = owner_id
+        self.category_key = category_key
+        self.section_key = section_key
         self.get_user = get_user
         self.save_data = save_data
-        self.add_item(GameActionSelect(bot, owner_id, category_key, get_user, save_data))
+        self.specs = _section_specs(category_key, section_key)
+        self.page_count = max(1, (len(self.specs) - 1) // SELECT_PAGE_SIZE + 1)
+        self.page = max(0, min(int(page), self.page_count - 1))
+        self.add_item(GameActionSelect(bot, owner_id, category_key, section_key, self.specs, self.page, get_user, save_data))
+        self.previous.disabled = self.page <= 0
+        self.next.disabled = self.page >= self.page_count - 1
+        self.back.label = "기능군" if len(GAME_SECTIONS.get(category_key, ())) > 1 else "카테고리"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.owner_id:
@@ -1030,13 +1249,83 @@ class GameActionView(discord.ui.View):
         await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
         return False
 
-    @discord.ui.button(label="카테고리로 돌아가기", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="이전", emoji="◀️", style=discord.ButtonStyle.secondary, row=1)
+    async def previous(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        page = max(0, self.page - 1)
+        await interaction.response.edit_message(
+            embed=_section_embed(self.category_key, self.section_key, page),
+            view=GameActionView(self.bot, self.owner_id, self.category_key, self.section_key, self.get_user, self.save_data, page),
+        )
+
+    @discord.ui.button(label="다음", emoji="▶️", style=discord.ButtonStyle.secondary, row=1)
+    async def next(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        page = min(self.page_count - 1, self.page + 1)
+        await interaction.response.edit_message(
+            embed=_section_embed(self.category_key, self.section_key, page),
+            view=GameActionView(self.bot, self.owner_id, self.category_key, self.section_key, self.get_user, self.save_data, page),
+        )
+
+    @discord.ui.button(label="기능군", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        sections = GAME_SECTIONS.get(self.category_key, ())
+        if len(sections) > 1:
+            await interaction.response.edit_message(
+                embed=_category_embed(self.category_key),
+                view=GameSectionView(self.bot, self.owner_id, self.category_key, self.get_user, self.save_data),
+            )
+            return
         await interaction.response.edit_message(
             embed=_main_embed(self.get_user(interaction.user.id)),
             view=GameCategoryView(self.bot, self.owner_id, self.get_user, self.save_data),
         )
 
+
+class GameSectionSelect(discord.ui.Select):
+    def __init__(self, bot: commands.Bot, owner_id: int, category_key: str, get_user: Any, save_data: Any) -> None:
+        self.bot = bot
+        self.owner_id = owner_id
+        self.category_key = category_key
+        self.get_user = get_user
+        self.save_data = save_data
+        options = [
+            discord.SelectOption(label=title[:100], value=key, description=description[:100])
+            for key, title, description, _keys in GAME_SECTIONS.get(category_key, ())
+        ]
+        super().__init__(placeholder="먼저 하고 싶은 기능군을 선택하세요", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
+            return
+        section_key = self.values[0]
+        await interaction.response.edit_message(
+            embed=_section_embed(self.category_key, section_key),
+            view=GameActionView(self.bot, self.owner_id, self.category_key, section_key, self.get_user, self.save_data),
+        )
+
+
+class GameSectionView(discord.ui.View):
+    def __init__(self, bot: commands.Bot, owner_id: int, category_key: str, get_user: Any, save_data: Any) -> None:
+        super().__init__(timeout=MENU_TIMEOUT)
+        self.bot = bot
+        self.owner_id = owner_id
+        self.category_key = category_key
+        self.get_user = get_user
+        self.save_data = save_data
+        self.add_item(GameSectionSelect(bot, owner_id, category_key, get_user, save_data))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
+        return False
+
+    @discord.ui.button(label="카테고리", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            embed=_main_embed(self.get_user(interaction.user.id)),
+            view=GameCategoryView(self.bot, self.owner_id, self.get_user, self.save_data),
+        )
 
 class GameSpecListView(discord.ui.View):
     def __init__(self, bot: commands.Bot, owner_id: int, specs: Sequence[ActionSpec], get_user: Any, save_data: Any) -> None:
@@ -1061,7 +1350,7 @@ class GameSpecListView(discord.ui.View):
         )
 
 
-class GameCategorySelect(discord.ui.Select):
+class QuickPathSelect(discord.ui.Select):
     def __init__(self, bot: commands.Bot, owner_id: int, get_user: Any, save_data: Any) -> None:
         self.bot = bot
         self.owner_id = owner_id
@@ -1069,18 +1358,77 @@ class GameCategorySelect(discord.ui.Select):
         self.save_data = save_data
         options = [
             discord.SelectOption(label=title[:100], value=key, description=description[:100])
+            for key, (title, description, _keys) in QUICK_PATHS.items()
+        ]
+        super().__init__(placeholder="지금 원하는 목표를 선택하세요", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
+            return
+        path_key = self.values[0]
+        specs = _quick_path_specs(path_key)
+        await interaction.response.edit_message(
+            embed=_quick_path_embed(path_key),
+            view=GameSpecListView(self.bot, self.owner_id, specs, self.get_user, self.save_data),
+        )
+
+
+class QuickPathView(discord.ui.View):
+    def __init__(self, bot: commands.Bot, owner_id: int, get_user: Any, save_data: Any) -> None:
+        super().__init__(timeout=MENU_TIMEOUT)
+        self.bot = bot
+        self.owner_id = owner_id
+        self.get_user = get_user
+        self.save_data = save_data
+        self.add_item(QuickPathSelect(bot, owner_id, get_user, save_data))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
+        return False
+
+    @discord.ui.button(label="카테고리 보기", emoji="🗂️", style=discord.ButtonStyle.secondary, row=1)
+    async def categories(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            embed=_main_embed(self.get_user(interaction.user.id)),
+            view=GameCategoryView(self.bot, self.owner_id, self.get_user, self.save_data),
+        )
+
+
+class GameCategorySelect(discord.ui.Select):
+    def __init__(self, bot: commands.Bot, owner_id: int, get_user: Any, save_data: Any) -> None:
+        self.bot = bot
+        self.owner_id = owner_id
+        self.get_user = get_user
+        self.save_data = save_data
+        options = [
+            discord.SelectOption(
+                label=title[:100],
+                value=key,
+                description=f"{len(GAME_SECTIONS.get(key, ()))}개 기능군 · {description}"[:100],
+            )
             for key, (title, description, _actions) in GAME_CATEGORIES.items()
         ]
-        super().__init__(placeholder="게임 카테고리를 선택하세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="익숙한 기능은 카테고리에서 찾으세요", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
             return
         category_key = self.values[0]
+        sections = GAME_SECTIONS.get(category_key, ())
+        if len(sections) == 1:
+            section_key = sections[0][0]
+            await interaction.response.edit_message(
+                embed=_section_embed(category_key, section_key),
+                view=GameActionView(self.bot, self.owner_id, category_key, section_key, self.get_user, self.save_data),
+            )
+            return
         await interaction.response.edit_message(
             embed=_category_embed(category_key),
-            view=GameActionView(self.bot, self.owner_id, category_key, self.get_user, self.save_data),
+            view=GameSectionView(self.bot, self.owner_id, category_key, self.get_user, self.save_data),
         )
 
 
@@ -1099,12 +1447,38 @@ class GameCategoryView(discord.ui.View):
         await interaction.response.send_message("🔒 이 게임 제어실은 처음 연 사용자만 조작할 수 있습니다.", ephemeral=True)
         return False
 
+    @discord.ui.button(label="처음 시작", emoji="🌱", style=discord.ButtonStyle.success, row=1)
+    async def beginner(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        embed = discord.Embed(
+            title="🌱 무엇부터 해야 할지 골라주세요",
+            description=(
+                "명령어 이름을 외울 필요가 없습니다. 아래 목표 중 하나를 선택하면 필요한 기능만 추천 순서로 보여줍니다.\n"
+                "이미 플레이 중이어도 성장·전투·돈벌이 루트로 바로 이동할 수 있습니다."
+            ),
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="첫날 기본 순서", value="정보 → 직업 → 출석 → 튜토리얼 → 첫 전투", inline=False)
+        await interaction.response.edit_message(
+            embed=embed,
+            view=QuickPathView(self.bot, self.owner_id, self.get_user, self.save_data),
+        )
+
+    @discord.ui.button(label="오늘 추천", emoji="☀️", style=discord.ButtonStyle.primary, row=1)
+    async def today(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        user = self.get_user(interaction.user.id)
+        specs = _today_specs(user)
+        await interaction.response.send_message(
+            embed=_list_embed("☀️ 오늘 먼저 할 일", "출석·퀘스트·상태를 기준으로 자주 놓치는 일일 기능을 모았습니다.", specs),
+            view=GameSpecListView(self.bot, self.owner_id, specs, self.get_user, self.save_data),
+            ephemeral=True,
+        )
+
     @discord.ui.button(label="즐겨찾기", emoji="⭐", style=discord.ButtonStyle.secondary, row=1)
     async def favorites(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         specs = _favorite_specs(self.get_user, interaction.user.id)
         if not specs:
             await interaction.response.send_message(
-                "⭐ 아직 즐겨찾기가 없습니다. 기능 미리보기에서 `즐겨찾기 추가/해제`를 눌러주세요.",
+                "⭐ 아직 즐겨찾기가 없습니다. 기능 미리보기에서 `즐겨찾기`를 눌러주세요.",
                 ephemeral=True,
             )
             return
@@ -1126,7 +1500,7 @@ class GameCategoryView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="기능 검색", emoji="🔎", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="기능 검색", emoji="🔎", style=discord.ButtonStyle.secondary, row=1)
     async def search(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         await interaction.response.send_modal(
             GameSearchModal(self.bot, self.owner_id, self.get_user, self.save_data)

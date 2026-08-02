@@ -211,47 +211,24 @@ def register_v30_commands(
                 return True
         return False
 
-    @bot.hybrid_command(name="도움말", aliases=["help"], description="아바돈의 명령어와 카테고리별 도움말을 확인합니다.")
+    @bot.hybrid_command(name="도움말", aliases=["help"], description="초보 가이드와 카테고리별 명령어 브라우저를 엽니다.")
     async def help_command(ctx, *, category: str = ""):
-        categories = {
-            "기본": ["가입 생존자", "프로필", "인벤토리", "장착", "해제", "상태", "휴식", "출석", "칭호"],
-            "전투": ["던전 [약함/보통/강함]", "심층던전 [층]", "월드보스", "월드보스공격", "PVP @유저", "전투력"],
-            "침공": ["침공", "참전", "침공공격", "침공랭킹", "침공기록", "침공상점"],
-            "탐험": ["지역목록", "지역정보", "지역이동 [지역]", "지역탐색", "좀비도감", "보스도감"],
-            "성장": ["직업목록", "직업선택", "직업정보", "펫", "펫뽑기", "강화", "강화정보", "보호강화", "장비옵션", "세트효과"],
-            "생활": ["채집", "낚시", "벌목", "광산", "생활숙련도", "제작", "제작목록", "기지", "기지건설", "기지수확"],
-            "경제": ["상점", "구매", "판매", "거래소", "거래등록", "거래검색", "경매등록", "입찰", "거래기록"],
-            "협동": ["길드", "길드생성", "길드가입", "길드랭킹", "파티", "파티생성", "파티가입"],
-            "도전": ["일일퀘스트", "주간퀘스트", "업적", "시즌패스", "랭킹", "종합랭킹", "오늘의퀴즈", "정답"],
-            "스토리": ["스토리", "스토리 시작", "스토리 선택 [번호]", "스토리 기록", "스토리 재시작", "도감", "도감보상"],
-            "기타": ["의약품", "약품구매", "사용", "병원", "패치노트", "도움말 [분류]"],
-        }
-        aliases = {"전투": "전투", "침공": "침공", "탐험": "탐험", "성장": "성장", "생활": "생활", "경제": "경제", "협동": "협동", "도전": "도전", "스토리": "스토리", "기타": "기타", "기본": "기본"}
-        selected = aliases.get(category.strip())
-        if selected:
-            embed = discord.Embed(
-                title=f"📖 아바돈 도움말 — {selected}",
-                description="기존 `!명령어`와 `/명령어`를 모두 사용할 수 있습니다. `/`는 입력창 자동완성에서 선택하세요.",
-                color=discord.Color.dark_red(),
-            )
-            embed.add_field(name=selected, value="\n".join(f"`!{cmd}`" for cmd in categories[selected]), inline=False)
-            embed.set_footer(text="예: !도움말 침공 · 관리자 명령어는 !관리자명령어")
-            await ctx.send(embed=embed)
-            return
-
-        embed = discord.Embed(
-            title="😈 아바돈 — Apocalypse RPG 도움말",
-            description=(
-                "세상의 종말에서 살아남으세요.\n"
-                "자세한 명령어는 `!도움말 분류` 또는 `/도움말`로 확인할 수 있습니다."
-            ),
-            color=discord.Color.dark_red(),
+        # V7.0.1부터 도움말과 명령어 브라우저를 하나로 통합합니다.
+        # 기존 !도움말 분류 사용자는 검색어로 그대로 연결되며, !도움말만 입력하면 초보 버튼이 있는 통합 화면이 열립니다.
+        browser = bot.get_command("명령어")
+        if browser is not None:
+            try:
+                if browser.cog is not None:
+                    await browser.callback(browser.cog, ctx, 검색어=category.strip() or None)
+                else:
+                    await browser.callback(ctx, 검색어=category.strip() or None)
+                return
+            except TypeError:
+                pass
+        await ctx.send(
+            "📚 명령어 브라우저를 열지 못했습니다. `!명령어` 또는 `!게임`을 사용해주세요.\n"
+            "처음이라면 `!처음`을 입력하세요."
         )
-        for name, commands_list in categories.items():
-            preview = " · ".join(f"`!{x.split()[0]}`" for x in commands_list[:6])
-            embed.add_field(name=f"{name}", value=preview, inline=False)
-        embed.set_footer(text="분류: 기본 / 전투 / 침공 / 탐험 / 성장 / 생활 / 경제 / 협동 / 도전 / 스토리 / 기타")
-        await ctx.send(embed=embed)
 
     @bot.command(name="침공", aliases=["서버침공", "침공현황"])
     async def invasion_status(ctx):

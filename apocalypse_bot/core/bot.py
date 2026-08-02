@@ -1703,7 +1703,7 @@ COMMAND_GUIDE_CATEGORIES = [
         "title": "가입 / 정보 / 기본",
         "hint": "처음 시작, 지갑, 랭킹, 상태 확인",
         "commands": [
-            "!가입 생존자", "!튜토리얼", "!정보", "!지갑", "!상태", "!랭킹",
+            "!가입 생존자", "!처음 / !초보", "!게임 / !게임센터", "!튜토리얼", "!정보", "!지갑", "!상태", "!랭킹",
             "!출석", "!출석보상", "!송금 @유저 금액", "!돈주세요", "!훈련", "!휴식",
             "!직업목록", "!직업선택 직업명", "!직업정보 [직업명]", "!직업변경 직업명",
             "!칭호목록", "!칭호 칭호이름"
@@ -1864,6 +1864,72 @@ COMMAND_GUIDE_CATEGORIES = [
 ]
 
 
+GUIDE_FEATURED_COMMANDS = {
+    "start": ["!가입 생존자", "!처음 / !초보", "!게임 / !게임센터", "!정보", "!출석", "!튜토리얼"],
+    "life": ["!알바", "!채집", "!광산", "!땅파기", "!오늘의 운세", "!보물감정"],
+    "shop": ["!장비", "!상점", "!인벤토리", "!장착 아이템명", "!강화 아이템명", "!제작목록"],
+    "battle": ["!전투 보통", "!던전 보통", "!지역탐색", "!레이드", "!월드보스", "!월드보스공격"],
+    "trade": ["!지갑", "!거래소", "!은행", "!암시장", "!송금 @유저 금액", "!자원시장"],
+    "casino": ["!카지노", "!카지노칩", "!카지노미션", "!카지노상점", "!카지노기록"],
+    "story": ["!스토리", "!시즌2", "!시즌3", "!원정", "!유물", "!오늘의퀴즈"],
+    "pet": ["!펫", "!펫상점", "!펫목록", "!펫모험", "!펫진화"],
+    "guild_party": ["!길드목록", "!길드정보", "!파티생성", "!파티가입 @리더", "!파티사냥"],
+    "quest": ["!일일퀘스트", "!퀘스트보상", "!주간퀘스트", "!시즌패스", "!업적"],
+    "base": ["!상태", "!병원", "!기지", "!기지강화", "!기지수확", "!날씨"],
+    "talk": ["!대화", "!아바돈 내용", "!오늘의질문", "!응원 @유저", "!지식 검색 단어"],
+    "server": ["!서버설정", "!운영도움말", "!퀴즈알림상태", "!암시장알림상태", "!테스트"],
+}
+
+BEGINNER_GUIDE_STEPS = [
+    ("1", "가입", "`!가입 생존자`", "캐릭터를 만들고 초기 식량 1,000개를 받습니다."),
+    ("2", "내 상태 확인", "`!정보` · `!상태`", "레벨·식량·HP·스태미나를 확인합니다."),
+    ("3", "직업 선택", "`!직업목록` → `!직업선택 직업명`", "처음에는 설명을 읽고 마음에 드는 직업을 고르면 됩니다."),
+    ("4", "매일 보상", "`!출석` · `!일일퀘스트`", "접속할 때마다 먼저 확인하면 성장 속도가 빨라집니다."),
+    ("5", "첫 전투", "`!훈련` 또는 `!전투 보통`", "장비가 없어도 가능한 안전한 전투부터 시작합니다."),
+]
+
+TODAY_GUIDE_COMMANDS = [
+    ("🎁", "출석", "`!출석`", "오늘 출석 보상을 받습니다."),
+    ("🎯", "일일 퀘스트", "`!일일퀘스트`", "오늘의 목표와 진행도를 확인합니다."),
+    ("📅", "주간 퀘스트", "`!주간퀘스트`", "주간 목표를 놓치지 않았는지 확인합니다."),
+    ("🧠", "오늘의 퀴즈", "`!오늘의퀴즈`", "퀴즈 보상과 랭킹에 도전합니다."),
+    ("☀️", "오늘의 운세", "`!오늘의`", "오늘 적용되는 행운 효과를 확인합니다."),
+    ("🌋", "월드보스", "`!월드보스`", "현재 서버 공동 보스와 미수령 보상을 확인합니다."),
+]
+
+
+def _make_beginner_help_embed():
+    embed = discord.Embed(
+        title="🌱 ABADDON 처음 시작 가이드",
+        description=(
+            "명령어를 외우지 않아도 됩니다. 아래 순서대로 한 번씩 실행한 뒤 `!게임`을 열면 "
+            "버튼과 드롭다운으로 대부분의 기능을 사용할 수 있습니다."
+        ),
+        color=discord.Color.green(),
+    )
+    for number, title, command_text, description in BEGINNER_GUIDE_STEPS:
+        embed.add_field(name=f"{number}. {title}", value=f"{command_text}\n{description}", inline=False)
+    embed.add_field(
+        name="막히면",
+        value="`!게임`에서 **처음 시작** 선택 · `!명령어 검색어`로 검색 · `!도움말`로 이 화면 다시 열기",
+        inline=False,
+    )
+    embed.set_footer(text="기존 명령어를 외울 필요 없이 !게임 메뉴를 중심으로 이용할 수 있습니다.")
+    return embed
+
+
+def _make_today_help_embed():
+    embed = discord.Embed(
+        title="☀️ 오늘 먼저 확인할 것",
+        description="매일 전부 할 필요는 없습니다. 보상과 진행도를 놓치기 쉬운 기능만 모았습니다.",
+        color=discord.Color.gold(),
+    )
+    for emoji, title, command_text, description in TODAY_GUIDE_COMMANDS:
+        embed.add_field(name=f"{emoji} {title}", value=f"{command_text}\n{description}", inline=True)
+    embed.set_footer(text="더 많은 추천은 !게임 → 오늘 추천")
+    return embed
+
+
 def _normalize_help_keyword(text):
     return str(text or "").lower().replace("`", "").replace("!", "").replace("/", "").replace(" ", "")
 
@@ -1886,29 +1952,59 @@ def _command_chunks(commands_list, max_len=900):
     return chunks
 
 
-def _make_help_embed(category=None):
+def _make_help_embed(category=None, *, full=False):
     color = discord.Color.dark_teal()
     if category is None:
         embed = discord.Embed(
-            title="📚 아포칼립스 명령어 가이드",
+            title="📚 ABADDON 명령어 안내",
             description=(
-                "드롭다운으로 카테고리를 바로 열 수 있습니다.\n"
-                "검색도 지원합니다. 예: `!명령어 감`, `!명령어 펫`, `!명령어 광`\n\n"
-                "한 글자만 입력해도 비슷한 명령어를 찾아줍니다."
+                "**처음 플레이한다면 아래 `처음 시작` 버튼부터 누르세요.**\n"
+                "명령어를 외우기보다 `!게임`의 버튼·드롭다운을 사용하는 것을 권장합니다.\n\n"
+                "검색 예시: `!명령어 강화` · `!명령어 월드보스` · `!명령어 길드`"
             ),
             color=color,
         )
+        embed.add_field(
+            name="🌱 30초 시작",
+            value="`!가입 생존자` → `!정보` → `!직업목록` → `!출석` → `!게임`",
+            inline=False,
+        )
+        embed.add_field(
+            name="🎮 가장 쉬운 이용법",
+            value="`!게임` → **처음 시작** 또는 원하는 카테고리 → 기능 설명 확인 → 실행하기",
+            inline=False,
+        )
         for cat in COMMAND_GUIDE_CATEGORIES[:25]:
-            embed.add_field(name=f"{cat['emoji']} {cat['title']}", value=cat['hint'], inline=True)
-        embed.set_footer(text="보물감정소·감정사처럼 헷갈리는 명령은 !명령어 감 으로 찾으면 됩니다.")
+            featured_count = len(GUIDE_FEATURED_COMMANDS.get(cat["id"], []))
+            embed.add_field(
+                name=f"{cat['emoji']} {cat['title']}",
+                value=f"{cat['hint']}\n대표 {featured_count}개 · 전체 {len(cat['commands'])}개",
+                inline=True,
+            )
+        embed.set_footer(text="카테고리를 고르면 대표 명령만 먼저 표시됩니다. 필요할 때 전체 목록을 펼치세요.")
         return embed
-    embed = discord.Embed(title=f"{category['emoji']} {category['title']}", description=category['hint'], color=color)
-    for idx, chunk in enumerate(_command_chunks(category['commands']), start=1):
-        name = "명령어 목록" if idx == 1 else f"명령어 목록 {idx}"
-        embed.add_field(name=name, value=chunk, inline=False)
-    embed.set_footer(text="검색: !명령어 검색어  |  드롭다운에서 다른 카테고리도 바로 열 수 있습니다.")
-    return embed
 
+    embed = discord.Embed(title=f"{category['emoji']} {category['title']}", description=category['hint'], color=color)
+    featured = GUIDE_FEATURED_COMMANDS.get(category["id"], category["commands"][:6])
+    embed.add_field(
+        name="⭐ 처음엔 이것만",
+        value="\n".join(f"• `{cmd}`" for cmd in featured)[:1024],
+        inline=False,
+    )
+    if full:
+        for idx, chunk in enumerate(_command_chunks(category['commands']), start=1):
+            name = "전체 명령어" if idx == 1 else f"전체 명령어 {idx}"
+            embed.add_field(name=name, value=chunk, inline=False)
+        embed.set_footer(text="전체 목록 표시 중 · 버튼을 누르면 대표 명령만 다시 볼 수 있습니다.")
+    else:
+        remaining = max(0, len(category["commands"]) - len(featured))
+        embed.add_field(
+            name="전체 목록이 필요한가요?",
+            value=f"비슷한 기능을 묶어 대표 명령만 표시했습니다. 아래 **전체 목록 보기**를 누르면 나머지 **{remaining}개**도 확인할 수 있습니다.",
+            inline=False,
+        )
+        embed.set_footer(text="검색: !명령어 검색어 · 실행 메뉴: !게임")
+    return embed
 
 def _search_commands(query, limit=20):
     token = _normalize_help_keyword(query)
@@ -1962,27 +2058,32 @@ class CommandCategorySelect(discord.ui.Select):
             discord.SelectOption(
                 label=cat['title'][:100],
                 value=cat['id'],
-                description=cat['hint'][:100],
+                description=f"대표 {len(GUIDE_FEATURED_COMMANDS.get(cat['id'], []))}개 · 전체 {len(cat['commands'])}개 · {cat['hint']}"[:100],
                 emoji=cat['emoji'],
             )
             for cat in COMMAND_GUIDE_CATEGORIES
         ]
-        super().__init__(placeholder="카테고리를 선택하세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="하고 싶은 분야를 선택하세요", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         selected = next((cat for cat in COMMAND_GUIDE_CATEGORIES if cat['id'] == self.values[0]), None)
         if not selected:
             await interaction.response.send_message("카테고리를 찾지 못했습니다.", ephemeral=True)
             return
-        await interaction.response.edit_message(embed=_make_help_embed(selected), view=self.view)
+        view = self.view
+        if isinstance(view, CommandHelpView):
+            view.category_id = selected['id']
+            view.full = False
+            view.sync_state()
+        await interaction.response.edit_message(embed=_make_help_embed(selected, full=False), view=view)
 
 
 class CommandSearchModal(discord.ui.Modal, title="명령어 검색"):
     검색어 = discord.ui.TextInput(
-        label="찾을 명령어",
-        placeholder="예: 감, 보물, 광산, 펫, 강화",
+        label="무엇을 하고 싶나요?",
+        placeholder="예: 장비 강화, 월드보스 보상, 길드 가입",
         min_length=1,
-        max_length=30,
+        max_length=40,
         required=True,
     )
 
@@ -1998,19 +2099,67 @@ class CommandSearchModal(discord.ui.Modal, title="명령어 검색"):
 class CommandHelpView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=300)
+        self.category_id = None
+        self.full = False
         self.add_item(CommandCategorySelect())
+        self.sync_state()
 
-    @discord.ui.button(label="명령어 검색", emoji="🔎", style=discord.ButtonStyle.primary, row=1)
+    def selected_category(self):
+        return next((cat for cat in COMMAND_GUIDE_CATEGORIES if cat['id'] == self.category_id), None)
+
+    def sync_state(self):
+        self.full_list.disabled = self.category_id is None
+        self.full_list.label = "대표만 보기" if self.full else "전체 목록 보기"
+        self.full_list.emoji = "📌" if self.full else "📜"
+
+    @discord.ui.button(label="처음 시작", emoji="🌱", style=discord.ButtonStyle.success, row=1)
+    async def beginner_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.category_id = None
+        self.full = False
+        self.sync_state()
+        await interaction.response.edit_message(embed=_make_beginner_help_embed(), view=self)
+
+    @discord.ui.button(label="오늘 할 일", emoji="☀️", style=discord.ButtonStyle.primary, row=1)
+    async def today_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.category_id = None
+        self.full = False
+        self.sync_state()
+        await interaction.response.edit_message(embed=_make_today_help_embed(), view=self)
+
+    @discord.ui.button(label="전체 목록 보기", emoji="📜", style=discord.ButtonStyle.secondary, row=1)
+    async def full_list(self, interaction: discord.Interaction, button: discord.ui.Button):
+        category = self.selected_category()
+        if category is None:
+            await interaction.response.send_message("먼저 위 드롭다운에서 카테고리를 선택해주세요.", ephemeral=True)
+            return
+        self.full = not self.full
+        self.sync_state()
+        await interaction.response.edit_message(embed=_make_help_embed(category, full=self.full), view=self)
+
+    @discord.ui.button(label="검색", emoji="🔎", style=discord.ButtonStyle.secondary, row=1)
     async def search_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CommandSearchModal())
+
+    @discord.ui.button(label="처음 화면", emoji="🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def home_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.category_id = None
+        self.full = False
+        self.sync_state()
+        await interaction.response.edit_message(embed=_make_help_embed(), view=self)
 
 
 @bot.hybrid_command()
 async def 명령어(ctx, *, 검색어: str = None):
+    view = CommandHelpView()
     if 검색어:
-        await ctx.send(embed=_make_search_embed(검색어, _search_commands(검색어)), view=CommandHelpView())
+        await ctx.send(embed=_make_search_embed(검색어, _search_commands(검색어)), view=view)
     else:
-        await ctx.send(embed=_make_help_embed(), view=CommandHelpView())
+        await ctx.send(embed=_make_help_embed(), view=view)
+
+
+@bot.command(name="처음", aliases=["초보", "초보가이드", "시작가이드"], help="처음 시작하는 생존자를 위한 5단계 가이드를 엽니다.")
+async def beginner_guide(ctx):
+    await ctx.send(embed=_make_beginner_help_embed(), view=CommandHelpView())
 
 @bot.hybrid_command()
 async def 정보(ctx):
