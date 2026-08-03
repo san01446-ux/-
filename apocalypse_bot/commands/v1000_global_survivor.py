@@ -213,6 +213,15 @@ PHRASES_EN: Dict[str, str] = {
     "잘못됐습니다": "is invalid", "찾을 수 없습니다": "could not be found", "저장": "Save",
     "삭제": "Deletion", "변경": "Change", "추가": "Add", "갱신": "Refresh", "검색": "Search",
     "버튼": "Button", "드롭다운": "Dropdown", "입력창": "Input Form", "페이지": "Page",
+    # v10.1.0 companions and expanded card games
+    "동료·확장 카드게임": "Companions & Expanded Card Games",
+    "NPC 동료 6명과 포커·화투 확장 카드게임": "Six NPC companions and expanded poker and hwatu games",
+    "카드게임 8종": "Eight Card Modes", "텍사스 홀덤": "Texas Hold'em",
+    "오마하 홀덤": "Omaha Hold'em", "세븐카드 스터드": "Seven-Card Stud",
+    "동료 목록": "Companion List", "동료 영입": "Recruit Companion",
+    "동료 배치": "Assign Companion", "동료 대화": "Talk to Companion",
+    "동료 임무": "Companion Mission", "동료 기록": "Companion Log",
+    "동료": "Companion", "맞고": "Matgo", "고스톱": "Go-Stop", "화투": "Hwatu",
     "개": "", "명": " players", "회": " times", "점": " points", "단계": " stage",
 }
 
@@ -1234,6 +1243,16 @@ def register_v1000_global_survivor(
         base = 55 + min(90, level * 2) + secrets.randbelow(31)
         if role_match[action] == role:
             base += 25
+        companion_bonus = 0
+        companion_bond = 0
+        companion_key = ""
+        companion_hook = getattr(bot, "v1010_companion_bonus", None)
+        if callable(companion_hook):
+            try:
+                companion_bonus, companion_bond, companion_key = companion_hook(user, action)
+                base += max(0, int(companion_bonus))
+            except Exception:
+                companion_bonus, companion_bond, companion_key = 0, 0, ""
         before = _safe_int(expedition["progress"])
         actual = min(base, max(0, _safe_int(expedition["target"]) - before))
         expedition["progress"] = before + actual
@@ -1243,7 +1262,7 @@ def register_v1000_global_survivor(
         profile = _profile(user)
         profile["stats"]["expedition_actions"] = _safe_int(profile["stats"].get("expedition_actions")) + 1
         npc = str(EXPEDITION_TEMPLATES[expedition["key"]]["npc"])
-        bond = 3 + (2 if role_match[action] == role else 0)
+        bond = 3 + (2 if role_match[action] == role else 0) + max(0, int(companion_bond))
         profile["relationships"][npc] = _safe_int(profile["relationships"].get(npc)) + bond
         profile["stats"]["relationships"] = max(_safe_int(profile["stats"].get("relationships")), profile["relationships"][npc])
         target = max(1, _safe_int(expedition["target"], 1))
@@ -1258,7 +1277,15 @@ def register_v1000_global_survivor(
         start_percent = before / target * 100
         end_percent = expedition["progress"] / target * 100
         action_name = ACTION_NAMES[action][locale]
-        note = (f"✅ {action_name} · 공동 진행도 **+{actual}** · 인연 **+{bond}**" if locale == "ko" else f"✅ {action_name} · Shared progress **+{actual}** · Bond **+{bond}**")
+        companion_note = ""
+        if companion_bonus and companion_key:
+            try:
+                companion_row = getattr(bot, "v1010_companions", {}).get(companion_key, {})
+                companion_name = companion_row.get(locale, companion_key)
+                companion_note = (f" · 동료 {companion_name} **+{companion_bonus}**" if locale == "ko" else f" · Companion {companion_name} **+{companion_bonus}**")
+            except Exception:
+                companion_note = ""
+        note = (f"✅ {action_name} · 공동 진행도 **+{actual}** · 인연 **+{bond}**{companion_note}" if locale == "ko" else f"✅ {action_name} · Shared progress **+{actual}** · Bond **+{bond}**{companion_note}")
         await animate_progress(ctx, locale=locale, start_percent=start_percent, end_percent=end_percent, title=L(locale, "expedition_title"), final_note=note)
         if expedition.get("status") == "completed":
             await ctx.send(L(locale, "expedition_complete"))

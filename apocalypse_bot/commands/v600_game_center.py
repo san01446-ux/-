@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "10.0.0"
+VERSION = "10.1.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -264,15 +264,24 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
         ),
     ),
     "card_games": (
-        "🃏 카드게임·파티",
-        "참가 버튼과 비공개 패 확인을 사용하는 포커·원카드·조커잡기입니다.",
+        "🃏 카드게임·동료",
+        "기존 안전 모집방으로 포커 4종·화투 2종·원카드·조커잡기를 즐기고 NPC 동료를 관리합니다.",
         (
-            _a("card_game_menu", "카드게임 안내", "세 카드게임의 규칙과 시작 명령을 확인합니다.", "카드게임"),
+            _a("card_game_menu", "카드게임 8종", "포커 4종·맞고·고스톱·원카드·조커잡기 통합 메뉴를 엽니다.", "카드게임"),
             _a("abaddon_ai", "아바돈 1:1 게임", "혼자일 때 아바돈과 7종 미니게임을 시작합니다.", "아바돈게임", "예: 식량 5000 또는 1000", force_modal=True),
             _a("abaddon_wager", "아바돈 선택 베팅", "게임·재화(칩/식량)·금액을 지정해 아바돈과 1:1 대결합니다.", "아바돈내기", "예: 포커 식량 5000", force_modal=True),
-            _a("poker", "포커 모집", "2~6명이 참가해 비공개 5장과 1회 교환으로 승부합니다. 혼자라면 아바돈을 초대할 수 있습니다.", "포커", "예: 10000", force_modal=True),
+            _a("poker", "5장 포커 모집", "2~6명이 비공개 5장과 1회 교환으로 승부합니다.", "포커", "예: 10000", force_modal=True),
+            _a("texas_holdem_v1010", "텍사스 홀덤", "2~6명이 홀카드 2장과 커뮤니티 카드로 승부합니다.", "텍사스홀덤", "예: 10000", force_modal=True),
+            _a("omaha_holdem_v1010", "오마하 홀덤", "홀카드 4장 중 정확히 2장과 보드 3장을 사용합니다.", "오마하홀덤", "예: 10000", force_modal=True),
+            _a("seven_stud_v1010", "세븐카드 스터드", "개인 7장 중 가장 좋은 5장 족보로 승부합니다.", "세븐카드스터드", "예: 10000", force_modal=True),
+            _a("matgo_v1010", "맞고", "2인 화투 고/스톱 게임을 시작합니다.", "맞고", "예: 10000", force_modal=True),
+            _a("gostop_v1010", "고스톱", "3~4인 화투 고/스톱 게임을 시작합니다.", "고스톱", "예: 10000", force_modal=True),
             _a("one_card", "원카드 모집", "2~6명이 같은 무늬·숫자를 내며 먼저 패를 비웁니다.", "원카드", "예: 10000", force_modal=True),
             _a("joker_draw", "조커잡기 모집", "2~8명이 짝을 버리고 마지막 조커를 피합니다.", "조커잡기", "예: 10000", force_modal=True),
+            _a("companions_v1010", "동료 목록", "영입 가능한 NPC 동료 6명과 패시브를 확인합니다.", "동료"),
+            _a("recruit_companion_v1010", "동료 영입", "인연 조건을 달성한 NPC를 영입합니다.", "동료영입", "예: 구조대장 민재", force_modal=True),
+            _a("assign_companion_v1010", "동료 배치", "영입 동료를 탐사·카드게임·대기에 배치합니다.", "동료배치", "예: 정찰대장 이라 탐사", force_modal=True),
+            _a("companion_mission_v1010", "동료 임무", "오늘의 연결 임무와 보상을 확인합니다.", "동료임무"),
         ),
     ),
     "casino": (
@@ -711,7 +720,8 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("treasure", "⛏️ 굴착·감정", "땅을 파고 보물을 감정해 보관합니다.", ("dig", "treasure_box", "appraisers", "treasure_appraise")),
     ),
     "card_games": (
-        ("cards", "🃏 카드게임·AI 동료", "로비를 열거나 칩·식량을 걸고 아바돈과 1:1 게임을 시작합니다.", ("card_game_menu", "abaddon_ai", "abaddon_wager", "poker", "one_card", "joker_draw")),
+        ("cards", "🃏 카드게임 8종", "기존 모집·예약·환불 흐름으로 포커·화투·파티 카드게임을 시작합니다.", ("card_game_menu", "abaddon_ai", "abaddon_wager", "poker", "texas_holdem_v1010", "omaha_holdem_v1010", "seven_stud_v1010", "matgo_v1010", "gostop_v1010", "one_card", "joker_draw")),
+        ("companions", "🤝 NPC 동료", "관계 기억을 실제 영입·배치·대화·일일 임무로 연결합니다.", ("companions_v1010", "recruit_companion_v1010", "assign_companion_v1010", "companion_mission_v1010")),
     ),
     "casino": (
         ("lobby", "🎰 카지노 로비·보상", "잔액, 환전, VIP, 미션, 상점과 랭킹을 관리합니다.", ("casino", "casino_balance", "casino_history", "casino_rank", "casino_chips", "casino_exchange", "casino_vip", "casino_jackpot", "casino_mission", "casino_mission_reward", "casino_achievement", "casino_shop", "casino_buy", "casino_season_rank")),

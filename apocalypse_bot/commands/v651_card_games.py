@@ -157,6 +157,7 @@ class CardLobbyView(discord.ui.View):
         start_factory: Callable[["CardLobbyView"], "BaseCardSession"],
         min_players: int,
         max_players: int,
+        allow_abaddon: bool = True,
     ) -> None:
         super().__init__(timeout=180)
         self.bot = bot
@@ -170,21 +171,31 @@ class CardLobbyView(discord.ui.View):
         self.start_factory = start_factory
         self.min_players = min_players
         self.max_players = max_players
+        self.allow_abaddon = bool(allow_abaddon)
         self.players: Dict[int, str] = {int(host.id): getattr(host, "display_name", str(host))}
         self.message: Optional[discord.Message] = None
         self.channel_id = 0
         self.started = False
         self.lock = asyncio.Lock()
+        if not self.allow_abaddon:
+            for child in list(self.children):
+                if getattr(child, "label", "") == "아바돈 초대":
+                    self.remove_item(child)
 
     def embed(self, note: str = "") -> discord.Embed:
         descriptions = {
             "포커": "각자 비공개 5장을 받고 **한 장을 한 번 교환**한 뒤 가장 높은 족보가 승리합니다.",
             "원카드": "내 차례에 같은 무늬·숫자 카드를 내거나 한 장을 뽑습니다. 먼저 패를 비우면 승리합니다.",
             "조커잡기": "짝이 맞는 카드는 자동으로 버립니다. 옆 사람 패에서 한 장씩 뽑고 마지막 조커를 피하세요.",
+            "텍사스홀덤": "각자 비공개 2장과 커뮤니티 5장 중 가장 좋은 5장 족보로 승부합니다.",
+            "오마하홀덤": "비공개 4장 중 정확히 2장과 커뮤니티 카드 3장을 조합해 승부합니다.",
+            "세븐카드스터드": "개인 7장 중 가장 좋은 5장 족보로 승부합니다.",
+            "맞고": "2인 화투입니다. 같은 월 패를 맞추고 점수 기준을 넘으면 고 또는 스톱을 선택합니다.",
+            "고스톱": "3~4인 화투입니다. 같은 월 패를 모아 점수를 만들고 고 또는 스톱을 선택합니다.",
         }
         embed = discord.Embed(
             title=f"🃏 {self.kind} 참가 모집",
-            description=f"**10초 설명**\n{descriptions[self.kind]}\n\n{note}".strip(),
+            description=f"**10초 설명**\n{descriptions.get(self.kind, self.kind)}\n\n{note}".strip(),
             color=discord.Color.dark_purple(),
         )
         names = "\n".join(f"{idx}. **{name}**{' 👑' if uid == self.host_id else ''}" for idx, (uid, name) in enumerate(self.players.items(), 1))
@@ -239,6 +250,9 @@ class CardLobbyView(discord.ui.View):
     @discord.ui.button(label="아바돈 초대", emoji="🤖", style=discord.ButtonStyle.secondary)
     async def invite_abaddon(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         async with self.lock:
+            if not self.allow_abaddon:
+                await interaction.response.send_message("이 게임은 현재 생존자 멀티플레이 전용입니다.", ephemeral=True)
+                return
             if int(interaction.user.id) != self.host_id:
                 await interaction.response.send_message("방장만 아바돈을 초대할 수 있습니다.", ephemeral=True)
                 return

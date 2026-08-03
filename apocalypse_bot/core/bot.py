@@ -5732,7 +5732,14 @@ register_v1000_global_survivor(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
-# V10.0.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.1.0: NPC 동료 생존자 · 포커 3종 · 맞고/고스톱 · 통합 패치 검수
+# 기존 v6.5.1 카드 모집/예약/환불 흐름을 재사용하며 한국어와 English 화면은 선택 언어별로 분리합니다.
+from apocalypse_bot.commands.v1010_companion_card_games import register_v1010_companion_card_games
+register_v1010_companion_card_games(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V10.1.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

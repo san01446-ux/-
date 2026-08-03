@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 import discord
 from discord.ext import commands
 
-VERSION = "10.0.0"
+VERSION = "10.1.0"
 PATCH_DATE = "2026-08-03"
 
 # English prefix aliases reuse the existing Korean command callbacks. Therefore
@@ -189,7 +189,7 @@ ENGLISH_GUIDE = {
 }
 
 
-# v10.0.0 official English command names. Existing aliases stay valid.
+# v10.1.0 official English command names. Existing aliases stay valid.
 ENGLISH_ALIASES.update({
     "언어": ("language", "lang"),
     "서버언어": ("serverlanguage", "serverlang"),
@@ -215,6 +215,21 @@ ENGLISH_ALIASES.update({
     "번역누락": ("missingtranslations", "translationfallbacks"),
     "명령어검수": ("commandaudit", "commandaliasaudit"),
     "1000안정화검수": ("v1000audit", "1000audit"),
+    "텍사스홀덤": ("texasholdem", "holdem"),
+    "오마하홀덤": ("omahaholdem", "omaha"),
+    "세븐카드스터드": ("sevencardstud", "studpoker"),
+    "맞고": ("matgo", "koreanmatgo"),
+    "고스톱": ("gostop", "go-stop"),
+    "동료": ("companions", "companionlist"),
+    "동료영입": ("recruitcompanion", "companionrecruit"),
+    "동료배치": ("assigncompanion", "companionassign"),
+    "동료대화": ("talkcompanion", "companiontalk"),
+    "동료임무": ("companionmission", "companionquest"),
+    "동료기록": ("companionlog", "companionrecord"),
+    "1010안정화검수": ("v1010audit", "1010audit", "patchaudit"),
+    "카드게임검수": ("cardgameaudit", "cardsaudit"),
+    "동료검수": ("companionaudit",),
+    "홈페이지검수": ("websiteaudit", "siteaudit"),
 })
 
 DYNAMIC_ENGLISH_COMMANDS: List[Tuple[str, str]] = []
@@ -800,7 +815,7 @@ def synchronize_all_english_aliases(bot: commands.Bot) -> Dict[str, Any]:
     bot.v950_english_sync = report
     bot.v950_english_registry = DYNAMIC_ENGLISH_COMMANDS
     print(
-        f"[ABADDON v9.5.0] full English sync commands={report['commands']} "
+        f"[ABADDON v{VERSION}] full English sync commands={report['commands']} "
         f"registered={registered} fallback={fallback} collisions_skipped={skipped} "
         f"missing={len(missing)} deletions=0"
     )
