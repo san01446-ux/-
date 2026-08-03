@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Tuple
 import discord
 from discord.ext import commands
 
-VERSION = "6.5.4"
-PATCH_DATE = "2026-08-02"
+VERSION = "9.5.0"
+PATCH_DATE = "2026-08-03"
 
 # English prefix aliases reuse the existing Korean command callbacks. Therefore
 # cooldowns, balances, permissions, and saved data remain shared and unchanged.
@@ -128,7 +128,51 @@ ENGLISH_ALIASES: Dict[str, Tuple[str, ...]] = {
     "서버브리핑": ("briefing", "serverbriefing"),
     "서버리뉴얼": ("serverrenewal",),
     "안정화상태": ("stability",),
+
+    # full core coverage refreshed for v9.5.0
+    "명령어": ("commandmenu", "allcommands"),
+    "송금": ("transfer", "sendfood"),
+    "출석보상": ("dailyreward", "checkinreward"),
+    "장착": ("equip",),
+    "해제": ("unequip",),
+    "버리기": ("discard", "dropitem"),
+    "감정": ("identify", "inspectitem"),
+    "펫상점": ("petshop",),
+    "펫구매": ("buypet",),
+    "레이드공격": ("raidattack",),
+    "보스랭킹": ("bossranking",),
+    "월드보스리셋": ("resetworldboss", "spawnworldboss"),
+    "월드보스체력": ("worldbosshp",),
+    "월드보스종료": ("endworldboss",),
+    "일일퀘스트": ("dailyquest",),
+    "퀘스트보상": ("questreward",),
+    "업적": ("achievements",),
+    "칭호목록": ("titlelist",),
+    "칭호": ("title",),
+    "가방조회": ("inspectbag",),
+    "식량지급": ("givefood",),
+    "식량회수": ("takefood",),
+    "자원": ("resources",),
+    "길드목록": ("guildlist",),
+    "길드생성": ("createguild",),
+    "길드가입": ("joinguild",),
+    "길드정보": ("guildinfo",),
+    "길드기부": ("guilddonate",),
+    "길드강화": ("guildupgrade",),
+    "길드탈퇴": ("leaveguild",),
+    "구매등록번호": ("marketbuy",),
+    "판매취소": ("cancelsale",),
+    "파티생성": ("createparty",),
+    "파티가입": ("joinparty",),
+    "파티정보": ("partyinfo",),
+    "파티사냥": ("partyhunt",),
+    "파티탈퇴": ("leaveparty",),
+    "주간퀘스트": ("weeklyquest",),
+    "주간보상": ("weeklyreward",),
+    "시즌패스": ("seasonpass",),
+    "시즌보상": ("seasonreward",),
 }
+
 
 # This small category remains visible in the Korean !명령어 browser, but its
 # wording is Korean because it belongs to the Korean interface.
@@ -143,6 +187,8 @@ ENGLISH_GUIDE = {
         "기존 한국어 명령어는 그대로 유지됩니다.",
     ],
 }
+
+DYNAMIC_ENGLISH_COMMANDS: List[Tuple[str, str]] = []
 
 ENGLISH_GUIDE_CATEGORIES: List[Dict[str, Any]] = [
     {
@@ -255,6 +301,21 @@ ENGLISH_GUIDE_CATEGORIES: List[Dict[str, Any]] = [
         "commands": [
             "!base", "!buildbase", "!upgradebase", "!baseharvest", "!basedefense",
             "!resourcemarket",
+        ],
+    },
+    {
+        "id": "investigation",
+        "emoji": "🕵️",
+        "title": "Investigation, Shelter & Case Raids",
+        "hint": "Weekly cases, bounties, personal shelter displays, and cooperative investigations",
+        "commands": [
+            "!caseboard", "!clues", "!investigate field", "!combineclues clue + clue",
+            "!solvecase suspect", "!bounty", "!trackbounty track", "!claimbounty",
+            "!shelter", "!decorateshelter apocalypse", "!decorations", "!craftdecoration",
+            "!showcase", "!displaytrophy trophy-name", "!visitshelter @member", "!likeshelter @member",
+            "!investigationraid", "!openinvestigationraid", "!joininvestigationraid analysis",
+            "!startinvestigationraid", "!investigationaction analyze", "!settleinvestigationraid",
+            "!claiminvestigationraid", "!investigationraidhistory",
         ],
     },
     {
@@ -379,6 +440,15 @@ def _search_english_commands(query: str, limit: int = 25) -> List[Tuple[str, str
             else:
                 continue
             matches.append((score, len(command), category["title"], command))
+    for korean_name, command in DYNAMIC_ENGLISH_COMMANDS:
+        command_text = _normalize(command + " " + korean_name)
+        if command_text.startswith(token):
+            score = 0
+        elif token in command_text:
+            score = 1
+        else:
+            continue
+        matches.append((score, len(command), "Complete Registry", command))
     matches.sort(key=lambda row: (row[0], row[1], row[2], row[3]))
     result: List[Tuple[str, str]] = []
     seen = set()
@@ -505,7 +575,7 @@ def register_v652_english_access(bot: commands.Bot, guide: List[Dict[str, Any]])
                 title="🛰️ ABADDON · Survival RPG",
                 description=(
                     "ABADDON은 Discord에서 즐기는 생존 RPG 봇입니다. 성장·스토리·던전·월드보스·장비·보물·펫·기지·생활·거래·카드게임과 "
-                    "서버 리뉴얼을 한곳에서 제공합니다. 기존 한국어 명령은 그대로 유지되며 주요 기능은 영어 명령어로도 실행할 수 있습니다."
+                    "서버 리뉴얼을 한곳에서 제공합니다. 기존 한국어 명령은 그대로 유지되며 전체 prefix 명령은 영어 실행 이름으로도 접근할 수 있습니다."
                 ),
                 color=0xC8AA62,
             )
@@ -561,3 +631,148 @@ def register_v652_english_access(bot: commands.Bot, guide: List[Dict[str, Any]])
     bot.v652_english_aliases = registered
     bot.v652_english_alias_skipped = skipped
     bot.v654_english_help_categories = len(ENGLISH_GUIDE_CATEGORIES)
+
+
+# ---------------------------------------------------------------------------
+# v9.5.0 complete English prefix synchronization
+# ---------------------------------------------------------------------------
+import re as _re
+import unicodedata as _unicodedata
+import hashlib
+
+_ASCII_COMMAND_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$", _re.I)
+_GENERIC_CALLBACKS = {"cmd", "command", "callback", "handler", "run", "execute"}
+
+_INITIAL = ("g","kk","n","d","tt","r","m","b","pp","s","ss","","j","jj","ch","k","t","p","h")
+_VOWEL = ("a","ae","ya","yae","eo","e","yeo","ye","o","wa","wae","oe","yo","u","wo","we","wi","yu","eu","ui","i")
+_FINAL = ("","k","k","ks","n","nj","nh","t","l","lk","lm","lb","ls","lt","lp","lh","m","p","ps","t","t","ng","t","t","k","t","p","h")
+
+
+def _romanize_command_name(value: str) -> str:
+    result: List[str] = []
+    for char in str(value or ""):
+        code = ord(char)
+        if 0xAC00 <= code <= 0xD7A3:
+            index = code - 0xAC00
+            initial = index // 588
+            vowel = (index % 588) // 28
+            final = index % 28
+            result.append(_INITIAL[initial] + _VOWEL[vowel] + _FINAL[final])
+        elif char.isascii() and char.isalnum():
+            result.append(char.lower())
+        elif char in {"_", "-"}:
+            result.append(char)
+    alias = "".join(result).strip("_-")
+    return alias[:32]
+
+
+def _clean_callback_alias(command: commands.Command) -> str:
+    callback = getattr(command, "callback", None)
+    name = str(getattr(callback, "__name__", "") or "").strip("_").lower()
+    name = _re.sub(r"_v\d+(?:_\d+)?$", "", name)
+    name = _re.sub(r"_(?:cmd|command|callback|handler|legacy)$", "", name)
+    name = _re.sub(r"[^a-z0-9_-]+", "_", name).strip("_-")
+    if name in _GENERIC_CALLBACKS:
+        return ""
+    return name[:32]
+
+
+def _command_registry(bot: commands.Bot, command: commands.Command) -> Dict[str, commands.Command]:
+    parent = getattr(command, "parent", None)
+    return parent.all_commands if parent is not None else bot.all_commands
+
+
+def _attach_ascii_alias(bot: commands.Bot, command: commands.Command, alias: str) -> Tuple[bool, str]:
+    alias = str(alias or "").strip().lower()
+    if not _ASCII_COMMAND_RE.fullmatch(alias):
+        return False, "invalid"
+    registry = _command_registry(bot, command)
+    existing = registry.get(alias)
+    if existing is not None and existing is not command:
+        return False, "collision"
+    if alias == str(command.name).casefold() or alias in {str(item).casefold() for item in command.aliases}:
+        return True, "existing"
+    registry[alias] = command
+    command.aliases.append(alias)
+    return True, "registered"
+
+
+def synchronize_all_english_aliases(bot: commands.Bot) -> Dict[str, Any]:
+    """Give every prefix command at least one ASCII alias after all patches register.
+
+    Curated aliases are preferred. Existing callback names provide meaningful
+    English for modern modules, while deterministic romanization is only a final
+    compatibility fallback. Collisions are never overwritten.
+    """
+    global DYNAMIC_ENGLISH_COMMANDS
+    registered = 0
+    skipped = 0
+    fallback = 0
+    rows: List[Tuple[str, str]] = []
+    commands_snapshot = list(bot.walk_commands())
+    for command in commands_snapshot:
+        ascii_aliases = [str(a).lower() for a in command.aliases if _ASCII_COMMAND_RE.fullmatch(str(a))]
+        if _ASCII_COMMAND_RE.fullmatch(str(command.name)):
+            ascii_aliases.insert(0, str(command.name).lower())
+        candidates: List[str] = []
+        candidates.extend(ENGLISH_ALIASES.get(str(command.name), ()))
+        callback_alias = _clean_callback_alias(command)
+        if callback_alias:
+            candidates.append(callback_alias)
+        module_name = str(getattr(getattr(command, "callback", None), "__module__", "")).rsplit(".", 1)[-1]
+        module_suffix = ""
+        match = _re.search(r"v(\d{3})", module_name)
+        if match and callback_alias:
+            module_suffix = f"{callback_alias}_{match.group(1)}"[:32]
+            candidates.append(module_suffix)
+        romanized = _romanize_command_name(str(command.name))
+        if romanized:
+            candidates.append(romanized)
+        if not ascii_aliases:
+            attached = False
+            for candidate in candidates:
+                ok, reason = _attach_ascii_alias(bot, command, candidate)
+                if ok:
+                    ascii_aliases.append(candidate.lower())
+                    registered += int(reason == "registered")
+                    attached = True
+                    break
+                skipped += int(reason == "collision")
+            if not attached:
+                digest = hashlib.sha1(str(command.qualified_name).encode("utf-8")).hexdigest()
+                for attempt in range(100):
+                    suffix = digest[:8] if attempt == 0 else f"{digest[:6]}{attempt:02d}"
+                    base = f"command_{suffix}"[:32]
+                    ok, reason = _attach_ascii_alias(bot, command, base)
+                    if ok:
+                        ascii_aliases.append(base)
+                        registered += int(reason == "registered")
+                        fallback += 1
+                        attached = True
+                        break
+                    skipped += int(reason == "collision")
+        if ascii_aliases:
+            rows.append((str(command.qualified_name), f"!{ascii_aliases[0]}"))
+    missing = []
+    for command in bot.walk_commands():
+        tokens = [str(command.name), *map(str, command.aliases)]
+        if not any(_ASCII_COMMAND_RE.fullmatch(token) for token in tokens):
+            missing.append(str(command.qualified_name))
+    DYNAMIC_ENGLISH_COMMANDS = sorted(rows, key=lambda row: (row[0], row[1]))
+    report = {
+        "commands": len(commands_snapshot),
+        "registered": registered,
+        "skipped": skipped,
+        "fallback": fallback,
+        "commands_without_ascii": len(missing),
+        "missing": missing[:50],
+        "deletions": 0,
+    }
+    bot.v950_english_sync = report
+    bot.v950_english_registry = DYNAMIC_ENGLISH_COMMANDS
+    print(
+        f"[ABADDON v9.5.0] full English sync commands={report['commands']} "
+        f"registered={registered} fallback={fallback} collisions_skipped={skipped} "
+        f"missing={len(missing)} deletions=0"
+    )
+    return report

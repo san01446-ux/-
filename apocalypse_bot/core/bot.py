@@ -5709,6 +5709,19 @@ register_v920_world_cycle_professions(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V9.5.0: 단서 조합 사건 수사 · 주간 현상금 · 개인 대피소/전시실 · 협동 수사 레이드
+# v9.3~v9.5 계획을 통합하며 기존 파밍·스토리·길드 레이드·파티를 삭제하거나 덮어쓰지 않습니다.
+from apocalypse_bot.commands.v950_investigation_shelter_raid import register_v950_investigation_shelter_raid
+register_v950_investigation_shelter_raid(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
+# V9.5.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
+from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
+synchronize_all_english_aliases(bot)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "9.2.0"
+VERSION = "9.5.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -566,6 +566,38 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("v920_stability", "v9.2 안정화 검수", "세계 순환·복구·전문화·분대 전술 연결을 읽기 전용 검사합니다.", "920안정화검수"),
         ),
     ),
+    "investigation_shelter": (
+        "🕵️ 사건 수사·대피소·협동 레이드",
+        "단서 조합 사건 수사, 현상금 추적, 개인 대피소 전시와 서버 공동 수사 레이드를 관리합니다.",
+        (
+            _a("case_board_v950", "사건판", "이번 주 공동 사건과 단서·증거 연결 진행도를 확인합니다.", "사건판"),
+            _a("clue_list_v950", "단서 목록", "개인이 확보한 사건 단서를 확인합니다.", "단서목록"),
+            _a("clue_investigate_v950", "단서 조사", "현장·기록·증언 트랙에서 단서를 조사합니다.", "단서조사", "예: 현장", force_modal=True),
+            _a("clue_combine_v950", "단서 조합", "보유한 두 단서를 연결해 사건 논리를 완성합니다.", "단서조합", "예: 단서1 + 단서2", force_modal=True),
+            _a("case_solve_v950", "사건 추리", "연결된 증거를 바탕으로 사건의 배후를 지목합니다.", "사건추리", "예: 용의자", force_modal=True),
+            _a("bounty_v950", "현상금", "이번 주 공동 현상금 표적과 진행도를 확인합니다.", "현상금"),
+            _a("bounty_track_v950", "현상금 추적", "추적·잠복·협상·제압으로 현상금 진행도를 올립니다.", "현상금추적", "예: 추적", force_modal=True),
+            _a("bounty_report_v950", "현상금 보고", "완료된 현상금의 개인 기여 보상을 받습니다.", "현상금보고"),
+            _a("bounty_history_v950", "현상금 기록", "개인의 현상금 완료 기록을 확인합니다.", "현상금기록"),
+            _a("shelter_v950", "개인 대피소", "개인 대피소의 테마·장식·전시품을 확인합니다.", "대피소"),
+            _a("shelter_decorate_v950", "대피소 꾸미기", "개인 대피소 테마를 변경합니다.", "대피소꾸미기", "예: 아포칼립스", force_modal=True),
+            _a("decoration_list_v950", "장식 목록", "제작 가능한 대피소 장식과 비용을 확인합니다.", "장식목록"),
+            _a("decoration_craft_v950", "장식 제작", "재료를 사용해 개인 대피소 장식을 제작합니다.", "장식제작", "예: 구조등", force_modal=True),
+            _a("showcase_v950", "전시실", "보유 트로피와 현재 전시품을 확인합니다.", "전시실"),
+            _a("trophy_display_v950", "트로피 전시", "보유한 트로피를 개인 대피소에 전시합니다.", "트로피전시", "예: 트로피 이름", force_modal=True),
+            _a("shelter_visit_v950", "대피소 방문", "다른 생존자의 개인 대피소를 방문합니다.", "대피소방문", "예: @생존자", force_modal=True),
+            _a("shelter_like_v950", "대피소 좋아요", "다른 생존자의 대피소에 좋아요를 남깁니다.", "대피소좋아요", "예: @생존자", force_modal=True),
+            _a("investigation_raid_v950", "협동 수사 레이드", "현재 수사 레이드 모집·진행·완료 상태를 확인합니다.", "수사레이드"),
+            _a("investigation_raid_open_v950", "수사 레이드 모집", "서버 공동 수사 레이드 모집을 시작합니다.", "수사레이드모집", "선택: 사건명", force_modal=False),
+            _a("investigation_raid_join_v950", "수사 레이드 참가", "현장수사·기술분석·현장경계·교섭 역할로 참가합니다.", "수사레이드참가", "예: 기술분석", force_modal=True),
+            _a("investigation_raid_start_v950", "수사 레이드 출발", "모집자가 2명 이상의 수사 레이드를 출발시킵니다.", "수사레이드출발"),
+            _a("investigation_raid_action_v950", "수사 레이드 행동", "수색·분석·확보·교차검증으로 진행도를 올립니다.", "수사레이드행동", "예: 분석", force_modal=True),
+            _a("investigation_raid_settle_v950", "수사 레이드 정산", "관리자가 완료된 수사 레이드를 한 번만 정산합니다.", "수사레이드정산"),
+            _a("investigation_raid_reward_v950", "수사 레이드 보상", "정산된 수사 레이드의 개인 기여 보상을 받습니다.", "수사레이드보상"),
+            _a("investigation_raid_history_v950", "수사 레이드 기록", "서버의 최근 협동 수사 레이드 기록을 확인합니다.", "수사레이드기록"),
+            _a("v950_stability", "v9.5 안정화 검수", "수사·대피소·레이드·영문 명령 연결을 읽기 전용 검사합니다.", "950안정화검수"),
+        ),
+    ),
 }
 
 def _build_action_catalog() -> Tuple[Dict[str, ActionSpec], Dict[str, str]]:
@@ -706,6 +738,12 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("squad", "👥 분대 전술", "기존 파티 기반 전술·역할·준비·협동 작전·기록입니다.", ("squad_tactics_v920", "squad_tactic_set_v920", "squad_role_v920", "squad_ready_v920", "squad_operation_v920", "squad_history_v920")),
         ("audit", "🛡️ v9.2 안정화", "세계 순환·복구·전문화·분대 전술 연결을 읽기 전용 검사합니다.", ("v920_stability",)),
     ),
+    "investigation_shelter": (
+        ("investigation", "🔎 사건 수사", "공동 사건판·단서 조사·조합·추리와 주간 현상금입니다.", ("case_board_v950", "clue_list_v950", "clue_investigate_v950", "clue_combine_v950", "case_solve_v950", "bounty_v950", "bounty_track_v950", "bounty_report_v950", "bounty_history_v950")),
+        ("shelter", "🏕️ 개인 대피소", "테마·장식 제작·트로피 전시·방문·좋아요입니다.", ("shelter_v950", "shelter_decorate_v950", "decoration_list_v950", "decoration_craft_v950", "showcase_v950", "trophy_display_v950", "shelter_visit_v950", "shelter_like_v950")),
+        ("raid", "🕵️ 협동 수사 레이드", "모집·역할 참가·출발·행동·정산·보상·기록입니다.", ("investigation_raid_v950", "investigation_raid_open_v950", "investigation_raid_join_v950", "investigation_raid_start_v950", "investigation_raid_action_v950", "investigation_raid_settle_v950", "investigation_raid_reward_v950", "investigation_raid_history_v950")),
+        ("audit", "🛡️ v9.5 안정화", "수사·대피소·레이드·영문 명령 연결을 읽기 전용 검사합니다.", ("v950_stability",)),
+    ),
 }
 
 QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
@@ -713,8 +751,8 @@ QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
     "grow": ("📈 강해지고 싶어요", "성장 보드에서 목표를 확인하고 프리셋·강화·미션 보상으로 성장합니다.", ("growth_board", "mission_reward_v710", "info", "shop", "inventory", "equipment", "equipment_preset_v710", "equip", "enhance", "season_pass", "achievements")),
     "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "world_map_v810", "world_scout_v810", "region_list", "region_explore", "raid", "worldboss_status")),
     "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 공동 재난으로 재화와 기여 보상을 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "world_scout_v810", "frontier_donate_v810", "disaster_status", "disaster_join", "dig", "treasure_appraise", "resource_market")),
-    "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·세계 상태 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "story4", "season5_v900", "world_status_v900", "world_cycle_v920", "today_world_v920", "expedition", "exp_start", "relic", "daily_quiz")),
-    "community": ("🤝 같이 놀고 싶어요", "길드·세력·호송·공동 전쟁·파티·카드게임으로 이동합니다.", ("guild_dashboard", "guild_base", "factions_v900", "convoy_status_v900", "faction_war_v900", "recovery_v920", "party_create", "squad_tactics_v920", "card_game_menu", "market", "transfer")),
+    "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·세계 상태 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "story4", "season5_v900", "world_status_v900", "world_cycle_v920", "today_world_v920", "case_board_v950", "clue_investigate_v950", "bounty_v950", "expedition", "exp_start", "relic", "daily_quiz")),
+    "community": ("🤝 같이 놀고 싶어요", "길드·세력·호송·공동 전쟁·파티·카드게임으로 이동합니다.", ("guild_dashboard", "guild_base", "factions_v900", "convoy_status_v900", "faction_war_v900", "recovery_v920", "party_create", "squad_tactics_v920", "investigation_raid_v950", "shelter_v950", "card_game_menu", "market", "transfer")),
 }
 
 
@@ -2371,6 +2409,8 @@ def register_v600_game_center(
     if getattr(bot, "_abaddon_v600_registered", False):
         return
     bot._abaddon_v600_registered = True
+    bot.v600_action_index = ACTION_INDEX
+    bot.v600_action_category = ACTION_CATEGORY
 
     async def choose_season3(interaction: discord.Interaction, number: int) -> None:
         user = get_user(interaction.user.id)
