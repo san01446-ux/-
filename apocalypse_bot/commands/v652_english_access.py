@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 import discord
 from discord.ext import commands
 
-VERSION = "9.5.0"
+VERSION = "10.0.0"
 PATCH_DATE = "2026-08-03"
 
 # English prefix aliases reuse the existing Korean command callbacks. Therefore
@@ -187,6 +187,35 @@ ENGLISH_GUIDE = {
         "기존 한국어 명령어는 그대로 유지됩니다.",
     ],
 }
+
+
+# v10.0.0 official English command names. Existing aliases stay valid.
+ENGLISH_ALIASES.update({
+    "언어": ("language", "lang"),
+    "서버언어": ("serverlanguage", "serverlang"),
+    "할일": ("tasks", "missiontracker", "trackmission"),
+    "생존도감": ("survivalcodex", "codex"),
+    "아이템도감": ("itemcodex",),
+    "인물도감": ("charactercodex", "npccodex"),
+    "지역도감": ("regioncodex",),
+    "시작안내": ("gettingstarted", "startguide"),
+    "복귀안내": ("returningguide", "returnguide"),
+    "인연": ("relationships", "bonds"),
+    "인물기록": ("characterrecord", "npcrecord"),
+    "탐사작전": ("expeditionoperation", "globalexpedition"),
+    "탐사참가": ("joinexpedition", "expeditionjoin"),
+    "탐사행동": ("expeditionaction", "globalexpeditionaction"),
+    "탐사정산": ("settleexpedition", "expeditionsettle"),
+    "탐사보상": ("claimexpedition", "expeditionreward"),
+    "탐사기록": ("expeditionhistory", "globalexpeditionhistory"),
+    "알림센터": ("notificationcenter", "notifications"),
+    "미수령보상": ("unclaimedrewards", "rewardqueue"),
+    "전체보상수령": ("claimallrewards", "claimall"),
+    "다국어검수": ("languageaudit", "localizationaudit"),
+    "번역누락": ("missingtranslations", "translationfallbacks"),
+    "명령어검수": ("commandaudit", "commandaliasaudit"),
+    "1000안정화검수": ("v1000audit", "1000audit"),
+})
 
 DYNAMIC_ENGLISH_COMMANDS: List[Tuple[str, str]] = []
 

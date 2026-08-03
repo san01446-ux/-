@@ -1790,6 +1790,12 @@ async def on_command_error(ctx, error):
     if ctx.command is not None and hasattr(ctx.command, "on_error"):
         return
 
+    # v10.0.0: the first-language selector intentionally stops the original command.
+    # The selector itself has already been sent, so this sentinel must stay silent.
+    if isinstance(error, commands.CheckFailure) and str(error) == getattr(bot, "v1000_language_check_sentinel", ""):
+        _release_command_lock(ctx)
+        return
+
     if isinstance(error, ConcurrentOperation):
         _release_command_lock(ctx)
         view_factory = getattr(bot, "v711_error_view_factory", None)
@@ -5717,7 +5723,16 @@ register_v950_investigation_shelter_raid(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
-# V9.5.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.0.0: 완전 한·영 단일 언어 렌더링 · 임무 추적/도감/인연 · 주간 글로벌 탐사 · 보상 회수 센터
+# 게임 상태와 보상 로직은 하나만 유지하고, 개인/서버 언어에 따라 화면만 분리합니다.
+# 기존 기능·명령·데이터를 삭제하지 않으며 진행형 명령에는 이모지 이동 프레임과 실제 퍼센트 게이지를 연결합니다.
+from apocalypse_bot.commands.v1000_global_survivor import register_v1000_global_survivor
+register_v1000_global_survivor(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
+# V10.0.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

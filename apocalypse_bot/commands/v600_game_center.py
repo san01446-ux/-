@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "9.5.0"
+VERSION = "10.0.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -599,6 +599,39 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
         ),
     ),
 }
+
+# v10.0.0 keeps the existing catalog intact and appends one self-contained page.
+# The page has 22 entries, safely below Discord's 25-option select limit.
+GAME_CATEGORIES = dict(GAME_CATEGORIES)
+GAME_CATEGORIES["global_v1000"] = (
+    "🌐 글로벌 생존자·언어",
+    "개인/서버 언어, 임무 추적, 생존 도감, NPC 인연, 글로벌 탐사와 보상 회수 기능입니다.",
+    (
+        _a("language_v1000", "개인 언어", "게임 화면 언어를 한국어 또는 영어로 설정합니다.", "언어", "예: 한국어 또는 english", force_modal=True),
+        _a("server_language_v1000", "서버 언어", "공개 공동 패널의 기본 언어를 설정합니다.", "서버언어", "예: 한국어 또는 english", force_modal=True),
+        _a("tasks_v1000", "임무 추적기", "진행 중 콘텐츠와 미수령 보상을 한 화면에서 확인합니다.", "할일"),
+        _a("codex_v1000", "생존 도감", "지역·세력·인카운트·사건 도감을 확인합니다.", "생존도감"),
+        _a("item_codex_v1000", "아이템 도감", "보유·발견 아이템을 확인합니다.", "아이템도감"),
+        _a("character_codex_v1000", "인물 도감", "주요 우호 인물과 관계 단계를 확인합니다.", "인물도감"),
+        _a("region_codex_v1000", "지역 도감", "공동 탐험 지역과 상태를 확인합니다.", "지역도감"),
+        _a("getting_started_v1000", "신규 안내", "신규 생존자의 첫 플레이 순서를 확인합니다.", "시작안내"),
+        _a("returning_guide_v1000", "복귀 안내", "최근 대형 기능과 복귀 동선을 확인합니다.", "복귀안내"),
+        _a("relationships_v1000", "NPC 인연", "NPC가 기억하는 개인 관계 기록을 확인합니다.", "인연"),
+        _a("character_record_v1000", "인물 기록", "특정 NPC와의 관계·기억을 확인합니다.", "인물기록", "예: 구조대장", force_modal=True),
+        _a("global_expedition_v1000", "글로벌 탐사", "이번 주 서버 공동 탐사 작전을 확인합니다.", "탐사작전"),
+        _a("join_expedition_v1000", "탐사 참가", "정찰·의무·기술·경계 역할로 참가합니다.", "탐사참가", "예: 정찰", force_modal=True),
+        _a("expedition_action_v1000", "탐사 행동", "신호분석·구조·복구·확보 행동을 수행합니다.", "탐사행동", "예: 신호분석", force_modal=True),
+        _a("settle_expedition_v1000", "탐사 정산", "완료된 탐사 작전을 한 번만 정산합니다.", "탐사정산"),
+        _a("claim_expedition_v1000", "탐사 보상", "정산된 탐사의 개인 기여 보상을 받습니다.", "탐사보상"),
+        _a("expedition_history_v1000", "탐사 기록", "최근 글로벌 탐사 기록을 확인합니다.", "탐사기록"),
+        _a("unclaimed_rewards_v1000", "미수령 보상", "감지 가능한 미수령 공동 보상을 점검합니다.", "미수령보상"),
+        _a("claim_all_v1000", "전체 보상 수령", "안전하게 확인 가능한 보상을 순서대로 수령합니다.", "전체보상수령"),
+        _a("language_audit_v1000", "다국어 검수", "단일 언어 출력과 번역 런타임을 검사합니다.", "다국어검수"),
+        _a("command_audit_v1000", "명령어 검수", "한글·영문 명령 접근과 충돌을 검사합니다.", "명령어검수"),
+        _a("v1000_stability", "v10.0 안정화 검수", "현지화·진행 연출·탐사·보상 연결을 검사합니다.", "1000안정화검수"),
+    ),
+)
+
 
 def _build_action_catalog() -> Tuple[Dict[str, ActionSpec], Dict[str, str]]:
     index: Dict[str, ActionSpec] = {}
