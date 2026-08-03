@@ -5739,7 +5739,16 @@ register_v1010_companion_card_games(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V10.1.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.5.0: 화투 정식 배수 규칙 · 카드게임 15종 · 전 카드 아바돈 AI · 게임장/토너먼트
+# 동료 실전 성장 · 생존자 연합/협동 보스 · 무료 시즌 임무를 하나의 추가 모듈로 연결합니다.
+# 기존 저장과 명령은 유지하며 v1050 전용 데이터 영역만 추가합니다.
+from apocalypse_bot.commands.v1050_unified_expansion import register_v1050_unified_expansion
+register_v1050_unified_expansion(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
+# V10.5.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 import discord
 from discord.ext import commands
 
-VERSION = "10.1.0"
+VERSION = "10.5.0"
 PATCH_DATE = "2026-08-03"
 
 # English prefix aliases reuse the existing Korean command callbacks. Therefore
@@ -230,6 +230,11 @@ ENGLISH_ALIASES.update({
     "카드게임검수": ("cardgameaudit", "cardsaudit"),
     "동료검수": ("companionaudit",),
     "홈페이지검수": ("websiteaudit", "siteaudit"),
+    "아바돈게임": ("abaddongames", "playwithabaddon"),
+    "아바돈초대": ("inviteabaddon", "abaddoninvite"),
+    "아바돈전적": ("abaddonstats", "aistats"),
+    "카드블랙잭": ("blackjacktable", "cardblackjack"),
+    "카드바카라": ("baccarattable", "cardbaccarat"),
 })
 
 DYNAMIC_ENGLISH_COMMANDS: List[Tuple[str, str]] = []
