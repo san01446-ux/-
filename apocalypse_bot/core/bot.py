@@ -5821,7 +5821,14 @@ register_v1141_horse_marker_hotfix(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V11.4.1: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V11.4.2: 경주를 새로 만들 때마다 6마리 배당을 다시 생성합니다.
+# 출발 후에는 해당 배당을 잠그고, 결과 정산은 선택 화면의 배당을 그대로 사용합니다.
+from apocalypse_bot.commands.v1142_dynamic_horse_odds import register_v1142_dynamic_horse_odds
+register_v1142_dynamic_horse_odds(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.4.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

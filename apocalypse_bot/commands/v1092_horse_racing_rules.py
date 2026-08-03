@@ -16,6 +16,34 @@ HORSES: Tuple[Dict[str, Any], ...] = (
     {"name_ko": "아바돈-Ω", "name_en": "ABADDON-Ω", "emoji": "🏇", "rating": 0.90, "odds": 6.0},
 )
 
+ODDS_MIN = 1.5
+ODDS_MAX = 9.9
+
+
+def generate_race_odds(rng: random.Random | Any = random) -> Tuple[float, ...]:
+    """Create a fresh six-horse market for one race.
+
+    Each market is anchored to the horse's long-term rating so stronger horses
+    usually remain shorter-priced, while a sizeable per-race form swing keeps
+    the odds visibly different. The returned odds are locked for that race.
+    """
+    market: List[float] = []
+    for index, horse in enumerate(HORSES):
+        base = float(horse.get("odds", 3.0))
+        # Market mood and track form vary independently for every new race.
+        multiplier = float(rng.uniform(0.78, 1.28))
+        drift = float(rng.choice((-0.3, -0.2, -0.1, 0.0, 0.0, 0.1, 0.2, 0.3)))
+        value = round(max(ODDS_MIN, min(ODDS_MAX, base * multiplier + drift)), 1)
+        market.append(value)
+
+    # Avoid an all-identical-looking market after one-decimal rounding.
+    if len(set(market)) < 3:
+        market = [
+            round(max(ODDS_MIN, min(ODDS_MAX, value + (index - 2.5) * 0.1)), 1)
+            for index, value in enumerate(market)
+        ]
+    return tuple(float(value) for value in market)
+
 
 def render_track_lane(position: int, marker: str = "♞") -> str:
     """Render one race lane with a visible horse and a shared fixed finish flag.
@@ -67,14 +95,22 @@ def choose_winner(positions: Sequence[int], rng: random.Random | Any = random) -
     return int(rng.choice(candidates))
 
 
-def race_settlement(bet: int, selected: int, winner: int) -> Tuple[int, int]:
-    """Return gross payout and net change from the balance before entry."""
+def race_settlement(
+    bet: int,
+    selected: int,
+    winner: int,
+    odds: Sequence[float] | None = None,
+) -> Tuple[int, int]:
+    """Return gross payout and net change using the market locked for the race."""
     stake = int(bet)
     if stake <= 0:
         raise ValueError("bet must be positive")
     if selected not in range(len(HORSES)) or winner not in range(len(HORSES)):
         raise ValueError("invalid horse index")
-    gross = int(round(stake * float(HORSES[winner]["odds"]))) if selected == winner else 0
+    market = tuple(float(value) for value in odds) if odds is not None else tuple(float(horse["odds"]) for horse in HORSES)
+    if len(market) != len(HORSES) or any(value <= 0 for value in market):
+        raise ValueError("invalid race odds")
+    gross = int(round(stake * market[selected])) if selected == winner else 0
     return gross, gross - stake
 
 

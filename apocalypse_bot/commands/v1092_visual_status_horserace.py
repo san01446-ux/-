@@ -15,7 +15,7 @@ from apocalypse_bot.commands.v1090_integrated_renewal import _dashboard
 from apocalypse_bot.commands.v1091_card_dashboard_hotfix import CATEGORIES
 from apocalypse_bot.commands.v1060_authentic_card_games import GAME_EN
 from apocalypse_bot.commands.v1092_visual_assets import build_card_catalog, build_profile_card, build_world_map_card, dashboard_font_status
-from apocalypse_bot.commands.v1092_horse_racing_rules import FINISH, HORSES, advance_positions, choose_winner, crossing_winner, race_settlement, render_track_lane
+from apocalypse_bot.commands.v1092_horse_racing_rules import FINISH, HORSES, advance_positions, choose_winner, crossing_winner, generate_race_odds, race_settlement, render_track_lane
 from apocalypse_bot.commands import v810_world_map_ux as world_map_runtime
 
 VERSION = "10.9.2"
@@ -99,7 +99,7 @@ def _track(locale: str, positions: Sequence[int], selected: Optional[int] = None
     return "\n".join(rows)
 
 
-def _race_embed(bot: commands.Bot, locale: str, *, title: str, positions: Sequence[int], selected: Optional[int], bet: int, tick: int, note: str) -> discord.Embed:
+def _race_embed(bot: commands.Bot, locale: str, *, title: str, positions: Sequence[int], selected: Optional[int], bet: int, tick: int, note: str, odds: Optional[Sequence[float]] = None) -> discord.Embed:
     embed = _dashboard(
         bot,
         locale,
@@ -112,7 +112,10 @@ def _race_embed(bot: commands.Bot, locale: str, *, title: str, positions: Sequen
     embed.add_field(name=_t(locale, "실시간 트랙", "Live Track"), value=_track(locale, positions, selected), inline=False)
     embed.add_field(name=_t(locale, "판돈", "Stake"), value=f"**{bet:,}** {_t(locale, '칩', 'chips')}", inline=True)
     embed.add_field(name=_t(locale, "진행", "Progress"), value=f"**{tick}** {_t(locale, '틱', 'ticks')}", inline=True)
-    embed.set_footer(text=_t(locale, "약 1.4초마다 순위가 움직입니다. 잔액 음수 허용 · 배당 상한 없음", "Standings move about every 1.4 seconds. Negative balance · uncapped payout"))
+    if odds is not None:
+        compact = " · ".join(f"{index + 1} x{float(value):.1f}" for index, value in enumerate(odds))
+        embed.add_field(name=_t(locale, "이번 경주 배당", "This Race Odds"), value=compact, inline=False)
+    embed.set_footer(text=_t(locale, "경주를 만들 때마다 배당이 바뀌고 출발 후에는 고정됩니다. 잔액 음수 허용", "Odds reroll for every new race and lock after the start. Negative balance allowed"))
     return embed
 
 
@@ -287,18 +290,21 @@ def register_v1092_visual_status_horserace(
         card_dashboard.description = card_dashboard.help
 
     class HorseRaceView(discord.ui.View):
-        def __init__(self, owner_id: int, bet: int, locale: str, user: MutableMapping[str, Any]) -> None:
+        def __init__(self, owner_id: int, bet: int, locale: str, user: MutableMapping[str, Any], odds: Sequence[float]) -> None:
             super().__init__(timeout=180)
             self.owner_id = owner_id
             self.bet = int(bet)
             self.locale = locale
             self.user = user
+            self.odds = tuple(float(value) for value in odds)
+            if len(self.odds) != len(HORSES):
+                raise ValueError("invalid horse odds count")
             options = [
                 discord.SelectOption(
                     label=f"{i + 1}. {_name(horse, locale)}",
                     value=str(i),
                     emoji=horse["emoji"],
-                    description=_t(locale, f"배당 x{horse['odds']:.1f} · ABADDON 기수", f"Odds x{horse['odds']:.1f} · ABADDON jockey"),
+                    description=_t(locale, f"이번 경주 x{self.odds[i]:.1f} · ABADDON 기수", f"This race x{self.odds[i]:.1f} · ABADDON jockey"),
                 )
                 for i, horse in enumerate(HORSES)
             ]
@@ -325,6 +331,9 @@ def register_v1092_visual_status_horserace(
                 "bet": self.bet,
                 "before": before,
                 "started_at": datetime.now(timezone.utc).isoformat(),
+                "odds": list(self.odds),
+                "selected": selected,
+                "selected_odds": self.odds[selected],
             }
             save_data()
             for child in self.children:
@@ -341,8 +350,9 @@ def register_v1092_visual_status_horserace(
                 "positions": list(positions),
                 "tick": 0,
                 "status": "starting",
+                "odds": list(self.odds),
             }
-            embed = _race_embed(bot, self.locale, title=_t(self.locale, "🏁 ABADDON 실시간 경마 · 출발", "🏁 ABADDON Live Horse Race · Start"), positions=positions, selected=selected, bet=self.bet, tick=0, note=_t(self.locale, "선택 완료. 전 말이 ABADDON 기수와 함께 출발합니다.", "Selection locked. Every horse starts with an ABADDON jockey."))
+            embed = _race_embed(bot, self.locale, title=_t(self.locale, "🏁 ABADDON 실시간 경마 · 출발", "🏁 ABADDON Live Horse Race · Start"), positions=positions, selected=selected, bet=self.bet, tick=0, note=_t(self.locale, "선택 완료. 이번 배당이 고정됐습니다. 전 말이 ABADDON 기수와 함께 출발합니다.", "Selection locked. This race market is now fixed. Every horse starts with an ABADDON jockey."), odds=self.odds)
             await interaction.response.edit_message(embed=embed, view=self)
             message = interaction.message
             asyncio.create_task(self._run(message, selected, before))
@@ -369,8 +379,9 @@ def register_v1092_visual_status_horserace(
                         "positions": list(positions),
                         "tick": tick,
                         "status": "racing",
+                        "odds": list(self.odds),
                     }
-                    embed = _race_embed(bot, self.locale, title=_t(self.locale, "🏇 ABADDON 실시간 경마 · 질주 중", "🏇 ABADDON Live Horse Race · Racing"), positions=positions, selected=selected, bet=self.bet, tick=tick, note=_t(self.locale, "순위가 실시간으로 바뀝니다. 결승선을 먼저 넘는 말이 승리합니다.", "Standings update live. First across the line wins."))
+                    embed = _race_embed(bot, self.locale, title=_t(self.locale, "🏇 ABADDON 실시간 경마 · 질주 중", "🏇 ABADDON Live Horse Race · Racing"), positions=positions, selected=selected, bet=self.bet, tick=tick, note=_t(self.locale, "순위가 실시간으로 바뀝니다. 결승선을 먼저 넘는 말이 승리합니다.", "Standings update live. First across the line wins."), odds=self.odds)
                     try:
                         await message.edit(embed=embed, view=self)
                     except discord.HTTPException:
@@ -382,7 +393,7 @@ def register_v1092_visual_status_horserace(
                 if winner is None:
                     winner = choose_winner(positions)
                 horse = HORSES[winner]
-                gross, expected_net = race_settlement(self.bet, selected, winner)
+                gross, expected_net = race_settlement(self.bet, selected, winner, self.odds)
                 if gross:
                     add_casino_chips(self.user, gross)
                 after = casino_chips(self.user)
@@ -403,6 +414,9 @@ def register_v1092_visual_status_horserace(
                     "net": net,
                     "before": before,
                     "after": after,
+                    "selected_odds": self.odds[selected],
+                    "winner_odds": self.odds[winner],
+                    "market_odds": list(self.odds),
                 }
                 stats["history"].insert(0, record)
                 del stats["history"][20:]
@@ -415,9 +429,9 @@ def register_v1092_visual_status_horserace(
                 for child in self.children:
                     child.disabled = True
                 title = _t(self.locale, "🏆 적중! ABADDON 실시간 경마 결과", "🏆 Winner! ABADDON Live Race Result") if winner == selected else _t(self.locale, "💀 미적중 · ABADDON 실시간 경마 결과", "💀 Miss · ABADDON Live Race Result")
-                embed = _race_embed(bot, self.locale, title=title, positions=positions, selected=selected, bet=self.bet, tick=tick, note=_t(self.locale, "결승 판정과 잔액 정산이 완료됐습니다.", "Finish and balance settlement are complete."))
-                embed.add_field(name=_t(self.locale, "우승마", "Winner"), value=f"**{winner + 1}. {_name(horse, self.locale)}** · x{horse['odds']:.1f}", inline=True)
-                embed.add_field(name=_t(self.locale, "내 선택", "Your Pick"), value=f"**{selected + 1}. {_name(HORSES[selected], self.locale)}**", inline=True)
+                embed = _race_embed(bot, self.locale, title=title, positions=positions, selected=selected, bet=self.bet, tick=tick, note=_t(self.locale, "결승 판정과 잔액 정산이 완료됐습니다.", "Finish and balance settlement are complete."), odds=self.odds)
+                embed.add_field(name=_t(self.locale, "우승마", "Winner"), value=f"**{winner + 1}. {_name(horse, self.locale)}** · x{self.odds[winner]:.1f}", inline=True)
+                embed.add_field(name=_t(self.locale, "내 선택", "Your Pick"), value=f"**{selected + 1}. {_name(HORSES[selected], self.locale)}** · x{self.odds[selected]:.1f}", inline=True)
                 embed.add_field(name=_t(self.locale, "정산", "Settlement"), value=_t(self.locale, f"총 지급 **{gross:+,}칩** · 이번 게임 **{net:+,}칩**\n잔액 **{before:,} → {after:,}칩**", f"Gross **{gross:+,} chips** · game net **{net:+,} chips**\nBalance **{before:,} → {after:,} chips**"), inline=False)
                 LIVE_RACE_STATES[self.owner_id] = {
                     "owner_id": self.owner_id,
@@ -431,6 +445,7 @@ def register_v1092_visual_status_horserace(
                     "tick": tick,
                     "status": "finished",
                     "net": net,
+                    "odds": list(self.odds),
                 }
                 try:
                     await message.edit(embed=embed, view=self)
@@ -480,19 +495,20 @@ def register_v1092_visual_status_horserace(
             return
         user = get_user(uid)
         positions = [0] * len(HORSES)
-        embed = _race_embed(bot, locale, title=_t(locale, "🏇 ABADDON 실시간 경마장", "🏇 ABADDON Live Horse Track"), positions=positions, selected=None, bet=int(판돈), tick=0, note=_t(locale, "말을 선택하면 판돈이 차감되고 약 1.4초마다 트랙이 움직입니다. 모든 상대 기수는 ABADDON입니다.", "Choose a horse to place the stake. The track moves about every 1.4 seconds. Every rival jockey is ABADDON."))
-        odds = "\n".join(f"**{i + 1}. {_name(h, locale)}** · x{h['odds']:.1f}" for i, h in enumerate(HORSES))
-        embed.add_field(name=_t(locale, "고정 배당", "Fixed Odds"), value=odds, inline=False)
-        await ctx.send(embed=embed, view=HorseRaceView(uid, int(판돈), locale, user))
+        race_odds = generate_race_odds()
+        embed = _race_embed(bot, locale, title=_t(locale, "🏇 ABADDON 실시간 경마장", "🏇 ABADDON Live Horse Track"), positions=positions, selected=None, bet=int(판돈), tick=0, note=_t(locale, "이 경주만의 배당이 새로 배정됐습니다. 말을 선택하면 배당이 고정되고 약 1.4초마다 트랙이 움직입니다.", "A fresh market was generated for this race. Choose a horse to lock the odds and start the live track."), odds=race_odds)
+        odds_text = "\n".join(f"**{i + 1}. {_name(h, locale)}** · x{race_odds[i]:.1f}" for i, h in enumerate(HORSES))
+        embed.add_field(name=_t(locale, "이번 경주 랜덤 배당", "Random Odds for This Race"), value=odds_text, inline=False)
+        await ctx.send(embed=embed, view=HorseRaceView(uid, int(판돈), locale, user, race_odds))
 
     horse_command = bot.command(name="경마", aliases=["horserace", "horse", "race"], help="실시간으로 움직이는 6마리 경주에 베팅합니다.")(horse_race)
 
-    @bot.command(name="경마장", aliases=["racetrack", "horsearena"], help="실시간 경마 규칙과 배당을 확인합니다.")
+    @bot.command(name="경마장", aliases=["racetrack", "horsearena"], help="경주마다 새로 바뀌는 배당과 실시간 경마 규칙을 확인합니다.")
     async def horse_track(ctx: commands.Context) -> None:
         locale = _ctx_locale(bot, ctx)
         embed = _dashboard(bot, locale, "🏟️ ABADDON 실시간 경마장 대시보드", "🏟️ ABADDON Live Racetrack Dashboard", "6마리의 ABADDON 기수가 약 1.4초 간격으로 실제 순위를 바꿉니다.", "Six ABADDON jockeys change position about every 1.4 seconds.", discord.Color.gold())
         embed.add_field(name=_t(locale, "시작", "Start"), value=_t(locale, "`!경마 10000` 또는 `!아바돈초대 경마 10000`", "`!horserace 10000` or `!inviteabaddon horse 10000`"), inline=False)
-        embed.add_field(name=_t(locale, "경제", "Economy"), value=_t(locale, "음수 잔액 허용 · 판돈 상한 없음 · 우승마 고정 배당 전액 지급", "Negative balance · uncapped stake · full fixed-odds payout"), inline=False)
+        embed.add_field(name=_t(locale, "경제", "Economy"), value=_t(locale, "음수 잔액 허용 · 판돈 상한 없음 · 경주마다 랜덤 배당 · 출발 후 배당 고정", "Negative balance · uncapped stake · fresh odds every race · odds lock after start"), inline=False)
         await ctx.send(embed=embed)
 
     @bot.command(name="경마전적", aliases=["horseracestats", "racestats"], help="내 실시간 경마 전적과 손익을 확인합니다.")
