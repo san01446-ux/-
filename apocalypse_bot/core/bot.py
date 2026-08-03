@@ -5807,7 +5807,21 @@ register_v1100_game_city_overhaul(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V11.0.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V11.4.0: v11.0.1~v11.4.0 통합 — 상태 체크포인트 · 챔피언십/NPC 딜러
+# 연합 대항전 · 개인 카지노 꾸미기 · 6챕터 카드 캠페인 · 일괄 이미지 자산
+from apocalypse_bot.commands.v1140_championship_alliance_casino_story import register_v1140_championship_alliance_casino_story
+register_v1140_championship_alliance_casino_story(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.4.1: 실시간 경마의 말 이모지와 움직이는 트랙 표식을 복구합니다.
+# 6개 레인의 길이와 체커기 위치는 동일하며 기존 순위·배당·정산 규칙은 유지합니다.
+from apocalypse_bot.commands.v1141_horse_marker_hotfix import register_v1141_horse_marker_hotfix
+register_v1141_horse_marker_hotfix(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.4.1: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

@@ -25,7 +25,7 @@ from apocalypse_bot.commands.v1094_visual_core import (
     truncate,
 )
 
-VERSION = "10.9.5"
+VERSION = "11.4.0"
 ANIMATED_TABLES = os.getenv("ABADDON_ANIMATED_TABLES", "1").strip().lower() not in {"0", "false", "off", "no"}
 
 BG = (15, 14, 20)

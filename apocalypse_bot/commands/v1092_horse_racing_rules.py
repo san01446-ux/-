@@ -17,6 +17,18 @@ HORSES: Tuple[Dict[str, Any], ...] = (
 )
 
 
+def render_track_lane(position: int, marker: str = "♞") -> str:
+    """Render one race lane with a visible horse and a shared fixed finish flag.
+
+    FINISH is the final valid horse coordinate. Every lane therefore contains
+    FINISH + 1 cells (0..FINISH), followed by exactly one finish flag.
+    """
+    current = min(FINISH, max(0, int(position)))
+    cells = ["·"] * (FINISH + 1)
+    cells[current] = str(marker or "♞")[:1]
+    return f"[{''.join(cells)}🏁]"
+
+
 def advance_positions(positions: Sequence[int], rng: random.Random | Any = random) -> List[int]:
     """Advance one visible race tick without moving any horse backwards."""
     if len(positions) != len(HORSES):

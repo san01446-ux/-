@@ -369,6 +369,7 @@ def _enhance_final_result(session: DebtCardSession, embed: discord.Embed) -> dis
     if not any(str(row.get("game_id"))==str(session.game_id) for row in ledger if isinstance(row,Mapping)):
         ledger.insert(0,{
             "game_id":str(session.game_id),"kind":str(getattr(session,"variant",getattr(session,"mode",session.kind))),
+            "guild_id":int(getattr(getattr(session.message,"guild",None),"id",0) or 0),
             "winners":list(dict.fromkeys(winners)),"pot":int(getattr(session,"pot",0) or 0),"players":ledger_players,
             "commit":commit,"secret":secret,"payload":payload,"verified":verified,"at":int(time.time()),
         })

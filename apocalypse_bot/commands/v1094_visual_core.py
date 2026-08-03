@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Shared visual rendering helpers for ABADDON v10.9.5.
+"""Shared visual rendering helpers for ABADDON v11.4.0.
 
 No user image is persisted. Korean fonts are discovered from the host first. If
 Render does not provide one, Noto Sans CJK KR is cached in /tmp on first use.
@@ -17,7 +17,7 @@ from typing import Iterable, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "11.0.0"
+VERSION = "11.4.0"
 FONT_CACHE = Path(os.getenv("ABADDON_FONT_CACHE", "/tmp/abaddon-fonts"))
 FONT_URLS = {
     "regular": os.getenv(
