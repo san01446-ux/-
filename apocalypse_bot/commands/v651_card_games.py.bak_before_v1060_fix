@@ -35,7 +35,6 @@ Card = Tuple[int, str]
 
 ACTIVE_LOBBIES: Dict[int, "CardLobbyView"] = {}
 ACTIVE_GAMES: Dict[int, "BaseCardSession"] = {}
-ABADDON_AI_ID = -1060
 
 
 def _card_text(card: Card) -> str:
@@ -244,14 +243,9 @@ class CardLobbyView(discord.ui.View):
 
     @discord.ui.button(label="아바돈 초대", emoji="🤖", style=discord.ButtonStyle.secondary)
     async def invite_abaddon(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        """Start the exact same table engine with ABADDON as a synthetic player.
-
-        Older builds jumped to a one-click score comparison.  v10.5.1 keeps the
-        lobby, rules, turns, cards and settlement identical to human multiplayer.
-        """
         async with self.lock:
             if not self.allow_abaddon:
-                await interaction.response.send_message("이 게임은 아바돈 참가를 지원하지 않습니다.", ephemeral=True)
+                await interaction.response.send_message("이 게임은 현재 생존자 멀티플레이 전용입니다.", ephemeral=True)
                 return
             if int(interaction.user.id) != self.host_id:
                 await interaction.response.send_message("방장만 아바돈을 초대할 수 있습니다.", ephemeral=True)
@@ -260,25 +254,16 @@ class CardLobbyView(discord.ui.View):
                 await interaction.response.send_message("이미 시작된 방입니다.", ephemeral=True)
                 return
             if len(self.players) != 1:
-                await interaction.response.send_message("생존자가 참가 중일 때는 일반 멀티플레이로 시작해주세요.", ephemeral=True)
+                await interaction.response.send_message("다른 생존자가 참가 중일 때는 일반 멀티플레이로 시작해주세요.", ephemeral=True)
                 return
-            self.players[ABADDON_AI_ID] = "ABADDON"
-            if self.kind == "고스톱":
-                self.players[ABADDON_AI_ID - 1] = "ABADDON-β"
+            starter = getattr(self.bot, "v720_start_ai_card", None)
+            if not callable(starter):
+                await interaction.response.send_message("아바돈 동료전 모듈을 찾지 못했습니다.", ephemeral=True)
+                return
             self.started = True
-            await interaction.response.defer()
-            session = self.start_factory(self)
-            try:
-                await session.start()
-            except Exception as exc:
-                self.players.pop(ABADDON_AI_ID, None)
-                self.players.pop(ABADDON_AI_ID - 1, None)
-                self.started = False
-                await self._update(f"❌ 아바돈 대전 시작 실패: `{type(exc).__name__}` · 참가비는 차감되지 않았습니다.")
-                return
             ACTIVE_LOBBIES.pop(self.channel_id, None)
-            ACTIVE_GAMES[self.channel_id] = session
             self.stop()
+            await starter(interaction, self.kind, self.bet)
 
     @discord.ui.button(label="인원 확정·시작", emoji="🚦", style=discord.ButtonStyle.primary)
     async def start_game(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -347,8 +332,6 @@ class BaseCardSession(discord.ui.View):
         deducted: List[int] = []
         try:
             for uid in self.player_ids:
-                if uid < 0:
-                    continue
                 user = self.get_user(uid)
                 add_casino_chips(user, -self.bet)
                 deducted.append(uid)
@@ -356,7 +339,7 @@ class BaseCardSession(discord.ui.View):
             root["reservations"][self.game_id] = {
                 "kind": self.kind,
                 "bet": self.bet,
-                "players": [uid for uid in self.player_ids if uid >= 0],
+                "players": list(self.player_ids),
                 "created_at": int(time.time()),
             }
             self.save_data()
@@ -379,8 +362,7 @@ class BaseCardSession(discord.ui.View):
         payouts: Dict[int, int] = {}
         for index, uid in enumerate(winners):
             amount = base + (1 if index < remainder else 0)
-            if uid >= 0:
-                add_casino_chips(self.get_user(uid), amount)
+            add_casino_chips(self.get_user(uid), amount)
             payouts[uid] = amount
         self._close_reservation()
         self.save_data()
@@ -388,8 +370,7 @@ class BaseCardSession(discord.ui.View):
 
     def _refund(self) -> None:
         for uid in self.player_ids:
-            if uid >= 0:
-                add_casino_chips(self.get_user(uid), self.bet)
+            add_casino_chips(self.get_user(uid), self.bet)
         self._close_reservation()
         self.save_data()
 
@@ -929,6 +910,8 @@ def register_v651_card_games(
             return False, "이 채널에서 이미 카드게임이 진행 중입니다."
         if str(interaction.user.id) not in user_data and int(interaction.user.id) not in user_data:
             return False, "먼저 `!가입`으로 생존자를 등록하세요."
+        if casino_chips(get_user(int(interaction.user.id))) < bet:
+            return False, f"참가비가 부족합니다. 현재 **{casino_chips(get_user(int(interaction.user.id))):,}칩**"
         min_players, max_players = (2, 8) if kind == "조커잡기" else (2, 6)
         factory_map = {"포커": PokerSession, "원카드": OneCardSession, "조커잡기": JokerSession}
         lobby = CardLobbyView(
@@ -992,7 +975,7 @@ def register_v651_card_games(
         embed.add_field(name="♠️ 포커", value="비공개 5장 · 한 장 교환 · 족보 승부", inline=False)
         embed.add_field(name="🎴 원카드", value="턴제 선택 · 같은 무늬/숫자 · 특수 카드", inline=False)
         embed.add_field(name="🃏 조커잡기", value="짝 자동 제거 · 옆 사람 패에서 뽑기 · 마지막 조커 패배", inline=False)
-        embed.set_footer(text=f"최소 참가비 {MIN_BET:,}칩 · 상한 없음 · 잔액 음수 허용 · 시간 초과 시 전원 환불")
+        embed.set_footer(text=f"참가비 {MIN_BET:,}칩 이상 · 상한 없음 · 진행 중 시간 초과 시 전원 환불")
         await ctx.send(embed=embed, view=CardGameMenuView(create_lobby_from_interaction))
 
     @bot.command(name="포커", aliases=["생존자포커"])

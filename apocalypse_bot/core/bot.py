@@ -5748,7 +5748,14 @@ register_v1050_unified_expansion(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
-# V10.5.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.6.0: 실제 턴·베팅·선택 카드게임 · 섯다 · 음수 잔액 · 무제한 정산
+# v10.5의 자동 패 비교 경로를 실전 진행 세션으로 교체하며 기존 비카드 기능과 저장은 유지합니다.
+from apocalypse_bot.commands.v1060_authentic_card_games import register_v1060_authentic_card_games
+register_v1060_authentic_card_games(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V10.6.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

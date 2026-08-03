@@ -82,6 +82,7 @@ from apocalypse_bot.commands.v1050_rules import (
     blackjack_value,
     build_single_elimination,
     capped_extra_payment,
+    # v10.6 overrides settlement with uncapped debt sessions; kept for legacy saves only,
     claimable_season_rewards,
     ensure_game_stats,
     ensure_season_profile,
@@ -440,7 +441,7 @@ class FullHwatuSession(HwatuSession):
                     nagari_multiplier=carry,
                     rules=self._rules(),
                 )
-                extra = capped_extra_payment(casino_chips(self.get_user(loser)), self.bet, multiplier)
+                extra = max(0, int(self.bet)) * max(0, int(multiplier) - 1)
                 if extra:
                     add_casino_chips(self.get_user(loser), -extra)
                     add_casino_chips(self.get_user(winner), extra)
@@ -1064,9 +1065,7 @@ def register_v1050_unified_expansion(
             return False, _t(locale, "먼저 `!가입`으로 등록하세요.", "Register first with `!register`.")
         error = _validate_bet(int(bet))
         if error:
-            return False, error if locale == "ko" else f"Entry fee must be between {MIN_BET:,} and {MAX_BET:,} chips."
-        if casino_chips(get_user(uid)) < bet:
-            return False, _t(locale, f"참가비가 부족합니다. 현재 {casino_chips(get_user(uid)):,}칩", f"Insufficient chips. Balance: {casino_chips(get_user(uid)):,}")
+            return False, error if locale == "ko" else f"Minimum entry fee is {MIN_BET:,} chips; there is no maximum."
         factory, min_players, max_players, allow_ai = factory_for(kind)
         public_locale = _public_locale(bot, getattr(interaction.guild, "id", 0))
         lobby = V1050LobbyView(bot=bot, kind=kind, host=interaction.user, bet=bet, get_user=get_user, save_data=save_data, world_data=world_data, user_data=user_data, start_factory=factory, min_players=min_players, max_players=max_players, allow_abaddon=allow_ai, public_locale=public_locale)
@@ -1083,14 +1082,11 @@ def register_v1050_unified_expansion(
         locale = _ctx_locale(bot, ctx)
         error = _validate_bet(int(bet))
         if error:
-            await ctx.send(error if locale == "ko" else f"Entry fee must be between {MIN_BET:,} and {MAX_BET:,} chips.")
+            await ctx.send(error if locale == "ko" else f"Minimum entry fee is {MIN_BET:,} chips; there is no maximum.")
             return
         channel_id = int(ctx.channel.id)
         if channel_id in ACTIVE_LOBBIES or channel_id in ACTIVE_GAMES:
             await ctx.send(_t(locale, "⚠️ 이 채널에서 이미 게임이 진행 중입니다.", "⚠️ A game is already active in this channel."))
-            return
-        if casino_chips(get_user(ctx.author.id)) < bet:
-            await ctx.send(_t(locale, "참가비가 부족합니다.", "Insufficient chips."))
             return
         factory, min_players, max_players, allow_ai = factory_for(kind)
         public_locale = _public_locale(bot, getattr(ctx.guild, "id", 0))
@@ -1171,9 +1167,7 @@ def register_v1050_unified_expansion(
             await old_ai_card(interaction, kind, bet)
             return
         user = get_user(uid)
-        bet = max(0, min(MAX_AI_BET, int(bet or 0)))
-        if casino_chips(user) < bet:
-            await interaction.response.send_message(_t(locale, "참가비가 부족합니다.", "Insufficient chips."), ephemeral=True); return
+        bet = max(0, int(bet or 0))
         if bet:
             add_casino_chips(user, -bet); save_data()
         kwargs = dict(owner_id=uid, user=user, bet=bet, save_data=save_data, world_data=world_data, game_key=f"card:{kind}", title=f"{CARD_EMOJI.get(kind, '🃏')} {_display_game(kind, locale)}", currency="chips")
@@ -1278,8 +1272,6 @@ def register_v1050_unified_expansion(
         uid = int(ctx.author.id)
         for lobby in ACTIVE_LOBBIES.values():
             if lobby.started or uid in lobby.players or len(lobby.players) >= lobby.max_players:
-                continue
-            if casino_chips(get_user(uid)) < lobby.bet:
                 continue
             lobby.players[uid] = getattr(ctx.author, "display_name", str(ctx.author))
             await lobby._update(_t(locale, f"⚡ **{lobby.players[uid]}** 빠른 참가", f"⚡ **{lobby.players[uid]}** joined via Quick Join"))

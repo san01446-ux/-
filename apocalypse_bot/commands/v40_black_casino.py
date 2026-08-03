@@ -306,7 +306,7 @@ def ensure_black_casino_account(user: Dict[str, Any]) -> Dict[str, Any]:
         season.clear()
         season.update({"id": _season_id(), "profit": 0, "plays": 0, "wins": 0, "bet": 0})
 
-    account["chips"] = max(0, int(account.get("chips", 0) or 0))
+    account["chips"] = int(account.get("chips", 0) or 0)
     account["vip_points"] = max(0, int(account.get("vip_points", 0) or 0))
     account["luck"] = max(0, min(100, int(account.get("luck", 0) or 0)))
     account["tickets"] = max(0, int(account.get("tickets", 0) or 0))
@@ -319,7 +319,7 @@ def casino_chips(user: Dict[str, Any]) -> int:
 
 def set_casino_chips(user: Dict[str, Any], amount: int) -> int:
     account = ensure_black_casino_account(user)
-    account["chips"] = max(0, int(amount))
+    account["chips"] = int(amount)
     return int(account["chips"])
 
 

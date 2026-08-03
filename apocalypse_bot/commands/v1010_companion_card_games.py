@@ -847,7 +847,7 @@ class ExpandedBetModal(discord.ui.Modal):
         error = _validate_bet(bet)
         if error:
             if locale == "en":
-                error = f"Entry fee must be between {MIN_BET:,} and {MAX_BET:,} chips."
+                error = f"Minimum entry fee is {MIN_BET:,} chips; there is no maximum."
             await interaction.response.send_message(error, ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
@@ -946,16 +946,13 @@ def register_v1010_companion_card_games(
         locale = _ctx_locale(bot, ctx)
         error = _validate_bet(int(bet))
         if error:
-            await ctx.send(error if locale == "ko" else f"Entry fee must be between {MIN_BET:,} and {MAX_BET:,} chips.")
+            await ctx.send(error if locale == "ko" else f"Minimum entry fee is {MIN_BET:,} chips; there is no maximum.")
             return
         channel_id = int(ctx.channel.id)
         if channel_id in ACTIVE_LOBBIES or channel_id in ACTIVE_GAMES:
             await ctx.send(_t(locale, "⚠️ 이 채널에서 이미 카드게임이 진행 중입니다.", "⚠️ A card game is already active in this channel."))
             return
         user = get_user(ctx.author.id)
-        if casino_chips(user) < bet:
-            await ctx.send(_t(locale, f"참가비가 부족합니다. 현재 **{casino_chips(user):,}칩**", f"Insufficient chips. Current balance: **{casino_chips(user):,} chips**"))
-            return
         factory, min_players, max_players, allow_abaddon = factory_for(kind)
         public_locale = _locale(bot, 0, getattr(ctx.guild, "id", 0))
         lobby = V1010LobbyView(
@@ -981,7 +978,7 @@ def register_v1010_companion_card_games(
             embed.add_field(name=_t(locale, "포커 4종", "Four Poker Modes"), value=_t(locale, "5장 포커 · 텍사스 홀덤 · 오마하 홀덤 · 세븐카드 스터드", "Five-Card Draw · Texas Hold'em · Omaha Hold'em · Seven-Card Stud"), inline=False)
             embed.add_field(name=_t(locale, "화투 2종", "Two Hwatu Modes"), value=_t(locale, "맞고 2인 · 고스톱 3~4인 · 고/스톱 선택", "Two-player Matgo · 3–4 player Go-Stop · Go/Stop decisions"), inline=False)
             embed.add_field(name=_t(locale, "기존 게임", "Existing Games"), value=_t(locale, "원카드 · 조커잡기", "One Card · Old Maid"), inline=False)
-            embed.set_footer(text=_t(locale, f"참가비 {MIN_BET:,}~{MAX_BET:,}칩 · 진행 중 시간 초과 시 전원 환불", f"Entry fee {MIN_BET:,}–{MAX_BET:,} chips · timeout refunds all players"))
+            embed.set_footer(text=_t(locale, f"참가비 {MIN_BET:,}칩 이상 · 상한 없음 · 진행 중 시간 초과 시 전원 환불", f"Entry fee {MIN_BET:,}–{MAX_BET:,} chips · timeout refunds all players"))
             await ctx.send(embed=embed, view=ExpandedCardMenu(bot=bot, create_lobby=create_lobby_interaction, locale=locale))
         menu_command.callback = expanded_card_menu
         menu_command.help = "카드게임 8종 통합 메뉴 / Eight-mode card-game menu"

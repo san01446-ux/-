@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 import discord
 from discord.ext import commands
 
-VERSION = "10.5.0"
+VERSION = "10.6.0"
 PATCH_DATE = "2026-08-03"
 
 # English prefix aliases reuse the existing Korean command callbacks. Therefore
