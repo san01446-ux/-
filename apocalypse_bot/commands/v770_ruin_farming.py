@@ -1097,6 +1097,13 @@ def register_v770_ruin_farming(
             encounter = _encounter_from_pending(pending)
             encounter_key = str(encounter.get("key") or "unknown")
             category = str(encounter.get("category") or "threat")
+            faction_hook = getattr(bot, "v900_on_encounter", None)
+            if callable(faction_hook):
+                faction_note = faction_hook(ctx.author.id, user, encounter_key, category, action)
+                if asyncio.iscoroutine(faction_note):
+                    faction_note = await faction_note
+                if faction_note:
+                    hook_note = (hook_note + "\n" if hook_note else "") + str(faction_note)
             profile["history"].append({
                 "id": str(pending.get("id") or ""), "region": region_key, "action": action,
                 "encounter_key": encounter_key, "category": category,

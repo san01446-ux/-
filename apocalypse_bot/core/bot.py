@@ -5693,6 +5693,14 @@ register_v811_encounter_variety(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V9.0.0: NPC 세력·평판·거점 교류 · 지역 무역로/호송 · 세력전쟁 · 시즌 5 세계 상태
+# v8.1.1의 우호 인카운트와 v8.1.0 공동 지도를 연결하며 기존 길드·계약·상점을 삭제하지 않습니다.
+from apocalypse_bot.commands.v900_faction_world_state import register_v900_faction_world_state
+register_v900_faction_world_state(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

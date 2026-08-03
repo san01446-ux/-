@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "8.1.1"
+VERSION = "9.0.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -497,6 +497,44 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("codex_reward", "도감 보상", "달성한 도감 보상을 받습니다.", "도감보상"),
         ),
     ),
+    "factions_world": (
+        "🌍 세력·무역·세계상태",
+        "NPC 세력 평판, 지역 무역 호송, 서버 공동 세력전쟁과 시즌 5 세계 선택을 관리합니다.",
+        (
+            _a("factions_v900", "세력 목록", "우호 세력과 현재 관계를 확인합니다.", "세력"),
+            _a("reputation_v900", "세력 평판", "세력별 평판과 증표를 확인합니다.", "평판"),
+            _a("faction_info_v900", "세력 정보", "세력의 역할·관계·혜택을 확인합니다.", "세력정보", "예: 구조대", force_modal=True),
+            _a("faction_outpost_v900", "세력 거점", "세력 거점의 의뢰·교환·지원 기능을 확인합니다.", "세력거점", "예: 정찰대", force_modal=True),
+            _a("faction_mission_v900", "세력 의뢰", "오늘의 세력 의뢰와 요청 물자를 확인합니다.", "세력의뢰", "예: 의무단", force_modal=True),
+            _a("faction_mission_accept_v900", "세력 의뢰 수락", "오늘의 의뢰 하나를 수락합니다.", "세력의뢰수락", "예: 복구단", force_modal=True),
+            _a("faction_mission_complete_v900", "세력 의뢰 완료", "수락한 의뢰 물자를 제출하고 정산합니다.", "세력의뢰완료"),
+            _a("faction_shop_v900", "세력 상점", "세력 증표 교환 목록을 확인합니다.", "세력상점", "예: 호위대", force_modal=True),
+            _a("faction_exchange_v900", "세력 교환", "세력 증표로 보급품 또는 칭호를 교환합니다.", "세력교환", "예: 구조대 1", force_modal=True),
+            _a("trade_routes_v900", "지역 무역로", "개방된 무역로와 오늘의 수요를 확인합니다.", "무역로"),
+            _a("regional_economy_v900", "지역 경제", "지역별 수요와 공동 보급 지표를 확인합니다.", "지역경제"),
+            _a("convoy_open_v900", "호송 모집", "화물을 적재하고 지역 호송대를 모집합니다.", "호송모집", "예: 철도 식량 5000", force_modal=True),
+            _a("convoy_join_v900", "호송 참가", "선봉·정비·의무·교섭 역할로 호송대에 참가합니다.", "호송참가", "예: 정비", force_modal=True),
+            _a("convoy_start_v900", "호송 출발", "모집 중인 호송대를 출발시킵니다.", "호송출발"),
+            _a("convoy_status_v900", "호송 상태", "현재 호송대의 노선·화물·편성을 확인합니다.", "호송상태"),
+            _a("convoy_settle_v900", "호송 정산", "도착한 호송 결과를 한 번만 정산합니다.", "호송정산"),
+            _a("convoy_reward_v900", "호송 보상", "정산된 호송의 개인 보상을 받습니다.", "호송보상"),
+            _a("convoy_cancel_v900", "호송 취소", "출발 전 모집을 취소하고 화물을 반환합니다.", "호송취소"),
+            _a("faction_war_v900", "세력전쟁", "현재 적대 세력과 공동 전쟁 진행도를 확인합니다.", "세력전쟁"),
+            _a("front_select_v900", "집중 전선 선택", "관리자가 구조·방어·복구 집중 전선을 선택합니다.", "전선선택", "예: 방어", force_modal=True),
+            _a("war_join_v900", "전쟁 참여", "정찰·구조·방어·복구 행동으로 전쟁에 참여합니다.", "전쟁참여", "예: 구조", force_modal=True),
+            _a("war_donate_v900", "전쟁 기부", "자원을 공동 전쟁 진행도에 기부합니다.", "전쟁기부", "예: 식량 5000", force_modal=True),
+            _a("war_contribution_v900", "전쟁 기여도", "현재 세력전쟁 기여 순위를 확인합니다.", "전쟁기여도"),
+            _a("war_settle_v900", "전쟁 정산", "관리자가 완료된 세력전쟁을 정산합니다.", "전쟁정산"),
+            _a("war_reward_v900", "전쟁 보상", "정산된 전쟁의 개인 기여 보상을 받습니다.", "전쟁보상"),
+            _a("war_restart_v900", "다음 전쟁 개시", "관리자가 정산 후 새로운 적대 세력전을 시작합니다.", "전쟁재개"),
+            _a("world_status_v900", "세계 상태", "안정도·보급·사기·오염과 전쟁·시즌 상태를 확인합니다.", "세계상태"),
+            _a("season5_v900", "시즌 5", "잿빛 연합전선의 현재 장과 선택지를 확인합니다.", "시즌5"),
+            _a("season5_vote_v900", "시즌 5 투표", "현재 장의 서버 선택지에 투표합니다.", "시즌5투표", "예: 2", force_modal=True),
+            _a("season5_decide_v900", "시즌 5 결정", "관리자가 투표 결과를 확정하고 다음 장을 엽니다.", "시즌5결정", "선택: 1", force_modal=False),
+            _a("world_chronicle_v900", "세계 연대기", "시즌 선택·전쟁·호송 기록을 확인합니다.", "세계연대기"),
+            _a("v900_stability", "v9.0 안정화 검수", "세력·무역·전쟁·시즌 5 연결을 읽기 전용 검사합니다.", "900안정화검수"),
+        ),
+    ),
 }
 
 def _build_action_catalog() -> Tuple[Dict[str, ActionSpec], Dict[str, str]]:
@@ -623,6 +661,12 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("growth", "🐾 펫 성장", "펫을 구매하고 장착·훈련·먹이·모험·진화합니다.", ("pet_shop", "pet_buy", "pet_info", "pet_train", "pet_list", "pet_equip", "pet_feed", "pet_adventure", "pet_evolve")),
         ("codex", "📖 통합 도감", "장비·펫·몬스터 수집과 도감 보상을 확인합니다.", ("codex", "codex_gear", "codex_pet", "codex_monster", "codex_reward")),
     ),
+    "factions_world": (
+        ("factions", "🤝 세력·평판·거점", "NPC 세력 관계, 일일 의뢰와 증표 교환입니다.", ("factions_v900", "reputation_v900", "faction_info_v900", "faction_outpost_v900", "faction_mission_v900", "faction_mission_accept_v900", "faction_mission_complete_v900", "faction_shop_v900", "faction_exchange_v900")),
+        ("trade", "🚚 무역로·호송", "지역 수요, 호송 모집·편성·출발·정산·보상입니다.", ("trade_routes_v900", "regional_economy_v900", "convoy_open_v900", "convoy_join_v900", "convoy_start_v900", "convoy_status_v900", "convoy_settle_v900", "convoy_reward_v900", "convoy_cancel_v900")),
+        ("war", "⚔️ 세력전쟁", "구조·방어·복구 전선과 참여·기부·정산·보상·다음 전쟁입니다.", ("faction_war_v900", "front_select_v900", "war_join_v900", "war_donate_v900", "war_contribution_v900", "war_settle_v900", "war_reward_v900", "war_restart_v900")),
+        ("season5", "📖 시즌 5·세계 상태", "세계 지표, 서버 투표·결정·연대기와 v9.0 검수입니다.", ("world_status_v900", "season5_v900", "season5_vote_v900", "season5_decide_v900", "world_chronicle_v900", "v900_stability")),
+    ),
 }
 
 QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
@@ -630,8 +674,8 @@ QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
     "grow": ("📈 강해지고 싶어요", "성장 보드에서 목표를 확인하고 프리셋·강화·미션 보상으로 성장합니다.", ("growth_board", "mission_reward_v710", "info", "shop", "inventory", "equipment", "equipment_preset_v710", "equip", "enhance", "season_pass", "achievements")),
     "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "world_map_v810", "world_scout_v810", "region_list", "region_explore", "raid", "worldboss_status")),
     "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 공동 재난으로 재화와 기여 보상을 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "world_scout_v810", "frontier_donate_v810", "disaster_status", "disaster_join", "dig", "treasure_appraise", "resource_market")),
-    "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·퀴즈 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "expedition", "exp_start", "relic", "daily_quiz")),
-    "community": ("🤝 같이 놀고 싶어요", "길드·공동 기지·레이드·파티·카드게임·거래로 이동합니다.", ("guild_dashboard", "guild_base", "guild_raid", "party_create", "card_game_menu", "market", "transfer")),
+    "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·세계 상태 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "story4", "season5_v900", "world_status_v900", "expedition", "exp_start", "relic", "daily_quiz")),
+    "community": ("🤝 같이 놀고 싶어요", "길드·세력·호송·공동 전쟁·파티·카드게임으로 이동합니다.", ("guild_dashboard", "guild_base", "factions_v900", "convoy_status_v900", "faction_war_v900", "party_create", "card_game_menu", "market", "transfer")),
 }
 
 
