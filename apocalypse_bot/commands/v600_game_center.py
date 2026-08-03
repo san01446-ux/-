@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "9.0.0"
+VERSION = "9.2.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -535,6 +535,37 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("v900_stability", "v9.0 안정화 검수", "세력·무역·전쟁·시즌 5 연결을 읽기 전용 검사합니다.", "900안정화검수"),
         ),
     ),
+    "world_cycle_profession": (
+        "🌐 세계 순환·전문화·분대",
+        "안전한 세계 시간 순환, 공동 복구, 주간 지령, 기존 직업 전문화와 기존 파티 분대 전술을 관리합니다.",
+        (
+            _a("world_cycle_v920", "세계 순환", "세계 지표의 안전한 시간 순환과 다음 반영 시각을 확인합니다.", "세계순환"),
+            _a("world_cycle_settings_v920", "세계 순환 설정", "관리자가 세계 순환을 켜거나 일시정지합니다.", "세계순환설정", "예: 일시정지", force_modal=True),
+            _a("world_cycle_now_v920", "세계 즉시 순환", "관리자가 세계 순환 1회를 즉시 반영합니다.", "세계순환즉시"),
+            _a("today_world_v920", "오늘의 세계", "세계 지표·복구·지령을 한 화면에 요약합니다.", "오늘의세계"),
+            _a("recovery_v920", "공동 복구 작전", "현재 장기 복구 작전과 버튼 참여 패널을 엽니다.", "복구작전"),
+            _a("recovery_start_v920", "복구 작전 시작", "관리자가 발전·식수·병원·보급로·통신·방벽 작전을 시작합니다.", "복구작전시작", "예: 발전망", force_modal=True),
+            _a("recovery_join_v920", "복구 현장 참여", "정찰·구조·수리·경계 행동으로 공동 진행도를 올립니다.", "복구참여", "예: 수리", force_modal=True),
+            _a("recovery_supply_v920", "복구 물자 납품", "복구 작전에 필요한 자원을 목표를 넘지 않게 지원합니다.", "복구납품", "예: 고철 20", force_modal=True),
+            _a("recovery_contribution_v920", "복구 기여도", "현재 공동 복구 기여 순위를 확인합니다.", "복구기여도"),
+            _a("recovery_reward_v920", "복구 보상", "완료된 복구 작전의 개인 기여 보상을 받습니다.", "복구보상"),
+            _a("directive_v920", "세계 지령", "이번 주 공동 목표와 투표 패널을 확인합니다.", "세계지령"),
+            _a("directive_vote_v920", "지령 투표", "이번 주 세계 지령에 투표합니다.", "지령투표", "예: 보급", force_modal=True),
+            _a("directive_decide_v920", "지령 결정", "관리자가 최다 득표 또는 지정 지령을 확정합니다.", "지령결정", "선택: 안정", force_modal=False),
+            _a("specialization_v920", "내 전문화", "현재 기본 직업과 선택한 전문화를 확인합니다.", "전문화"),
+            _a("specialization_list_v920", "전문화 목록", "현재 직업에서 선택 가능한 전문화를 확인합니다.", "전문화목록"),
+            _a("specialization_info_v920", "전문화 정보", "특정 전문화의 역할과 연동 콘텐츠를 확인합니다.", "전문화정보", "예: 방벽대장", force_modal=True),
+            _a("specialization_choose_v920", "전문화 선택", "레벨 20 이상에서 현재 직업의 전문화를 선택합니다.", "전문화선택", "예: 방벽대장", force_modal=True),
+            _a("specialization_change_v920", "전문화 변경", "식량을 사용해 같은 기본 직업의 전문화를 변경합니다.", "전문화변경", "예: 돌격대장", force_modal=True),
+            _a("squad_tactics_v920", "분대 전술", "기존 파티의 전술과 역할 편성을 확인합니다.", "분대전술"),
+            _a("squad_tactic_set_v920", "분대 전술 설정", "파티장이 균형·돌격·방어·구조·정찰 전술을 설정합니다.", "분대전술설정", "예: 구조", force_modal=True),
+            _a("squad_role_v920", "분대 역할", "자신의 역할을 선봉·의무·기술·정찰 중 선택합니다.", "분대역할", "예: 기술", force_modal=True),
+            _a("squad_ready_v920", "분대 준비 점검", "인원·역할 다양성·전문화·작전 대기시간을 확인합니다.", "분대준비"),
+            _a("squad_operation_v920", "분대 작전", "파티장이 역할과 전문화를 반영한 협동 작전을 수행합니다.", "분대작전", "예: 오염정찰", force_modal=True),
+            _a("squad_history_v920", "분대 작전 기록", "현재 파티의 최근 분대 작전 기록을 확인합니다.", "분대작전기록"),
+            _a("v920_stability", "v9.2 안정화 검수", "세계 순환·복구·전문화·분대 전술 연결을 읽기 전용 검사합니다.", "920안정화검수"),
+        ),
+    ),
 }
 
 def _build_action_catalog() -> Tuple[Dict[str, ActionSpec], Dict[str, str]]:
@@ -667,15 +698,23 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("war", "⚔️ 세력전쟁", "구조·방어·복구 전선과 참여·기부·정산·보상·다음 전쟁입니다.", ("faction_war_v900", "front_select_v900", "war_join_v900", "war_donate_v900", "war_contribution_v900", "war_settle_v900", "war_reward_v900", "war_restart_v900")),
         ("season5", "📖 시즌 5·세계 상태", "세계 지표, 서버 투표·결정·연대기와 v9.0 검수입니다.", ("world_status_v900", "season5_v900", "season5_vote_v900", "season5_decide_v900", "world_chronicle_v900", "v900_stability")),
     ),
+    "world_cycle_profession": (
+        ("cycle", "🌍 세계 순환", "안전한 시간 순환과 오늘의 세계 상황입니다.", ("world_cycle_v920", "world_cycle_settings_v920", "world_cycle_now_v920", "today_world_v920")),
+        ("recovery", "🏗️ 공동 복구", "6개 장기 작전의 버튼 행동·물자 납품·기여도·보상입니다.", ("recovery_v920", "recovery_start_v920", "recovery_join_v920", "recovery_supply_v920", "recovery_contribution_v920", "recovery_reward_v920")),
+        ("directive", "📜 세계 지령", "주간 공동 목표 투표와 관리자 확정입니다.", ("directive_v920", "directive_vote_v920", "directive_decide_v920")),
+        ("specialization", "🧑‍🔧 직업 전문화", "기존 기본 직업을 유지하는 전문화 12종입니다.", ("specialization_v920", "specialization_list_v920", "specialization_info_v920", "specialization_choose_v920", "specialization_change_v920")),
+        ("squad", "👥 분대 전술", "기존 파티 기반 전술·역할·준비·협동 작전·기록입니다.", ("squad_tactics_v920", "squad_tactic_set_v920", "squad_role_v920", "squad_ready_v920", "squad_operation_v920", "squad_history_v920")),
+        ("audit", "🛡️ v9.2 안정화", "세계 순환·복구·전문화·분대 전술 연결을 읽기 전용 검사합니다.", ("v920_stability",)),
+    ),
 }
 
 QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
-    "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·성장 보드·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "tutorial", "growth_board", "catchup_support_v710", "shop", "inventory", "equipment", "training")),
+    "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·성장 보드·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "specialization_list_v920", "tutorial", "growth_board", "catchup_support_v710", "shop", "inventory", "equipment", "training")),
     "grow": ("📈 강해지고 싶어요", "성장 보드에서 목표를 확인하고 프리셋·강화·미션 보상으로 성장합니다.", ("growth_board", "mission_reward_v710", "info", "shop", "inventory", "equipment", "equipment_preset_v710", "equip", "enhance", "season_pass", "achievements")),
     "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "world_map_v810", "world_scout_v810", "region_list", "region_explore", "raid", "worldboss_status")),
     "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 공동 재난으로 재화와 기여 보상을 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "world_scout_v810", "frontier_donate_v810", "disaster_status", "disaster_join", "dig", "treasure_appraise", "resource_market")),
-    "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·세계 상태 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "story4", "season5_v900", "world_status_v900", "expedition", "exp_start", "relic", "daily_quiz")),
-    "community": ("🤝 같이 놀고 싶어요", "길드·세력·호송·공동 전쟁·파티·카드게임으로 이동합니다.", ("guild_dashboard", "guild_base", "factions_v900", "convoy_status_v900", "faction_war_v900", "party_create", "card_game_menu", "market", "transfer")),
+    "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·세계 상태 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "story4", "season5_v900", "world_status_v900", "world_cycle_v920", "today_world_v920", "expedition", "exp_start", "relic", "daily_quiz")),
+    "community": ("🤝 같이 놀고 싶어요", "길드·세력·호송·공동 전쟁·파티·카드게임으로 이동합니다.", ("guild_dashboard", "guild_base", "factions_v900", "convoy_status_v900", "faction_war_v900", "recovery_v920", "party_create", "squad_tactics_v920", "card_game_menu", "market", "transfer")),
 }
 
 

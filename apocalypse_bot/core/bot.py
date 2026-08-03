@@ -5701,6 +5701,14 @@ register_v900_faction_world_state(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V9.2.0: 안전한 세계 시간 순환 · 공동 복구 작전 · 주간 세계 지령 · 기존 직업 전문화 · 기존 파티 기반 분대 전술
+# v9.1 계획을 통합하고 기존 직업/파티/길드/재난 기능을 삭제하거나 복제하지 않습니다.
+from apocalypse_bot.commands.v920_world_cycle_professions import register_v920_world_cycle_professions
+register_v920_world_cycle_professions(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
