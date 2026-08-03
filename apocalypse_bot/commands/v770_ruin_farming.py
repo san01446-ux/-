@@ -20,8 +20,8 @@ from apocalypse_bot.commands.v610_digging_treasure import (
     _ensure_profile as _ensure_treasure_profile,
 )
 
-VERSION = "7.8.0"
-SCHEMA_VERSION = 1
+VERSION = "8.1.1"
+SCHEMA_VERSION = 2
 KST = timezone(timedelta(hours=9))
 FARM_DAILY_LIMIT = 16
 SIGNAL_DAILY_LIMIT = 5
@@ -139,34 +139,183 @@ _BONUS_TABLES: Dict[str, Tuple[Tuple[int, Tuple[str, str, int, int]], ...]] = {
     ),
 }
 
-_ENCOUNTERS: Tuple[Dict[str, str], ...] = (
+_ENCOUNTERS: Tuple[Dict[str, Any], ...] = (
     {
-        "key": "infected",
+        "key": "infected", "category": "threat", "emoji": "🧟", "actor": "감염체 무리",
         "title": "감염체 무리가 통로를 막았습니다",
-        "description": "뒤편에는 아직 열리지 않은 보급 상자가 보입니다. 소음을 내면 더 많은 감염체가 몰려올 수 있습니다.",
+        "description": "깨진 진열대 뒤로 보급 상자가 보입니다. 소음을 내면 더 많은 감염체가 몰려올 수 있습니다.",
+        "regions": ("market", "residential", "freight", "quarantine"),
     },
     {
-        "key": "distress",
-        "title": "붕괴 건물에서 구조 신호가 잡혔습니다",
-        "description": "약한 생체 신호와 함께 보급품 위치 정보가 반복 송신됩니다.",
-    },
-    {
-        "key": "vault",
-        "title": "봉인된 지하 보관실을 발견했습니다",
-        "description": "문 주변에 급조된 경보 장치가 남아 있습니다. 내부 물자는 아직 회수되지 않은 듯합니다.",
-    },
-    {
-        "key": "raiders",
+        "key": "raiders", "category": "threat", "emoji": "🏴", "actor": "약탈자 정찰조",
         "title": "약탈자 정찰조가 접근합니다",
         "description": "상대는 아직 당신을 완전히 발견하지 못했습니다. 주변에는 버려진 운반 상자가 흩어져 있습니다.",
+        "regions": ("residential", "freight", "quarantine"),
+    },
+    {
+        "key": "mutant_hounds", "category": "threat", "emoji": "🐺", "actor": "변이 들개 떼",
+        "title": "변이 들개 떼가 냄새를 따라왔습니다",
+        "description": "철망 너머에서 낮은 울음소리가 번집니다. 가까운 창고 안에는 아직 물자 반응이 남아 있습니다.",
+        "regions": ("market", "residential", "freight"),
+    },
+    {
+        "key": "rogue_drones", "category": "threat", "emoji": "🤖", "actor": "오작동 경비 드론",
+        "title": "오작동 경비 드론이 표적을 탐색합니다",
+        "description": "붉은 탐조등이 통로를 훑고 있습니다. 드론 뒤편 제어함을 확보하면 폐허 회로를 건질 수 있습니다.",
+        "regions": ("freight", "quarantine"),
+    },
+    {
+        "key": "toxic_leak", "category": "hazard", "emoji": "☣️", "actor": "독성 누출 구역",
+        "title": "배관에서 독성 증기가 새어 나옵니다",
+        "description": "시야가 흐려지고 경보음이 빨라집니다. 밸브를 안정화하면 봉쇄된 물자함까지 접근할 수 있습니다.",
+        "regions": ("freight", "quarantine"),
+    },
+    {
+        "key": "collapse", "category": "hazard", "emoji": "🏚️", "actor": "붕괴 직전 구조물",
+        "title": "천장 균열이 빠르게 번지고 있습니다",
+        "description": "잔해 사이에서 생체 신호와 금속 상자 반응이 함께 잡힙니다. 오래 머물수록 통로가 불안정해집니다.",
+        "regions": ("market", "residential", "freight"),
+    },
+    {
+        "key": "electrical_fire", "category": "hazard", "emoji": "⚡", "actor": "과부하 전력실",
+        "title": "전력실에서 청색 불꽃이 튀고 있습니다",
+        "description": "차단기를 내리면 주변 보급 장치가 살아날 수 있지만, 잘못 건드리면 통로 전체가 정전됩니다.",
+        "regions": ("market", "freight", "quarantine"),
+    },
+    {
+        "key": "distress", "category": "rescue", "emoji": "📡", "actor": "미확인 구조 신호",
+        "title": "붕괴 건물에서 구조 신호가 잡혔습니다",
+        "description": "약한 생체 신호와 함께 보급품 위치 정보가 반복 송신됩니다.",
+        "regions": ("residential", "freight", "quarantine"),
+    },
+    {
+        "key": "trapped_family", "category": "rescue", "emoji": "🧑‍🧑‍🧒", "actor": "고립된 생존자 가족",
+        "title": "무너진 상가 안에서 사람 목소리가 들립니다",
+        "description": "잔해 아래에 고립된 생존자들이 있습니다. 주변에는 그들이 모아 둔 식량 상자가 보입니다.",
+        "regions": ("market", "residential"),
+    },
+    {
+        "key": "wounded_scout", "category": "rescue", "emoji": "🩹", "actor": "부상당한 길잡이",
+        "title": "부상당한 길잡이가 벽에 기대어 신호를 보냅니다",
+        "description": "그는 안전한 지름길과 숨겨진 저장고 위치를 알고 있지만, 먼저 응급 처치가 필요해 보입니다.",
+        "regions": ("residential", "freight", "quarantine"),
+    },
+    {
+        "key": "white_lamp", "category": "ally", "emoji": "🚑", "actor": "백색등 구조대",
+        "title": "백색등 구조대가 현장 수색을 진행 중입니다",
+        "description": "구조대는 잔해 안쪽 생존 신호를 추적하고 있습니다. 인력을 보태면 공동 회수 구역을 열 수 있습니다.",
+        "regions": ("market", "residential", "freight"),
+    },
+    {
+        "key": "blue_shield", "category": "ally", "emoji": "🛡️", "actor": "푸른 방패 민병대",
+        "title": "푸른 방패 민병대가 통로를 지키고 있습니다",
+        "description": "민병대는 피난민 이동로를 확보하는 중입니다. 주변 위협을 정리하면 남은 물자를 공정하게 나누겠다고 합니다.",
+        "regions": ("residential", "freight", "quarantine"),
+    },
+    {
+        "key": "dawn_medics", "category": "ally", "emoji": "⚕️", "actor": "새벽 의무단",
+        "title": "새벽 의무단의 임시 진료소를 발견했습니다",
+        "description": "의무단은 부상자를 치료하며 약초와 의료 표본을 분류하고 있습니다. 손을 보태면 현장 자료를 나눠 줍니다.",
+        "regions": ("market", "residential", "quarantine"),
+    },
+    {
+        "key": "rail_engineers", "category": "ally", "emoji": "🧰", "actor": "철도 복구단",
+        "title": "철도 복구단이 끊어진 화물선을 수리합니다",
+        "description": "복구단은 잔해 제거와 전력 연결에 도움이 필요합니다. 작업이 끝나면 봉인 화물칸을 함께 확인할 수 있습니다.",
+        "regions": ("freight",),
+    },
+    {
+        "key": "supply_escort", "category": "ally", "emoji": "🚚", "actor": "보급 호위대",
+        "title": "보급 호위대가 멈춰 선 수송차를 지키고 있습니다",
+        "description": "바퀴가 잔해에 걸려 이동이 중단됐습니다. 호위를 돕거나 수리를 지원하면 일부 보급품을 받을 수 있습니다.",
+        "regions": ("market", "residential", "freight"),
+    },
+    {
+        "key": "ranger_patrol", "category": "ally", "emoji": "🧭", "actor": "황무지 정찰대",
+        "title": "황무지 정찰대가 안전 표식을 갱신하고 있습니다",
+        "description": "정찰대는 위험 구역과 숨겨진 회수 지점을 지도에 표시 중입니다. 정보를 교환하면 새로운 길이 열릴 수 있습니다.",
+        "regions": ("residential", "freight", "quarantine"),
+    },
+    {
+        "key": "vault", "category": "mystery", "emoji": "🔐", "actor": "봉인 보관실",
+        "title": "봉인된 지하 보관실을 발견했습니다",
+        "description": "문 주변에 급조된 경보 장치가 남아 있습니다. 내부 물자는 아직 회수되지 않은 듯합니다.",
+        "regions": ("market", "residential", "freight", "quarantine"),
+    },
+    {
+        "key": "archive_terminal", "category": "mystery", "emoji": "🖥️", "actor": "구형 기록 단말",
+        "title": "꺼져 있던 기록 단말이 갑자기 켜졌습니다",
+        "description": "화면에는 좌표와 구조 명단이 교대로 나타납니다. 전원을 유지하면 숨겨진 저장고를 찾을 수 있습니다.",
+        "regions": ("residential", "freight", "quarantine"),
+    },
+    {
+        "key": "lost_convoy", "category": "mystery", "emoji": "🚛", "actor": "실종된 보급대 흔적",
+        "title": "실종된 보급대의 표식을 발견했습니다",
+        "description": "끊어진 로프와 빈 탄피, 멀리 이어지는 바퀴 자국이 보입니다. 흔적을 추적하면 남은 화물을 찾을 수 있습니다.",
+        "regions": ("market", "residential", "freight"),
+    },
+    {
+        "key": "wandering_trader", "category": "trade", "emoji": "🧳", "actor": "떠돌이 공정 상인",
+        "title": "중립 표식을 단 떠돌이 상인이 손을 흔듭니다",
+        "description": "상인은 약탈품을 취급하지 않는다며, 주변 길을 안전하게 만드는 데 협력하면 물자를 나누겠다고 합니다.",
+        "regions": ("market", "residential", "freight", "quarantine"),
     },
 )
 
+_ENCOUNTER_BY_KEY: Dict[str, Dict[str, Any]] = {str(row["key"]): row for row in _ENCOUNTERS}
+_ENCOUNTER_CATEGORY_LABELS = {
+    "threat": "🚨 적대 신호", "hazard": "⚠️ 환경 위험", "rescue": "🆘 구조 요청",
+    "ally": "🤝 우호 세력", "mystery": "✨ 미확인 발견", "trade": "🕊️ 중립 접촉",
+}
+_ENCOUNTER_ACTIONS: Dict[str, Dict[str, Tuple[str, str, discord.ButtonStyle]]] = {
+    "threat": {
+        "fight": ("맞서기", "⚔️", discord.ButtonStyle.danger),
+        "evade": ("우회", "🫥", discord.ButtonStyle.secondary),
+        "rescue": ("보호", "🛡️", discord.ButtonStyle.success),
+        "search": ("빈틈 탐색", "🔎", discord.ButtonStyle.primary),
+    },
+    "hazard": {
+        "fight": ("돌파", "💥", discord.ButtonStyle.danger),
+        "evade": ("안전 우회", "🫥", discord.ButtonStyle.secondary),
+        "rescue": ("현장 안정화", "🧰", discord.ButtonStyle.success),
+        "search": ("원인 조사", "📡", discord.ButtonStyle.primary),
+    },
+    "rescue": {
+        "fight": ("잔해 제거", "💪", discord.ButtonStyle.danger),
+        "evade": ("안전 확인", "👁️", discord.ButtonStyle.secondary),
+        "rescue": ("구조", "🩹", discord.ButtonStyle.success),
+        "search": ("주변 수색", "📡", discord.ButtonStyle.primary),
+    },
+    "ally": {
+        "fight": ("합류", "🤝", discord.ButtonStyle.success),
+        "evade": ("경계 유지", "🧭", discord.ButtonStyle.secondary),
+        "rescue": ("지원", "📦", discord.ButtonStyle.success),
+        "search": ("공동 수색", "🔎", discord.ButtonStyle.primary),
+    },
+    "mystery": {
+        "fight": ("강제 개방", "🔧", discord.ButtonStyle.danger),
+        "evade": ("원격 확인", "🛰️", discord.ButtonStyle.secondary),
+        "rescue": ("안전 해제", "🔐", discord.ButtonStyle.success),
+        "search": ("정밀 조사", "🔎", discord.ButtonStyle.primary),
+    },
+    "trade": {
+        "fight": ("호위 협력", "🛡️", discord.ButtonStyle.success),
+        "evade": ("관망", "👁️", discord.ButtonStyle.secondary),
+        "rescue": ("거래 지원", "🤝", discord.ButtonStyle.success),
+        "search": ("주변 탐색", "📦", discord.ButtonStyle.primary),
+    },
+}
+
+
 ACTION_ALIASES = {
-    "전투": "fight", "싸움": "fight", "공격": "fight", "fight": "fight",
-    "회피": "evade", "도주": "evade", "피하기": "evade", "evade": "evade",
-    "구조": "rescue", "구출": "rescue", "도움": "rescue", "rescue": "rescue",
-    "추가탐색": "search", "탐색": "search", "수색": "search", "search": "search",
+    "전투": "fight", "싸움": "fight", "공격": "fight", "맞서기": "fight", "돌파": "fight",
+    "잔해제거": "fight", "합류": "fight", "호위": "fight", "강제개방": "fight", "fight": "fight",
+    "회피": "evade", "도주": "evade", "피하기": "evade", "우회": "evade", "안전우회": "evade",
+    "경계": "evade", "경계유지": "evade", "관망": "evade", "원격확인": "evade", "evade": "evade",
+    "구조": "rescue", "구출": "rescue", "도움": "rescue", "보호": "rescue", "지원": "rescue",
+    "현장안정화": "rescue", "안전해제": "rescue", "거래지원": "rescue", "rescue": "rescue",
+    "추가탐색": "search", "탐색": "search", "수색": "search", "공동수색": "search",
+    "정밀조사": "search", "원인조사": "search", "주변수색": "search", "search": "search",
 }
 ACTION_LABELS = {
     "fight": "⚔️ 전투",
@@ -293,6 +442,54 @@ def _action_key(value: Any) -> Optional[str]:
     return ACTION_ALIASES.get(str(value or "").strip().replace(" ", "").casefold())
 
 
+
+def _encounter_from_pending(pending: Mapping[str, Any]) -> Dict[str, Any]:
+    key = str(pending.get("encounter_key") or "")
+    if key in _ENCOUNTER_BY_KEY:
+        return _ENCOUNTER_BY_KEY[key]
+    index = _safe_int(pending.get("encounter_index"), 0) % len(_ENCOUNTERS)
+    return _ENCOUNTERS[index]
+
+
+def _encounter_action(category: str, action: str) -> Tuple[str, str, discord.ButtonStyle]:
+    mapping = _ENCOUNTER_ACTIONS.get(category, _ENCOUNTER_ACTIONS["threat"])
+    return mapping.get(action, mapping["search"])
+
+
+def _choose_encounter(profile: Mapping[str, Any], region_key: str, rng: random.Random) -> Dict[str, Any]:
+    pool = [row for row in _ENCOUNTERS if region_key in row.get("regions", ())]
+    recent = [str(x) for x in profile.get("recent_encounters", [])] if isinstance(profile.get("recent_encounters"), list) else []
+    fresh = [row for row in pool if str(row.get("key")) not in recent[-4:]]
+    return rng.choice(fresh or pool or list(_ENCOUNTERS))
+
+
+def _category_colour(category: str) -> discord.Colour:
+    return {
+        "threat": discord.Colour.red(),
+        "hazard": discord.Colour.orange(),
+        "rescue": discord.Colour.gold(),
+        "ally": discord.Colour.green(),
+        "mystery": discord.Colour.purple(),
+        "trade": discord.Colour.teal(),
+    }.get(category, discord.Colour.dark_teal())
+
+
+def _route_line(position: int, *, encounter: bool = False, result: bool = False) -> str:
+    nodes = ["🚪", "🗺️", "📡", "⚠️" if encounter else "✨", "📦", "🏠"]
+    position = max(0, min(position, len(nodes) - 1))
+    pieces: List[str] = []
+    for index, node in enumerate(nodes):
+        if index == position:
+            marker = "💨" if index < len(nodes) - 1 else "✅"
+            pieces.append(f"{marker}{node}")
+        elif index < position:
+            pieces.append(f"✅{node}")
+        else:
+            pieces.append(f"▫️{node}")
+    suffix = " · 정산 완료" if result else ""
+    return " `" + " ━ ".join(pieces) + "`" + suffix
+
+
 def _dict(parent: MutableMapping[str, Any], key: str) -> MutableMapping[str, Any]:
     value = parent.get(key)
     if not isinstance(value, dict):
@@ -324,8 +521,10 @@ def ensure_v770_profile(user: MutableMapping[str, Any]) -> MutableMapping[str, A
     pending = profile.get("pending_encounter")
     profile["pending_encounter"] = pending if isinstance(pending, dict) else {}
     profile["history"] = [row for row in profile.get("history", []) if isinstance(row, dict)] if isinstance(profile.get("history"), list) else []
+    profile["recent_encounters"] = [str(x) for x in profile.get("recent_encounters", [])][-4:] if isinstance(profile.get("recent_encounters"), list) else []
+    profile["encounter_discovery"] = [str(x) for x in profile.get("encounter_discovery", []) if str(x) in _ENCOUNTER_BY_KEY] if isinstance(profile.get("encounter_discovery"), list) else []
     stats = _dict(profile, "stats")
-    for key in ("runs", "encounters", "fight", "evade", "rescue", "search", "treasures", "scrap", "contracts", "signals"):
+    for key in ("runs", "encounters", "fight", "evade", "rescue", "search", "treasures", "scrap", "contracts", "signals", "ally", "rescue_event", "threat", "hazard", "mystery", "trade"):
         stats[key] = max(0, _safe_int(stats.get(key), 0))
 
     workshop = _dict(profile, "workshop")
@@ -512,42 +711,130 @@ def _encounter_result(
     calculate_user_power: Callable[[Mapping[str, Any]], int],
 ) -> Tuple[List[Dict[str, Any]], str, int]:
     region_key = _region_key(pending.get("region")) or "market"
-    region = FARM_REGIONS[region_key]
+    encounter = _encounter_from_pending(pending)
+    category = str(encounter.get("category") or "threat")
+    actor = str(encounter.get("actor") or encounter.get("title") or "미확인 신호")
     seed = _safe_int(pending.get("seed"), 1, 1)
-    rng = random.Random(int(hashlib.sha256(f"{seed}:{action}".encode("utf-8")).hexdigest()[:16], 16))
+    rng = random.Random(int(hashlib.sha256(f"{seed}:{encounter.get('key')}:{action}".encode("utf-8")).hexdigest()[:16], 16))
     power = max(1, _safe_int(calculate_user_power(user), 1, 1))
     threshold = {"market": 120, "residential": 380, "freight": 900, "quarantine": 1_900}[region_key]
     hp_loss = 0
     rewards: List[Dict[str, Any]]
-    if action == "evade":
-        rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
-        story = "위험 구역을 크게 우회해 확보 가능한 물자만 챙겼습니다."
-    elif action == "rescue":
-        rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
-        rewards.append({"kind": "research", "key": "연구 자료", "amount": rng.randint(2, 5), "region": region_key})
-        if rng.randrange(100) < 28:
+
+    if category == "ally":
+        if action == "fight":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=False)
+            rewards.append({"kind": "research", "key": "연구 자료", "amount": rng.randint(2, 5), "region": region_key})
+            story = f"{actor}와 합류해 경계선을 밀어냈습니다. 임무가 끝난 뒤 회수 물자와 현장 지도를 공정하게 나눴습니다."
+        elif action == "rescue":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
             rewards.append({"kind": "material", "key": "보물파편", "amount": rng.randint(1, 2), "region": region_key})
-        story = "생존 신호를 우선 확보했습니다. 구조 대상이 숨겨 둔 위치 정보를 넘겨주었습니다."
-    elif action == "fight":
-        score = power * rng.uniform(0.82, 1.18)
-        if score >= threshold:
+            story = f"{actor}의 부족한 장비와 인력을 지원했습니다. 감사의 뜻으로 보관 중이던 회수품 일부를 받았습니다."
+        elif action == "search":
             rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=True)
-            story = "위협을 제압하고 봉쇄된 회수 구역까지 진입했습니다."
+            story = f"{actor}와 공동 수색망을 펼쳤습니다. 서로 놓쳤던 신호를 보완하며 숨겨진 회수 지점을 발견했습니다."
         else:
             rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
-            hp_loss = rng.randint(4, 13)
-            story = "교전 끝에 간신히 빠져나왔습니다. 일부 물자만 회수했습니다."
-    else:
-        score = power * rng.uniform(0.72, 1.22)
-        if score >= threshold * 0.82:
+            story = f"{actor}와 거리를 유지한 채 안전 정보만 교환했습니다. 충돌 없이 필요한 물자만 확보했습니다."
+    elif category == "rescue":
+        if action == "rescue":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=False)
+            rewards.append({"kind": "research", "key": "연구 자료", "amount": rng.randint(3, 6), "region": region_key})
+            story = f"{actor}을 안전 구역까지 이끌었습니다. 구조 대상은 숨겨 둔 물자와 경로 정보를 넘겨주었습니다."
+        elif action == "fight":
+            score = power * rng.uniform(0.80, 1.18)
+            rewards = _roll_base_rewards(region_key, rng, enhanced=score >= threshold * 0.85, allow_special=score >= threshold)
+            if score < threshold * 0.75:
+                hp_loss = rng.randint(2, 8)
+            story = "무너진 잔해와 위협 요소를 힘으로 밀어내 구조 통로를 만들었습니다." if not hp_loss else "통로를 열었지만 붕괴 충격을 피하지 못했습니다. 구조 신호는 확보했습니다."
+        elif action == "search":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=False)
+            rewards.append({"kind": "material", "key": "보물파편", "amount": rng.randint(1, 2), "region": region_key})
+            story = "주변을 먼저 수색해 2차 붕괴 위험과 안전한 진입로를 찾아냈습니다. 구조와 회수를 함께 마쳤습니다."
+        else:
+            rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
+            story = "안전한 접근로와 구조대가 올 수 있는 좌표를 남기고, 위험 구역 바깥의 물자만 회수했습니다."
+    elif category == "hazard":
+        if action == "rescue":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=False)
+            rewards.append({"kind": "material", "key": "폐허회로", "amount": rng.randint(1, 3), "region": region_key})
+            story = "위험 설비를 차단하고 현장을 안정화했습니다. 봉쇄 장치가 풀리며 정비 물자함이 열렸습니다."
+        elif action == "search":
+            score = power * rng.uniform(0.76, 1.20)
+            rewards = _roll_base_rewards(region_key, rng, enhanced=score >= threshold * 0.80, allow_special=score >= threshold)
+            if score < threshold * 0.72:
+                hp_loss = rng.randint(2, 9)
+            story = "원인을 추적해 안전 구간과 회수 지점을 찾아냈습니다." if not hp_loss else "원인을 확인했지만 위험이 번져 급히 철수했습니다."
+        elif action == "fight":
+            score = power * rng.uniform(0.72, 1.15)
+            rewards = _roll_base_rewards(region_key, rng, enhanced=score >= threshold, allow_special=score >= threshold * 1.10)
+            if score < threshold:
+                hp_loss = rng.randint(4, 12)
+            story = "위험 구간을 정면으로 돌파해 봉쇄된 물자를 확보했습니다." if not hp_loss else "강행 돌파 중 충격을 받았지만 손에 잡힌 물자는 지켜냈습니다."
+        else:
+            rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
+            story = "위험 반경을 크게 돌아 안전한 외곽 물자만 확보했습니다."
+    elif category == "mystery":
+        if action == "search":
             rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=True)
-            if rng.randrange(100) < 35:
+            if rng.randrange(100) < 32:
                 rewards.append({"kind": "material", "key": "보물파편", "amount": rng.randint(1, 3), "region": region_key})
-            story = "위험을 감수해 주변 구획을 더 조사했고 숨겨진 회수 지점을 찾아냈습니다."
+            story = "신호와 흔적을 차근히 대조해 숨겨진 회수 구획을 열었습니다."
+        elif action == "rescue":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=False)
+            rewards.append({"kind": "research", "key": "연구 자료", "amount": rng.randint(2, 5), "region": region_key})
+            story = "경보 장치와 잠금 구조를 안전하게 해제했습니다. 기록과 물자를 손상 없이 확보했습니다."
+        elif action == "fight":
+            score = power * rng.uniform(0.74, 1.20)
+            rewards = _roll_base_rewards(region_key, rng, enhanced=score >= threshold * 0.90, allow_special=score >= threshold * 1.08)
+            if score < threshold * 0.75:
+                hp_loss = rng.randint(3, 10)
+            story = "봉인을 강제로 열어 안쪽 물자를 회수했습니다." if not hp_loss else "강제 개방 과정에서 경보가 작동해 일부만 챙기고 빠져나왔습니다."
         else:
             rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
-            hp_loss = rng.randint(2, 9)
-            story = "구조물이 무너지기 시작해 탐색을 중단했습니다. 손에 잡힌 물자만 들고 철수했습니다."
+            story = "원격으로 위험 여부를 확인하고 노출된 물자만 안전하게 가져왔습니다."
+    elif category == "trade":
+        if action in {"fight", "rescue"}:
+            rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=False)
+            rewards.append({"kind": "food", "key": "식량", "amount": rng.randint(280, 760), "region": region_key})
+            story = f"{actor}의 이동과 거래를 도왔습니다. 상인은 약속대로 정당한 몫을 나누고 안전한 길을 알려주었습니다."
+        elif action == "search":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=True)
+            story = f"{actor}와 주변 폐허를 함께 확인해 거래품과 숨겨진 회수품을 동시에 확보했습니다."
+        else:
+            rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
+            story = f"{actor}의 신분 표식을 확인한 뒤 필요한 정보만 교환하고 자리를 떠났습니다."
+    else:
+        if action == "evade":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
+            story = "위험 구역을 크게 우회해 확보 가능한 물자만 챙겼습니다."
+        elif action == "rescue":
+            rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
+            rewards.append({"kind": "research", "key": "연구 자료", "amount": rng.randint(2, 5), "region": region_key})
+            story = "보호가 필요한 대상을 우선 확보하고 숨겨진 위치 정보를 전달받았습니다."
+        elif action == "fight":
+            score = power * rng.uniform(0.82, 1.18)
+            if score >= threshold:
+                rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=True)
+                story = "위협을 제압하고 봉쇄된 회수 구역까지 진입했습니다."
+            else:
+                rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
+                hp_loss = rng.randint(4, 13)
+                story = "교전 끝에 간신히 빠져나왔습니다. 일부 물자만 회수했습니다."
+        else:
+            score = power * rng.uniform(0.72, 1.22)
+            if score >= threshold * 0.82:
+                rewards = _roll_base_rewards(region_key, rng, enhanced=True, allow_special=True)
+                if rng.randrange(100) < 35:
+                    rewards.append({"kind": "material", "key": "보물파편", "amount": rng.randint(1, 3), "region": region_key})
+                story = "위험을 감수해 주변 구획을 더 조사했고 숨겨진 회수 지점을 찾아냈습니다."
+            else:
+                rewards = _roll_base_rewards(region_key, rng, enhanced=False, allow_special=False)
+                hp_loss = rng.randint(2, 9)
+                story = "구조물이 무너지기 시작해 탐색을 중단했습니다. 손에 잡힌 물자만 들고 철수했습니다."
+
+    if category in {"ally", "rescue"} and rng.randrange(100) < 18:
+        rewards.append({"kind": "material", "key": "보물파편", "amount": 1, "region": region_key})
     if hp_loss:
         user["hp"] = max(1, _safe_int(user.get("hp"), 100, 1) - hp_loss)
     return rewards, story, hp_loss
@@ -644,7 +931,7 @@ def register_v770_ruin_farming(
     if life_category is not None:
         additions = (
             "!파밍 / !파밍지역 / !파밍출발 지역 — 지역 선택형 폐허 회수",
-            "!파밍선택 전투/회피/구조/추가탐색 · !파밍기록",
+            "!파밍선택 선택지 · !파밍기록 · !파밍인카운트도감",
             "!공방 · !폐품감정 · !폐품분해 · !폐품수리",
             "!전파탐색 · !신호해독 번호 · !주파수기록",
             "!의뢰게시판 · !계약수락 번호 · !납품 · !계약현황",
@@ -675,27 +962,39 @@ def register_v770_ruin_farming(
     async def show_farming_route(ctx: commands.Context, region_key: str, *, encounter: bool) -> None:
         region = FARM_REGIONS[region_key]
         danger = {
-            "market": "🟢 경계 안정",
-            "residential": "🟡 잔해 위험",
-            "freight": "🟠 신호 불안정",
-            "quarantine": "🔴 오염 경보",
+            "market": "🟢 경계 안정", "residential": "🟡 잔해 위험",
+            "freight": "🟠 신호 불안정", "quarantine": "🔴 오염 경보",
         }[region_key]
-        stages = (
-            ("🚪 출발", f"{region['emoji']} **{region['name']}** 방향으로 이동을 시작합니다.\n`🚪 출발 ━━━ 🗺️ 이동 ··· 📡 탐색 ··· 📦 복귀`"),
-            ("🗺️ 이동 중", f"{danger} · 폐허 통로를 확인하고 안전 루트를 갱신합니다.\n`🚪 출발 ━━━ 🗺️ 이동 ━━━ 📡 스캔 ··· 📦 복귀`"),
-            (("🚨 위험 신호" if encounter else "✨ 발견 신호"), (
-                "주변에서 움직임과 구조 신호가 동시에 포착됐습니다. 선택이 필요합니다."
-                if encounter else "회수 가능한 물자 반응을 확인했습니다. 복귀 경로를 확보합니다."
-            ) + "\n`🚪 출발 ━━━ 🗺️ 이동 ━━━ 📡 탐지 ━━━ " + ("⚠️ 판단" if encounter else "📦 회수") + "`"),
-        )
+        atmosphere = {
+            "market": ("🛒", "깨진 진열대 사이로 이동 경로를 확보합니다."),
+            "residential": ("🏚️", "무너진 벽과 흔들리는 계단을 피해 진입합니다."),
+            "freight": ("🚇", "멈춘 화물칸 사이에서 신호를 추적합니다."),
+            "quarantine": ("☣️", "오염 수치를 확인하며 차폐 통로를 통과합니다."),
+        }[region_key]
+        stage_rows = [
+            ("🚪 출발 신호", f"{region['emoji']} **{region['name']}** 작전을 개시합니다.", 0, discord.Colour.dark_teal()),
+            ("👣 폐허 진입", atmosphere[1], 1, discord.Colour.dark_teal()),
+            ("📡 전방 스캔", f"{danger} · 생체·물자·위험 신호를 동시에 분석합니다.", 2, discord.Colour.blurple()),
+            (("🚨 접촉 경보" if encounter else "✨ 회수 신호"), (
+                "복수의 움직임이 포착됐습니다. 현장 판단이 필요합니다."
+                if encounter else "회수 가능한 물자 반응이 선명해졌습니다."
+            ), 3, discord.Colour.orange() if encounter else discord.Colour.green()),
+            (("⚠️ 판단 지점" if encounter else "📦 회수 작업"), (
+                "접촉 대상과 주변 환경을 확인하고 선택지를 준비합니다."
+                if encounter else "물자를 포장하고 안전한 복귀 경로를 고정합니다."
+            ), 3 if encounter else 4, discord.Colour.red() if encounter else discord.Colour.dark_green()),
+        ]
         message = None
-        for index, (title, description) in enumerate(stages):
+        for index, (title, description, position, colour) in enumerate(stage_rows):
+            pulse = ("▰" * (index + 1)) + ("▱" * (len(stage_rows) - index - 1))
             embed = discord.Embed(
                 title=f"{region['emoji']} 파밍 작전 진행 · {title}",
-                description=description,
-                colour=discord.Colour.orange() if encounter and index == 2 else discord.Colour.dark_teal(),
+                description=f"{description}\n\n{_route_line(position, encounter=encounter)}\n`{pulse}`",
+                colour=colour,
             )
-            embed.set_footer(text="현장 정산은 서버에 한 번만 기록됩니다")
+            embed.add_field(name="현장 경계", value=danger, inline=True)
+            embed.add_field(name="신호 상태", value="🚨 인카운트 확인" if encounter and index >= 3 else "📡 탐색 중", inline=True)
+            embed.set_footer(text="이모지 프레임을 갱신해 이동 중인 것처럼 연출합니다")
             try:
                 if message is None:
                     message = await ctx.send(embed=embed)
@@ -703,30 +1002,36 @@ def register_v770_ruin_farming(
                     await message.edit(embed=embed)
             except (discord.HTTPException, discord.Forbidden, AttributeError, TypeError):
                 return
-            if index < len(stages) - 1:
-                await asyncio.sleep(0.65)
+            if index < len(stage_rows) - 1:
+                await asyncio.sleep(0.55)
 
     async def send_encounter(ctx: commands.Context, pending: Mapping[str, Any]) -> None:
         region_key = _region_key(pending.get("region")) or "market"
         region = FARM_REGIONS[region_key]
-        encounter_index = _safe_int(pending.get("encounter_index"), 0) % len(_ENCOUNTERS)
-        encounter = _ENCOUNTERS[encounter_index]
+        encounter = _encounter_from_pending(pending)
+        category = str(encounter.get("category") or "threat")
         expires_at = _parse(pending.get("expires_at")) or (_now() + timedelta(seconds=ENCOUNTER_TTL_SECONDS))
+        choices = []
+        for action in ("fight", "evade", "rescue", "search"):
+            label, emoji, _style = _encounter_action(category, action)
+            choices.append(f"{emoji} **{label}**")
         embed = discord.Embed(
-            title=f"{region['emoji']} 랜덤 인카운트 · {encounter['title']}",
-            description=str(encounter["description"]),
-            colour=discord.Colour.orange(),
+            title=f"{encounter.get('emoji','⚠️')} 랜덤 인카운트 · {encounter['title']}",
+            description=f"{encounter['description']}\n\n`📡 신호 분석 → 👁️ 대상 식별 → ⚡ 선택 대기`",
+            colour=_category_colour(category),
         )
-        embed.add_field(name="진행 루트", value="`🚪 출발 → 🗺️ 이동 → 📡 위험 감지 → ⚠️ 현장 판단`", inline=False)
+        embed.add_field(name="신호 분류", value=_ENCOUNTER_CATEGORY_LABELS.get(category, "⚠️ 미확인"), inline=True)
+        embed.add_field(name="접촉 대상", value=f"{encounter.get('emoji','')} **{encounter.get('actor','미확인')}**", inline=True)
+        embed.add_field(name="진행 루트", value=_route_line(3, encounter=True), inline=False)
         embed.add_field(name="현재 지역", value=f"**{region['name']}** · 위험도 {region['danger']}", inline=False)
         embed.add_field(
-            name="선택",
-            value="⚔️ 전투 · 🫥 회피 · 🩹 구조 · 🔎 추가 탐색\n버튼이 사라져도 `!파밍선택 선택지`로 이어갈 수 있습니다.",
+            name="현장 선택",
+            value=" · ".join(choices) + "\n버튼이 사라져도 `!파밍선택 선택지`로 이어갈 수 있습니다.",
             inline=False,
         )
         embed.add_field(name="현장 신호 유지", value=f"<t:{int(expires_at.timestamp())}:R>", inline=True)
-        embed.set_footer(text=f"ABADDON v{VERSION} · 결과는 선택 완료 시 한 번만 정산됩니다")
-        await ctx.send(embed=embed, view=EncounterView(ctx.author.id))
+        embed.set_footer(text=f"ABADDON v{VERSION} · 같은 인카운트는 한 번만 정산됩니다")
+        await ctx.send(embed=embed, view=EncounterView(ctx.author.id, encounter))
 
     async def settle_expired(user: MutableMapping[str, Any], profile: MutableMapping[str, Any], actor_id: Any) -> Optional[str]:
         pending = profile.get("pending_encounter") if isinstance(profile.get("pending_encounter"), dict) else {}
@@ -739,11 +1044,19 @@ def register_v770_ruin_farming(
         rng = random.Random(_safe_int(pending.get("seed"), 1, 1) ^ 0x5A17)
         lines = _grant_rewards(user, profile, rewards, rng)
         region_key = _region_key(pending.get("region")) or "market"
+        encounter = _encounter_from_pending(pending)
+        encounter_key = str(encounter.get("key") or "unknown")
+        category = str(encounter.get("category") or "threat")
         profile["history"].append({
             "id": str(pending.get("id") or ""), "region": region_key, "action": "evade",
+            "encounter_key": encounter_key, "category": category,
             "auto": True, "rewards": list(lines), "resolved_at": _iso(), "hp_loss": hp_loss,
         })
         profile["stats"]["evade"] += 1
+        profile["stats"]["rescue_event" if category == "rescue" else category] += 1
+        if encounter_key not in profile["encounter_discovery"]:
+            profile["encounter_discovery"].append(encounter_key)
+        profile["recent_encounters"] = (profile["recent_encounters"] + [encounter_key])[-4:]
         profile["pending_encounter"] = {}
         save_data()
         return f"⌛ 이전 인카운트 신호가 종료되어 안전 회피로 자동 정산했습니다. {' · '.join(lines)}"
@@ -754,7 +1067,7 @@ def register_v770_ruin_farming(
             return
         action = _action_key(raw_action)
         if not action:
-            await ctx.send("⚠️ 선택지는 `전투 / 회피 / 구조 / 추가탐색` 중 하나입니다.")
+            await ctx.send("⚠️ 버튼에 표시된 행동을 고르거나 `전투 / 회피 / 구조 / 추가탐색 / 합류 / 지원 / 공동수색` 중 하나를 입력하세요.")
             return
         async with _user_lock(bot, ctx.author.id):
             profile = ensure_v770_profile(user)
@@ -781,25 +1094,71 @@ def register_v770_ruin_farming(
                 if asyncio.iscoroutine(hook_result):
                     hook_result = await hook_result
                 hook_note = str(hook_result or "")
+            encounter = _encounter_from_pending(pending)
+            encounter_key = str(encounter.get("key") or "unknown")
+            category = str(encounter.get("category") or "threat")
             profile["history"].append({
                 "id": str(pending.get("id") or ""), "region": region_key, "action": action,
+                "encounter_key": encounter_key, "category": category,
                 "auto": False, "rewards": list(lines), "resolved_at": _iso(), "hp_loss": hp_loss,
             })
             profile["stats"][action] += 1
+            profile["stats"]["rescue_event" if category == "rescue" else category] += 1
+            if encounter_key not in profile["encounter_discovery"]:
+                profile["encounter_discovery"].append(encounter_key)
+            profile["recent_encounters"] = (profile["recent_encounters"] + [encounter_key])[-4:]
             profile["pending_encounter"] = {}
             add_season_points(user, 2 if action in {"fight", "search"} else 1)
             if profile["stats"]["encounters"] >= 12:
                 add_title(user, "폐허의 현장 판단관")
+            ally_discoveries = [key for key in profile["encounter_discovery"] if _ENCOUNTER_BY_KEY.get(key, {}).get("category") == "ally"]
+            if len(ally_discoveries) >= 5:
+                add_title(user, "폐허의 신뢰받는 동료")
             save_data()
-        embed = discord.Embed(title=f"{ACTION_LABELS[action]} · 인카운트 정산", description=story, colour=discord.Colour.dark_teal())
-        embed.add_field(name="진행 루트", value=f"`🚪 출발 → 🗺️ 이동 → 🚨 인카운트 → {ACTION_LABELS[action]} → 📦 복귀`", inline=False)
+
+        encounter = _encounter_from_pending(pending)
+        category = str(encounter.get("category") or "threat")
+        action_label, action_emoji, _style = _encounter_action(category, action)
+        route_message = None
+        frames = (
+            ("⚡ 선택 실행", 3, "현장 판단을 실행합니다."),
+            ("💨 행동 진행", 4, f"{encounter.get('actor','접촉 대상')}과의 상황을 정리합니다."),
+            ("📦 물자 확보", 4, "회수 가능한 물자를 확인하고 중복 정산을 잠급니다."),
+        )
+        for index, (phase, position, detail) in enumerate(frames):
+            frame = discord.Embed(
+                title=f"{action_emoji} {phase}",
+                description=f"{detail}\n\n{_route_line(position, encounter=True)}",
+                colour=_category_colour(category),
+            )
+            frame.set_footer(text="현장 결과 계산 중" + "." * (index + 1))
+            try:
+                if route_message is None:
+                    route_message = await ctx.send(embed=frame)
+                else:
+                    await route_message.edit(embed=frame)
+            except (discord.HTTPException, discord.Forbidden, AttributeError, TypeError):
+                route_message = None
+                break
+            await asyncio.sleep(0.45)
+
+        embed = discord.Embed(title=f"{action_emoji} {action_label} · 인카운트 정산", description=story, colour=_category_colour(category))
+        embed.add_field(name="접촉 대상", value=f"{encounter.get('emoji','')} {encounter.get('actor','미확인')}", inline=True)
+        embed.add_field(name="신호 분류", value=_ENCOUNTER_CATEGORY_LABELS.get(category, "⚠️ 미확인"), inline=True)
+        embed.add_field(name="진행 루트", value=_route_line(5, encounter=True, result=True), inline=False)
         embed.add_field(name="회수 결과", value="\n".join(f"• {line}" for line in lines) or "• 확보한 물자 없음", inline=False)
         if hook_note:
             embed.add_field(name="서버 공동 대응", value=hook_note, inline=False)
         if hp_loss:
             embed.add_field(name="부상", value=f"HP -{hp_loss} · 현재 HP {max(1, _safe_int(user.get('hp'), 1))}", inline=False)
         embed.set_footer(text="같은 인카운트는 한 번만 정산됩니다")
-        await ctx.send(embed=embed)
+        if route_message is not None:
+            try:
+                await route_message.edit(embed=embed)
+            except (discord.HTTPException, discord.Forbidden, AttributeError):
+                await ctx.send(embed=embed)
+        else:
+            await ctx.send(embed=embed)
 
     async def start_farming(ctx: commands.Context, region_text: str) -> None:
         user, profile = await require_user(ctx)
@@ -843,11 +1202,14 @@ def register_v770_ruin_farming(
             encounter = rng.randrange(100) < {"market": 24, "residential": 31, "freight": 38, "quarantine": 46}[region_key]
             if encounter:
                 now = _now()
+                encounter_row = _choose_encounter(profile, region_key, rng)
+                encounter_key = str(encounter_row.get("key") or "infected")
                 pending = {
                     "id": f"FE-{secrets.token_hex(4).upper()}",
                     "region": region_key,
                     "seed": seed,
-                    "encounter_index": rng.randrange(len(_ENCOUNTERS)),
+                    "encounter_key": encounter_key,
+                    "encounter_index": next((idx for idx, row in enumerate(_ENCOUNTERS) if row.get("key") == encounter_key), 0),
                     "created_at": _iso(now),
                     "expires_at": _iso(now + timedelta(seconds=ENCOUNTER_TTL_SECONDS)),
                     "stamina_cost": cost,
@@ -937,9 +1299,15 @@ def register_v770_ruin_farming(
             self.add_item(FarmRegionSelect(owner_id))
 
     class EncounterView(discord.ui.View):
-        def __init__(self, owner_id: int) -> None:
+        def __init__(self, owner_id: int, encounter: Mapping[str, Any]) -> None:
             super().__init__(timeout=ENCOUNTER_TTL_SECONDS)
             self.owner_id = owner_id
+            category = str(encounter.get("category") or "threat")
+            for child, action in zip(self.children, ("fight", "evade", "rescue", "search")):
+                label, emoji, style = _encounter_action(category, action)
+                child.label = label
+                child.emoji = emoji
+                child.style = style
 
         async def _choose(self, interaction: discord.Interaction, action: str) -> None:
             if interaction.user.id != self.owner_id:
@@ -954,19 +1322,19 @@ def register_v770_ruin_farming(
             except (discord.HTTPException, discord.Forbidden, AttributeError):
                 pass
 
-        @discord.ui.button(label="전투", emoji="⚔️", style=discord.ButtonStyle.danger)
+        @discord.ui.button(label="행동 1", emoji="⚔️", style=discord.ButtonStyle.danger)
         async def fight(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
             await self._choose(interaction, "fight")
 
-        @discord.ui.button(label="회피", emoji="🫥", style=discord.ButtonStyle.secondary)
+        @discord.ui.button(label="행동 2", emoji="🫥", style=discord.ButtonStyle.secondary)
         async def evade(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
             await self._choose(interaction, "evade")
 
-        @discord.ui.button(label="구조", emoji="🩹", style=discord.ButtonStyle.success)
+        @discord.ui.button(label="행동 3", emoji="🩹", style=discord.ButtonStyle.success)
         async def rescue(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
             await self._choose(interaction, "rescue")
 
-        @discord.ui.button(label="추가 탐색", emoji="🔎", style=discord.ButtonStyle.primary)
+        @discord.ui.button(label="행동 4", emoji="🔎", style=discord.ButtonStyle.primary)
         async def search(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
             await self._choose(interaction, "search")
 
@@ -1456,6 +1824,37 @@ def register_v770_ruin_farming(
         lines = [f"{'✅' if key in unlocked else '🔒'} **{tech['name']}** — {tech['description']}" for key, tech in _RESEARCH.items()]
         await ctx.send("📐 **생활 기술 설계도**\n" + "\n".join(lines))
 
+    @bot.command(name="파밍인카운트도감", aliases=["폐허인카운트도감", "현장인물도감", "현장접촉기록"], help="발견한 파밍 인카운트와 우호 세력을 확인합니다.")
+    async def encounter_codex(ctx: commands.Context) -> None:
+        user, profile = await require_user(ctx)
+        if user is None or profile is None:
+            return
+        discovered = [key for key in profile.get("encounter_discovery", []) if key in _ENCOUNTER_BY_KEY]
+        by_category: Dict[str, List[Dict[str, Any]]] = {}
+        for key in discovered:
+            row = _ENCOUNTER_BY_KEY[key]
+            by_category.setdefault(str(row.get("category") or "mystery"), []).append(row)
+        embed = discord.Embed(
+            title=f"📚 {ctx.author.display_name}의 현장 인카운트 도감",
+            description="직접 마주친 접촉 대상만 기록됩니다. 발견하지 않은 대상은 이름도 공개되지 않습니다.",
+            colour=discord.Colour.blurple(),
+        )
+        order = ("ally", "rescue", "trade", "mystery", "hazard", "threat")
+        for category in order:
+            rows = by_category.get(category, [])
+            if not rows:
+                continue
+            value = "\n".join(f"{row.get('emoji','')} **{row.get('actor','미확인')}** · {row.get('title','')}" for row in rows[:8])
+            if len(rows) > 8:
+                value += f"\n외 {len(rows)-8}건"
+            embed.add_field(name=_ENCOUNTER_CATEGORY_LABELS.get(category, category), value=value[:1024], inline=False)
+        if not discovered:
+            embed.add_field(name="아직 기록 없음", value="`!파밍출발 지역`으로 현장 인카운트를 발견해보세요.", inline=False)
+        ally_count = sum(1 for key in discovered if _ENCOUNTER_BY_KEY[key].get("category") == "ally")
+        embed.add_field(name="발견 현황", value=f"전체 **{len(discovered)}/{len(_ENCOUNTERS)}** · 우호 세력 **{ally_count}**", inline=False)
+        embed.set_footer(text="중복 기록 없이 최초 발견만 도감에 추가")
+        await ctx.send(embed=embed)
+
     @bot.command(name="770안정화검수", aliases=["파밍검수", "생활기술검수", "v770검수"], help="v7.8 파밍·생활 저장 구조를 읽기 전용 검사합니다.")
     @commands.has_permissions(administrator=True)
     async def v770_audit(ctx: commands.Context) -> None:
@@ -1497,7 +1896,7 @@ def register_v770_ruin_farming(
             issues.append(f"폐품 ID 중복 {len(duplicates)}건")
         if duplicate_encounters:
             issues.append(f"인카운트 ID 중복 {len(duplicate_encounters)}건")
-        embed = discord.Embed(title="🛡️ ABADDON v7.8.0 파밍 연출·생활 시스템 안정화 검수", colour=discord.Colour.green() if not issues else discord.Colour.orange())
+        embed = discord.Embed(title="🛡️ ABADDON v8.1.1 인카운트 다양성·파밍 연출 안정화 검수", colour=discord.Colour.green() if not issues else discord.Colour.orange())
         embed.add_field(name="검사 생존자", value=str(checked), inline=True)
         embed.add_field(name="대기 인카운트", value=str(pending_count), inline=True)
         embed.add_field(name="발견 항목", value=str(len(issues)), inline=True)
@@ -1530,7 +1929,7 @@ def register_v770_ruin_farming(
     bot.v770_farming_fx_version = VERSION
     bot._abaddon_v770_registered = True
     print(
-        f"[ABADDON v{VERSION}] 폐허 파밍·공방·전파·계약·연구 등록 완료: "
-        f"지역={len(FARM_REGIONS)} 인카운트={len(_ENCOUNTERS)} 연구={len(_RESEARCH)} 삭제=0",
+        f"[ABADDON v{VERSION}] 파밍 인카운트 다양성·연출 등록 완료: "
+        f"지역={len(FARM_REGIONS)} 인카운트={len(_ENCOUNTERS)} 우호={sum(1 for row in _ENCOUNTERS if row.get('category') == 'ally')} 연구={len(_RESEARCH)} 삭제=0",
         flush=True,
     )

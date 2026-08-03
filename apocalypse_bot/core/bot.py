@@ -5685,6 +5685,14 @@ register_v810_world_map_ux(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V8.1.1: 파밍 인카운트 20종 · 우호/구조 세력 · 접촉별 동적 선택 버튼 · 이모지 프레임 이동 연출
+# 기존 파밍 저장과 명령을 유지하며 최근 조우 반복을 완화하고 구버전 인덱스 저장도 복구합니다.
+from apocalypse_bot.commands.v811_encounter_variety import register_v811_encounter_variety
+register_v811_encounter_variety(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "8.1.0"
+VERSION = "8.1.1"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -194,8 +194,9 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("farming_menu", "폐허 파밍", "지역을 고르고 물자 회수 또는 랜덤 인카운트를 진행합니다.", "파밍"),
             _a("farming_regions", "파밍 지역", "레벨·위험도·주요 회수 물자를 확인합니다.", "파밍지역"),
             _a("farming_start", "파밍 출발", "마트·주거구역·화물역·격리구역 중 하나로 출발합니다.", "파밍출발", "예: 화물역", force_modal=True),
-            _a("farming_choice", "인카운트 선택", "전투·회피·구조·추가 탐색 중 현장 행동을 선택합니다.", "파밍선택", "예: 추가탐색", force_modal=True),
+            _a("farming_choice", "인카운트 선택", "접촉 대상에 맞춰 합류·지원·돌파·우회·공동 수색 등 현장 행동을 선택합니다.", "파밍선택", "예: 합류", force_modal=True),
             _a("farming_history", "파밍 기록", "회수 결과와 인카운트 선택 기록을 확인합니다.", "파밍기록"),
+            _a("farming_encounter_codex_v811", "파밍 인카운트 도감", "직접 발견한 우호 세력·구조 요청·위험·미확인 접촉을 확인합니다.", "파밍인카운트도감"),
             _a("workshop", "폐허 복구 공방", "미감정 폐품과 감정 완료 폐품을 확인합니다.", "공방"),
             _a("scrap_identify", "폐품 감정", "미감정 폐품을 분석해 복구 대상을 확인합니다.", "폐품감정", "선택: 폐품 ID", force_modal=False),
             _a("scrap_dismantle", "폐품 분해", "감정 완료 폐품을 분해해 생활 재료를 회수합니다.", "폐품분해", "선택: 폐품 ID", force_modal=False),
@@ -212,6 +213,7 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("research_progress", "연구 진행", "진행 중 연구의 남은 시간과 완료 상태를 확인합니다.", "연구진행"),
             _a("blueprints", "생활 설계도", "해금한 생활 기술과 잠긴 설계도를 확인합니다.", "설계도"),
             _a("v770_stability", "v7.8 파밍 안정화 검수", "파밍·인카운트·공방·계약·연구 저장 구조와 진행 연출을 읽기 전용 검사합니다.", "770안정화검수"),
+            _a("v811_stability", "v8.1.1 인카운트 검수", "인카운트 다양성·우호 세력·동적 버튼·이모지 프레임 연출을 읽기 전용 검사합니다.", "811안정화검수"),
             _a("disaster_status", "서버 공동 재난", "현재 서버 재난과 공동 대응 진행도를 확인합니다.", "재난상황"),
             _a("disaster_missions", "재난 대응 임무", "현장 역할과 납품 가능한 물자를 확인합니다.", "재난임무"),
             _a("disaster_join", "재난 현장 참여", "정찰·구조·수리·방어 역할로 현장 대응에 참여합니다.", "재난참여", "예: 구조", force_modal=True),
@@ -564,7 +566,7 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
     ),
     "life": (
         ("activities", "🌲 생활 활동", "알바와 채집 활동, 자원·인카운트 기록입니다.", ("work", "coin", "gather", "fish", "lumber", "mine", "resources", "encounter_codex")),
-        ("ruin_farming", "🧭 폐허 파밍·생활 기술", "지역 파밍, 인카운트, 폐품 공방, 전파 해독, 납품과 연구를 실행합니다.", ("farming_menu", "farming_regions", "farming_start", "farming_choice", "farming_history", "workshop", "scrap_identify", "scrap_dismantle", "scrap_repair", "signal_search_v770", "signal_decode_v770", "signal_history_v770", "contract_board", "contract_accept", "contract_deliver", "contract_status", "laboratory", "research_start", "research_progress", "blueprints", "v770_stability")),
+        ("ruin_farming", "🧭 폐허 파밍·생활 기술", "지역 파밍, 다채로운 인카운트, 우호 세력, 폐품 공방, 전파 해독, 납품과 연구를 실행합니다.", ("farming_menu", "farming_regions", "farming_start", "farming_choice", "farming_history", "farming_encounter_codex_v811", "workshop", "scrap_identify", "scrap_dismantle", "scrap_repair", "signal_search_v770", "signal_decode_v770", "signal_history_v770", "contract_board", "contract_accept", "contract_deliver", "contract_status", "laboratory", "research_start", "research_progress", "blueprints", "v770_stability", "v811_stability")),
         ("server_disaster", "🚨 서버 공동 재난", "서버 전체가 현장 역할과 자원 납품으로 재난을 해결하고 기여 보상·버프를 받습니다.", ("disaster_status", "disaster_missions", "disaster_join", "disaster_deliver", "disaster_ranking", "disaster_reward", "disaster_buff", "disaster_spawn", "disaster_settle", "v780_stability")),
         ("base", "🏕️ 기지·세계 이벤트", "기지 성장, 날씨, 운세, 무전과 방어전입니다.", ("base", "base_build", "base_upgrade", "base_collect", "weather", "daily_fortune", "radio_signal", "hazard_zone", "random_box", "base_defense", "base_defense_attack")),
         ("market", "📦 자원 시장", "자원을 사고팔거나 기지 칩으로 교환합니다.", ("resource_market", "resource_buy", "resource_sell", "base_chip_exchange")),
