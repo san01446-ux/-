@@ -86,18 +86,25 @@ def _reservation_root(world_data: Dict[str, Any]) -> Dict[str, Any]:
     return root
 
 
-async def _safe_edit(message: Optional[discord.Message], *, embed: discord.Embed, view: Optional[discord.ui.View]) -> None:
+async def _safe_edit(message: Optional[discord.Message], *, embed: discord.Embed, view: Optional[discord.ui.View]) -> bool:
+    """Edit a game message with one retry and report whether it was published.
+
+    Older callers intentionally ignore the return value.  Final-result paths in
+    v10.9 use it to send a fresh fallback message when Discord can no longer
+    edit the original interaction message.
+    """
     if message is None:
-        return
+        return False
     try:
         await message.edit(embed=embed, view=view)
-        return
+        return True
     except (discord.HTTPException, OSError, asyncio.TimeoutError):
         await asyncio.sleep(0.8)
     try:
         await message.edit(embed=embed, view=view)
+        return True
     except Exception:
-        return
+        return False
 
 
 def _poker_score(hand: Sequence[Card]) -> Tuple[Tuple[int, ...], str]:

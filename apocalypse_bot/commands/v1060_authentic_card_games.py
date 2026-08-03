@@ -196,6 +196,7 @@ class DebtCardSession(BaseCardSession):
     def __init__(self, lobby: CardLobbyView, *, timeout: float) -> None:
         super().__init__(lobby, timeout=timeout)
         self.human_paid: Dict[int, int] = {uid: 0 for uid in _human_ids(self.player_ids)}
+        self.opening_chips: Dict[int, int] = {uid: casino_chips(self.get_user(uid)) for uid in _human_ids(self.player_ids)}
         self.pot = self.bet * len(self.player_ids)
 
     def _reserve(self) -> None:
@@ -257,6 +258,34 @@ class DebtCardSession(BaseCardSession):
 
     def net_earnings(self, uid: int, payout: int = 0) -> int:
         return int(payout) - int(self.human_paid.get(int(uid), 0))
+
+    def settlement_text(self, uid: int, payout: int = 0) -> str:
+        """Localized game-only delta and current wallet for final result cards."""
+        if _is_ai(uid):
+            return _t(getattr(self, "locale", "ko"), "AI 좌석", "AI seat")
+        locale = getattr(self, "locale", "ko")
+        net = self.net_earnings(uid, payout)
+        current = casino_chips(self.get_user(uid))
+        before = current - net
+        sign = "+" if net >= 0 else ""
+        if locale == "ko":
+            return f"이번 게임 **{sign}{net:,}칩** · 잔액 **{before:,} → {current:,}칩**"
+        return f"Game net **{sign}{net:,} chips** · balance **{before:,} → {current:,}**"
+
+
+async def _publish_final(session: DebtCardSession, embed: discord.Embed) -> bool:
+    """Publish a final result reliably, falling back to a new channel message."""
+    published = await _safe_edit(session.message, embed=embed, view=session)
+    if published:
+        return True
+    channel = getattr(session.message, "channel", None)
+    if channel is None or not hasattr(channel, "send"):
+        return False
+    try:
+        session.message = await channel.send(embed=embed, view=session)
+        return True
+    except Exception:
+        return False
 
 
 class RaiseModal(discord.ui.Modal):
@@ -728,13 +757,17 @@ class AuthenticPokerSession(DebtCardSession):
         self._close_reservation(); self.save_data(); self.done = True
         rows = []
         for uid in self.player_ids:
-            if uid in self.betting.folded:
-                rows.append(f"▫️ **{self.names[uid]}** · {_t(self.locale, '폴드', 'Folded')}"); continue
             payout = high_payouts.get(uid, 0) + low_payouts.get(uid, 0)
-            label = scores[uid][1]
-            low = lows[uid]
-            rows.append(f"{'🏆' if payout else '▫️'} **{self.names[uid]}** · {label} · Low {low or '-'}" + (f" · +{payout:,}" if payout else ""))
-            if not _is_ai(uid): _record(self.get_user(uid), self.variant, "win" if payout else "loss", self.net_earnings(uid, payout), versus_ai=AI_ID in self.player_ids)
+            if uid in self.betting.folded:
+                detail = _t(self.locale, "폴드", "Folded")
+            else:
+                label = scores[uid][1]
+                low = lows[uid]
+                detail = f"{label} · Low {low or '-'}"
+            money = self.settlement_text(uid, payout)
+            rows.append(f"{'🏆' if payout else '▫️'} **{self.names[uid]}** · {detail}\n└ {money}")
+            if not _is_ai(uid):
+                _record(self.get_user(uid), self.variant, "win" if payout else "loss", self.net_earnings(uid, payout), versus_ai=AI_ID in self.player_ids)
         await self._finish_message(rows)
 
     def _pay_partial(self, winners: Sequence[int], amount: int) -> Dict[int, int]:
@@ -751,22 +784,24 @@ class AuthenticPokerSession(DebtCardSession):
         payouts = self._pay_debt_pot(winners)
         rows = []
         for uid in self.player_ids:
+            payout = payouts.get(uid, 0)
             if uid in self.betting.folded:
-                rows.append(f"▫️ **{self.names[uid]}** · {_t(self.locale, '폴드', 'Folded')}")
+                detail = _t(self.locale, "폴드", "Folded")
             else:
                 value = scores.get(uid) if scores else None
                 label = value[1] if value else _t(self.locale, "마지막 생존", "Last player standing")
                 cards = " ".join(_card_text(c) for c in self.hands.get(uid, []))
-                payout = payouts.get(uid, 0)
-                rows.append(f"{'🏆' if uid in winners else '▫️'} **{self.names[uid]}** · {cards} · **{_poker_label(label, self.locale)}**" + (f" · +{payout:,}" if payout else ""))
+                detail = f"{cards} · **{_poker_label(label, self.locale)}**"
+            rows.append(f"{'🏆' if uid in winners else '▫️'} **{self.names[uid]}** · {detail}\n└ {self.settlement_text(uid, payout)}")
             if not _is_ai(uid):
-                payout = payouts.get(uid, 0)
                 _record(self.get_user(uid), self.variant, "win" if uid in winners else "loss", self.net_earnings(uid, payout), versus_ai=AI_ID in self.player_ids)
         await self._finish_message(rows)
 
     async def _finish_message(self, rows: Sequence[str]) -> None:
         self._disable(); ACTIVE_GAMES.pop(self.channel_id, None)
-        await _safe_edit(self.message, embed=self.embed(_t(self.locale, "🏆 최종 승부가 공개됐습니다.\n\n", "🏆 Final showdown.\n\n") + "\n".join(rows)), view=self)
+        title = _t(self.locale, "🏆 승부 결과 · 최종 정산\n\n", "🏆 Match Result · Final Settlement\n\n")
+        embed = self.embed(title + "\n".join(rows))
+        await _publish_final(self, embed)
         self.stop()
 
     async def on_timeout(self) -> None:
@@ -878,6 +913,7 @@ class AuthenticBlackjackSession(DebtCardSession):
         dealer_total = self.value(self.dealer)
         payouts: Dict[int, int] = {}
         rows = []
+        outcome_labels = {"win": _t(self.locale, "승리", "WIN"), "draw": _t(self.locale, "무승부", "PUSH"), "loss": _t(self.locale, "패배", "LOSS")}
         for uid in self.player_ids:
             total = self.value(self.hands[uid])
             natural = len(self.hands[uid]) == 2 and total == 21
@@ -888,11 +924,11 @@ class AuthenticBlackjackSession(DebtCardSession):
             else: outcome, returned = "loss", 0
             if not _is_ai(uid) and returned:
                 add_casino_chips(self.get_user(uid), returned); payouts[uid] = returned
-            rows.append(f"{'🏆' if outcome == 'win' else ('➖' if outcome == 'draw' else '▫️')} **{self.names[uid]}** · {' '.join(_card_text(c) for c in self.hands[uid])} · {total}" + (f" · +{returned:,}" if returned else ""))
+            rows.append(f"{'🏆' if outcome == 'win' else ('➖' if outcome == 'draw' else '▫️')} **{self.names[uid]}** · **{outcome_labels[outcome]}** · {' '.join(_card_text(c) for c in self.hands[uid])} · {total}\n└ {self.settlement_text(uid, returned)}")
             if not _is_ai(uid): _record(self.get_user(uid), "블랙잭", outcome, returned - self.human_paid.get(uid, 0), total, AI_ID in self.player_ids)
         self._close_reservation(); self.save_data(); self._disable(); ACTIVE_GAMES.pop(self.channel_id, None)
-        detail = f"{_t(self.locale, '딜러', 'Dealer')}: {' '.join(_card_text(c) for c in self.dealer)} · **{dealer_total}**\n\n" + "\n".join(rows)
-        await _safe_edit(self.message, embed=self.embed(detail), view=self); self.stop()
+        detail = _t(self.locale, "🏆 승부 결과 · 최종 정산\n", "🏆 Match Result · Final Settlement\n") + f"{_t(self.locale, '딜러', 'Dealer')}: {' '.join(_card_text(c) for c in self.dealer)} · **{dealer_total}**\n\n" + "\n".join(rows)
+        await _publish_final(self, self.embed(detail)); self.stop()
 
     async def on_timeout(self) -> None:
         if self.done: return
@@ -949,15 +985,17 @@ class AuthenticBaccaratSession(DebtCardSession):
         if self.done: return
         self.done = True; deck = _deck(); player, banker = baccarat_deal(deck); outcome = baccarat_outcome(player, banker)
         rows = []
+        outcome_labels = {"win": _t(self.locale, "승리", "WIN"), "draw": _t(self.locale, "적중 반환", "RETURN"), "loss": _t(self.locale, "패배", "LOSS")}
+        choice_labels = {"player": _t(self.locale, "플레이어", "Player"), "banker": _t(self.locale, "뱅커", "Banker"), "tie": _t(self.locale, "타이", "Tie")}
         for uid in self.player_ids:
             returned = baccarat_return(self.bet, self.choices[uid], outcome)
             if returned and not _is_ai(uid): add_casino_chips(self.get_user(uid), returned)
             result = "win" if returned > self.bet else ("draw" if returned == self.bet else "loss")
-            rows.append(f"{'🏆' if returned else '▫️'} **{self.names[uid]}** · {self.choices[uid]}" + (f" · +{returned:,}" if returned else ""))
+            rows.append(f"{'🏆' if result == 'win' else ('➖' if result == 'draw' else '▫️')} **{self.names[uid]}** · {choice_labels.get(self.choices[uid], self.choices[uid])} · **{outcome_labels[result]}**\n└ {self.settlement_text(uid, returned)}")
             if not _is_ai(uid): _record(self.get_user(uid), "바카라", result, returned - self.human_paid.get(uid, 0), baccarat_total(player), AI_ID in self.player_ids)
         self._close_reservation(); self.save_data(); self._disable(); ACTIVE_GAMES.pop(self.channel_id, None)
-        detail = f"🔵 Player: {' '.join(_card_text(c) for c in player)} · **{baccarat_total(player)}**\n🔴 Banker: {' '.join(_card_text(c) for c in banker)} · **{baccarat_total(banker)}**\n🏁 **{outcome.upper()}**\n\n" + "\n".join(rows)
-        await _safe_edit(self.message, embed=self.embed(detail), view=self); self.stop()
+        detail = _t(self.locale, "🏆 승부 결과 · 최종 정산\n", "🏆 Match Result · Final Settlement\n") + f"🔵 Player: {' '.join(_card_text(c) for c in player)} · **{baccarat_total(player)}**\n🔴 Banker: {' '.join(_card_text(c) for c in banker)} · **{baccarat_total(banker)}**\n🏁 **{outcome.upper()}**\n\n" + "\n".join(rows)
+        await _publish_final(self, self.embed(detail)); self.stop()
 
     async def on_timeout(self) -> None:
         if self.done: return
@@ -1081,13 +1119,19 @@ class AuthenticSeotdaSession(DebtCardSession):
         if self.done: return
         self.done = True; payouts = self._pay_debt_pot(winners); rows = []
         for uid in self.player_ids:
-            if uid in self.permanent_folded or uid in self.betting.folded: rows.append(f"▫️ **{self.names[uid]}** · {_t(self.locale, '폴드', 'Folded')}"); continue
-            rank = ranks[uid] if ranks and uid in ranks else (seotda_rank(self.hands[uid]) if len(self.hands[uid]) == 2 else None)
-            cards = " ".join(f"🎴{card.label}" for card in self.hands[uid]); payout = payouts.get(uid, 0)
-            rows.append(f"{'🏆' if uid in winners else '▫️'} **{self.names[uid]}** · {cards} · **{rank.name if rank else '-'}**" + (f" · +{payout:,}" if payout else ""))
+            payout = payouts.get(uid, 0)
+            if uid in self.permanent_folded or uid in self.betting.folded:
+                detail = _t(self.locale, "폴드", "Folded")
+                rank = None
+            else:
+                rank = ranks[uid] if ranks and uid in ranks else (seotda_rank(self.hands[uid]) if len(self.hands[uid]) == 2 else None)
+                cards = " ".join(f"🎴{card.label}" for card in self.hands[uid])
+                detail = f"{cards} · **{rank.name if rank else '-'}**"
+            rows.append(f"{'🏆' if uid in winners else '▫️'} **{self.names[uid]}** · {detail}\n└ {self.settlement_text(uid, payout)}")
             if not _is_ai(uid): _record(self.get_user(uid), "섯다", "win" if uid in winners else "loss", self.net_earnings(uid, payout), int(rank.category if rank else 0), AI_ID in self.player_ids)
         self._disable(); ACTIVE_GAMES.pop(self.channel_id, None)
-        await _safe_edit(self.message, embed=self.embed(_t(self.locale, "🏆 섯다 승부 공개\n\n", "🏆 Seotda showdown\n\n") + "\n".join(rows)), view=self); self.stop()
+        detail = _t(self.locale, "🏆 섯다 승부 결과 · 최종 정산\n\n", "🏆 Seotda Result · Final Settlement\n\n") + "\n".join(rows)
+        await _publish_final(self, self.embed(detail)); self.stop()
 
     async def on_timeout(self) -> None:
         if self.done: return
@@ -1394,10 +1438,11 @@ class AuthenticGoStopSession(DebtCardSession):
         payouts = self._pay_debt_pot(winners); rows = []
         for uid in self.player_ids:
             summary = self.score(uid); payout = payouts.get(uid, 0) + extra_wins.get(uid, 0)
-            rows.append(f"{'🏆' if uid in winners else '▫️'} **{self.names[uid]}** · **{summary.score}{_t(self.locale, '점', ' pts')}** · {_hwatu_labels(summary.labels, self.locale)} · {_t(self.locale, '고', 'Go')} {self.go_counts[uid]} · 💣{self.engine.bombs[uid]} 〰️{self.engine.shakes[uid]}" + (f" · +{payout:,}" if payout else ""))
+            rows.append(f"{'🏆' if uid in winners else '▫️'} **{self.names[uid]}** · **{summary.score}{_t(self.locale, '점', ' pts')}** · {_hwatu_labels(summary.labels, self.locale)} · {_t(self.locale, '고', 'Go')} {self.go_counts[uid]} · 💣{self.engine.bombs[uid]} 〰️{self.engine.shakes[uid]}\n└ {self.settlement_text(uid, payout)}")
             if not _is_ai(uid): _record(self.get_user(uid), self.mode, "win" if uid in winners else "loss", payout - self.human_paid.get(uid, 0), summary.score, AI_ID in self.player_ids)
         self.save_data(); self._disable(); ACTIVE_GAMES.pop(self.channel_id, None)
-        await _safe_edit(self.message, embed=self.embed(_t(self.locale, "🏆 최종 정산 · 배수 상한 없음\n", "🏆 Final settlement · uncapped multipliers\n") + "\n".join(reason_rows + rows)), view=self); self.stop()
+        detail = _t(self.locale, "🏆 승부 결과 · 최종 정산 · 배수 상한 없음\n", "🏆 Match Result · Final Settlement · uncapped multipliers\n") + "\n".join(reason_rows + rows)
+        await _publish_final(self, self.embed(detail)); self.stop()
 
     async def on_timeout(self) -> None:
         if self.done: return

@@ -1228,11 +1228,32 @@ class AuthenticOneCardSession(OneCardSession):
     async def start(self)->None:self._reserve();await self.update();await self.run_ai()
     async def finish(self,winner:int)->None:
         if self.done:return
-        before={u:casino_chips(self.get_user(u)) for u in self.player_ids if not is_ai(u)}
-        await super().finish(winner)
-        after={u:casino_chips(self.get_user(u)) for u in before}
-        record_table_results(self,{u:("win" if u==winner else "loss") for u in self.player_ids},{u:after[u]-before[u]-self.bet for u in before})
-        self.save_data()
+        self.done=True
+        payouts=self._pay([winner])
+        rows=[]
+        outcomes={}
+        earnings={}
+        for u in self.player_ids:
+            payout=int(payouts.get(u,0))
+            net=payout-int(self.bet)
+            outcomes[u]="win" if u==winner else "loss"
+            if is_ai(u):
+                money=_t(self.public_locale,"AI 좌석","AI seat")
+            else:
+                current=casino_chips(self.get_user(u));before=current-net;sign="+" if net>=0 else ""
+                money=(f"이번 게임 **{sign}{net:,}칩** · 잔액 **{before:,} → {current:,}칩**" if self.public_locale=="ko" else f"Game net **{sign}{net:,} chips** · balance **{before:,} → {current:,}**")
+                earnings[u]=net
+            rows.append(f"{'🏆' if u==winner else '▫️'} **{self.names[u]}** · {_t(self.public_locale,'승리','WIN') if u==winner else _t(self.public_locale,'패배','LOSS')}\n└ {money}")
+        record_table_results(self,outcomes,earnings)
+        self.save_data();self._disable();ACTIVE_GAMES.pop(self.channel_id,None)
+        final=_t(self.public_locale,"🏆 원카드 승부 결과 · 최종 정산\n\n","🏆 One Card Result · Final Settlement\n\n")+"\n".join(rows)
+        embed=self.embed(final);published=await _safe_edit(self.message,embed=embed,view=self)
+        if not published:
+            channel=getattr(self.message,"channel",None)
+            if channel is not None and hasattr(channel,"send"):
+                try:self.message=await channel.send(embed=embed,view=self)
+                except Exception:pass
+        self.stop()
     async def run_ai(self)->None:
         if self._ai_running:return
         self._ai_running=True
@@ -1301,9 +1322,30 @@ class AuthenticJokerSession(JokerSession):
         await self.update()
     async def finish(self,loser:int)->None:
         if self.done:return
-        before={u:casino_chips(self.get_user(u)) for u in self.player_ids if not is_ai(u)}
-        await super().finish(loser)
-        after={u:casino_chips(self.get_user(u)) for u in before};record_table_results(self,{u:("loss" if u==loser else "win") for u in self.player_ids},{u:after[u]-before[u]-self.bet for u in before});self.save_data()
+        self.done=True
+        winners=[u for u in self.player_ids if u!=loser]
+        payouts=self._pay(winners)
+        rows=[];outcomes={};earnings={}
+        for u in self.player_ids:
+            payout=int(payouts.get(u,0));net=payout-int(self.bet);won=u!=loser
+            outcomes[u]="win" if won else "loss"
+            if is_ai(u):
+                money=_t(self.public_locale,"AI 좌석","AI seat")
+            else:
+                current=casino_chips(self.get_user(u));before=current-net;sign="+" if net>=0 else ""
+                money=(f"이번 게임 **{sign}{net:,}칩** · 잔액 **{before:,} → {current:,}칩**" if self.public_locale=="ko" else f"Game net **{sign}{net:,} chips** · balance **{before:,} → {current:,}**")
+                earnings[u]=net
+            rows.append(f"{'🏆' if won else '💀'} **{self.names[u]}** · {_t(self.public_locale,'승리','WIN') if won else _t(self.public_locale,'마지막 조커 · 패배','Final Joker · LOSS')}\n└ {money}")
+        record_table_results(self,outcomes,earnings)
+        self.save_data();self._disable();ACTIVE_GAMES.pop(self.channel_id,None)
+        final=_t(self.public_locale,"🏆 조커잡기 승부 결과 · 최종 정산\n\n","🏆 Old Maid Result · Final Settlement\n\n")+"\n".join(rows)
+        embed=self.embed(final);published=await _safe_edit(self.message,embed=embed,view=self)
+        if not published:
+            channel=getattr(self.message,"channel",None)
+            if channel is not None and hasattr(channel,"send"):
+                try:self.message=await channel.send(embed=embed,view=self)
+                except Exception:pass
+        self.stop()
     async def run_ai(self)->None:
         if self._ai_running:return
         self._ai_running=True

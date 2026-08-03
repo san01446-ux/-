@@ -5755,7 +5755,15 @@ register_v1060_authentic_card_games(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V10.6.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.9.0: v10.7~v10.9 통합 — 신규 실전 카드 9종 · 카드룸/관전/리플레이
+# 아바돈 난이도/성향 · 정보 대시보드 · 부채/재기 · 카드 리그/명예의 전당 · 최신패치 전용 검수
+# 기존 카드 16종과 저장 데이터를 유지하고 전체 25종에 아바돈 초대 경로를 연결합니다.
+from apocalypse_bot.commands.v1090_integrated_renewal import register_v1090_integrated_renewal
+register_v1090_integrated_renewal(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V10.9.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)
