@@ -393,6 +393,11 @@ class BaseCardSession(discord.ui.View):
         self.message = lobby.message
         self.channel_id = lobby.channel_id
         self.pot = self.bet * len(self.player_ids)
+        # v11.0.0: keep the pre-game wallet so every legacy card result can
+        # show exact net change and balance before→after, including debt.
+        self.opening_chips: Dict[int, int] = {
+            uid: casino_chips(self.get_user(uid)) for uid in self.player_ids if uid >= 0
+        }
         self.game_id = f"{self.kind}-{self.channel_id}-{int(time.time() * 1000)}"
         self.done = False
         self.lock = asyncio.Lock()
@@ -450,6 +455,16 @@ class BaseCardSession(discord.ui.View):
     def _disable(self) -> None:
         for child in self.children:
             child.disabled = True
+
+    def settlement_text(self, uid: int) -> str:
+        """v11.0.0 game-only net and wallet before→after for legacy modes."""
+        if uid < 0:
+            return "AI 좌석"
+        before = int(self.opening_chips.get(uid, casino_chips(self.get_user(uid))))
+        after = int(casino_chips(self.get_user(uid)))
+        net = after - before
+        sign = "+" if net >= 0 else ""
+        return f"이번 게임 **{sign}{net:,}칩** · 잔액 **{before:,} → {after:,}칩**"
 
     async def start(self) -> None:
         raise NotImplementedError
@@ -583,7 +598,7 @@ class PokerSession(BaseCardSession):
             _, label = scored[uid]
             marker = "🏆" if uid in winners else "▫️"
             payout = f" · +{payouts[uid]:,}칩" if uid in payouts else ""
-            rows.append(f"{marker} **{self.names[uid]}** · {' '.join(_card_text(card) for card in self.hands[uid])} · **{label}**{payout}")
+            rows.append(f"{marker} **{self.names[uid]}** · {' '.join(_card_text(card) for card in self.hands[uid])} · **{label}**{payout}\n└ {self.settlement_text(uid)}")
         self._disable()
         ACTIVE_GAMES.pop(self.channel_id, None)
         await _safe_edit(self.message, embed=self.embed(reason + "\n\n" + "\n".join(rows)), view=self)
@@ -766,7 +781,9 @@ class OneCardSession(BaseCardSession):
         payout = self._pay([winner])[winner]
         self._disable()
         ACTIVE_GAMES.pop(self.channel_id, None)
-        text = f"🏆 **{self.names[winner]}** 님이 패를 모두 비워 승리했습니다!\n상금 **+{payout:,}칩**"
+        result_rows = [f"🏆 **{self.names[winner]}** 님이 패를 모두 비워 승리했습니다!\n상금 **+{payout:,}칩**"]
+        result_rows.extend(f"{'🏆' if uid == winner else '▫️'} **{self.names[uid]}**\n└ {self.settlement_text(uid)}" for uid in self.player_ids)
+        text = "\n\n".join(result_rows)
         await _safe_edit(self.message, embed=self.embed(text), view=self)
         self.stop()
 
@@ -906,8 +923,8 @@ class JokerSession(BaseCardSession):
         self.done = True
         winners = [uid for uid in self.player_ids if uid != loser]
         payouts = self._pay(winners)
-        rows = [f"💀 **{self.names[loser]}** 님이 마지막 조커를 보유했습니다."]
-        rows.extend(f"🏆 **{self.names[uid]}** · +{payouts[uid]:,}칩" for uid in winners)
+        rows = [f"💀 **{self.names[loser]}** 님이 마지막 조커를 보유했습니다.\n└ {self.settlement_text(loser)}"]
+        rows.extend(f"🏆 **{self.names[uid]}** · +{payouts[uid]:,}칩\n└ {self.settlement_text(uid)}" for uid in winners)
         self._disable()
         ACTIVE_GAMES.pop(self.channel_id, None)
         await _safe_edit(self.message, embed=self.embed("\n".join(rows)), view=self)

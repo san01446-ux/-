@@ -15,14 +15,13 @@ from apocalypse_bot.commands.v1090_integrated_renewal import _dashboard
 from apocalypse_bot.commands.v1091_card_dashboard_hotfix import CATEGORIES
 from apocalypse_bot.commands.v1060_authentic_card_games import GAME_EN
 from apocalypse_bot.commands.v1092_visual_assets import build_card_catalog, build_profile_card, build_world_map_card, dashboard_font_status
-from apocalypse_bot.commands.v1092_horse_racing_rules import FINISH, HORSES, advance_positions, choose_winner, race_settlement
+from apocalypse_bot.commands.v1092_horse_racing_rules import FINISH, HORSES, advance_positions, choose_winner, crossing_winner, race_settlement
 from apocalypse_bot.commands import v810_world_map_ux as world_map_runtime
 
 VERSION = "10.9.2"
 V1093_PROFILE_USES_DISCORD_AVATAR = True
 PATCH_DATE = "2026-08-03"
 MIN_RACE_BET = 1_000
-FINISH = 34
 ACTIVE_RACES: set[int] = set()
 LIVE_RACE_STATES: Dict[int, Dict[str, Any]] = {}
 
@@ -87,13 +86,18 @@ def _recover_interrupted_races(user_data: Mapping[Any, Any]) -> int:
 
 
 def _track(locale: str, positions: Sequence[int], selected: Optional[int] = None) -> str:
+    """Render every lane against one shared fixed finish coordinate."""
     rows: List[str] = []
     for index, (horse, pos) in enumerate(zip(HORSES, positions)):
+        marker = min(FINISH, max(0, int(pos)))
         lane = ["·"] * FINISH
-        marker = min(FINISH - 1, max(0, int(pos)))
-        lane[marker] = horse["emoji"]
-        prefix = "👉" if selected == index else f"{index + 1}."
-        rows.append(f"{prefix} **{_name(horse, locale)}**  {''.join(lane)} 🏁")
+        if marker < FINISH:
+            lane[marker] = "●"
+        prefix = "👉" if selected == index else "▫️"
+        rows.append(f"{prefix} **{index + 1}. {_name(horse, locale)}** · {marker}/{FINISH}")
+        # The lane starts on its own line, so different horse-name lengths can
+        # never move the checkered flag.
+        rows.append(f"`   [{''.join(lane)}|🏁]`")
     return "\n".join(rows)
 
 
@@ -349,9 +353,12 @@ def register_v1092_visual_status_horserace(
             positions = [0] * len(HORSES)
             tick = 0
             try:
+                winner: Optional[int] = None
                 while max(positions) < FINISH:
                     tick += 1
+                    previous_positions = list(positions)
                     positions = advance_positions(positions)
+                    winner = crossing_winner(previous_positions, positions)
                     leader_index = max(range(len(positions)), key=lambda idx: int(positions[idx]))
                     LIVE_RACE_STATES[self.owner_id] = {
                         "owner_id": self.owner_id,
@@ -371,10 +378,11 @@ def register_v1092_visual_status_horserace(
                     except discord.HTTPException:
                         pass
                     await asyncio.sleep(1.4)
-                    if tick >= 30:
+                    if winner is not None or tick >= 30:
                         break
 
-                winner = choose_winner(positions)
+                if winner is None:
+                    winner = choose_winner(positions)
                 horse = HORSES[winner]
                 gross, expected_net = race_settlement(self.bet, selected, winner)
                 if gross:

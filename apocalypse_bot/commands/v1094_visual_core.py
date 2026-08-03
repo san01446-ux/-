@@ -12,11 +12,12 @@ import os
 from pathlib import Path
 import re
 import urllib.request
+import json
 from typing import Iterable, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "10.9.5"
+VERSION = "11.0.0"
 FONT_CACHE = Path(os.getenv("ABADDON_FONT_CACHE", "/tmp/abaddon-fonts"))
 FONT_URLS = {
     "regular": os.getenv(
@@ -29,6 +30,45 @@ FONT_URLS = {
     ),
 }
 FONT_NAMES = {"regular": "NotoSansCJKkr-Regular.otf", "bold": "NotoSansCJKkr-Bold.otf"}
+
+HWATU_ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "hwatu_v1100"
+HWATU_MANIFEST_PATH = HWATU_ASSET_ROOT / "manifest.json"
+
+@lru_cache(maxsize=1)
+def _hwatu_manifest() -> dict[str, dict[str, str]]:
+    try:
+        raw = json.loads(HWATU_MANIFEST_PATH.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+def _hwatu_slot(card: object) -> int:
+    """Map the live rule card to one of the four original ABADDON artworks."""
+    category = str(getattr(card, "category", "junk"))
+    uid = int(getattr(card, "uid", 0) or 0)
+    if category.startswith("bright"):
+        return 4
+    if category.startswith("ribbon"):
+        return 2
+    if category.startswith("animal"):
+        return 3
+    # Two junk cards exist in most months. Alternate the two remaining pieces
+    # without changing rule identity or exposing a predictable deck order.
+    return 1 if uid % 2 == 0 else 4
+
+@lru_cache(maxsize=64)
+def _hwatu_asset(month: int, slot: int) -> Image.Image | None:
+    try:
+        rel = _hwatu_manifest().get(str(int(month)), {}).get(str(int(slot)))
+        if not rel:
+            return None
+        path = HWATU_ASSET_ROOT / rel
+        if not path.is_file():
+            return None
+        return Image.open(path).convert("RGB")
+    except Exception:
+        return None
+
 
 _FONT_CANDIDATES = {
     "regular": (
@@ -262,12 +302,23 @@ def draw_hwatu_card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], c
         "junk": (170, 143, 96),
     }
     color = palette.get(category, (170, 143, 96))
-    rounded(draw, box, 10, fill=(248, 240, 219), outline=color, width=3)
-    draw.rectangle((x1+5, y1+5, x2-5, y1+24), fill=color)
-    draw.text(((x1+x2)//2, y1+37), f"{month}월", font=font(18, True), fill=(36, 31, 28), anchor="ma")
+    asset = _hwatu_asset(month, _hwatu_slot(card))
+    if asset is not None:
+        target_w, target_h = max(1, x2-x1), max(1, y2-y1)
+        rendered = asset.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        draw._image.paste(rendered, (x1, y1))
+        rounded(draw, box, 10, fill=None, outline=color, width=max(2, target_w//30))
+    else:
+        rounded(draw, box, 10, fill=(248, 240, 219), outline=color, width=3)
+        draw.rectangle((x1+5, y1+5, x2-5, y1+24), fill=color)
+        draw.text(((x1+x2)//2, y1+37), f"{month}월", font=font(18, True), fill=(36, 31, 28), anchor="ma")
     short = {
         "bright": "광", "bright_rain": "비광", "animal": "열끗", "animal_godori": "고도리",
         "animal_doublejunk": "쌍피", "ribbon_blue": "청단", "ribbon_red_poetry": "홍단",
         "ribbon_red_plain": "초단", "ribbon": "띠", "junk": "피",
     }.get(category, "패")
-    draw.text(((x1+x2)//2, y2-23), short, font=font(15, True), fill=color, anchor="mm")
+    badge_w = max(30, int((x2-x1)*0.58))
+    badge_h = max(18, int((y2-y1)*0.17))
+    bx1=(x1+x2-badge_w)//2; by2=y2-5; by1=by2-badge_h
+    draw.rounded_rectangle((bx1,by1,bx1+badge_w,by2),radius=max(4,badge_h//3),fill=(20,18,23,225),outline=color,width=2)
+    draw.text(((x1+x2)//2,(by1+by2)//2),short,font=fit_font(draw,short,badge_w-8,max(12,badge_h-5),9,bold=True),fill=color,anchor="mm")

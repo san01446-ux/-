@@ -31,8 +31,20 @@ def advance_positions(positions: Sequence[int], rng: random.Random | Any = rando
             burst += rng.choice([0, 1])
         if rng.random() < max(0.02, rating - 0.9) * 0.16:
             burst += 1
-        next_positions.append(current + max(0, int(burst)))
+        next_positions.append(min(FINISH, current + max(0, int(burst))))
     return next_positions
+
+
+def crossing_winner(previous: Sequence[int], current: Sequence[int], rng: random.Random | Any = random) -> int | None:
+    """Return a winner only when a horse crosses the one shared finish line."""
+    if len(previous) != len(HORSES) or len(current) != len(HORSES):
+        raise ValueError("invalid race position count")
+    crossers = [index for index, value in enumerate(current) if int(value) >= FINISH and int(previous[index]) < FINISH]
+    if not crossers:
+        return None
+    # A simultaneous photo finish is resolved among horses that crossed on the
+    # same visible tick. Every lane still uses the exact same FINISH coordinate.
+    return int(rng.choice(crossers))
 
 
 def choose_winner(positions: Sequence[int], rng: random.Random | Any = random) -> int:
@@ -59,7 +71,12 @@ def simulate_race(seed: int, max_ticks: int = 30) -> Tuple[List[int], int, int]:
     rng = random.Random(int(seed))
     positions = [0] * len(HORSES)
     ticks = 0
+    winner = None
     while max(positions) < FINISH and ticks < max_ticks:
+        previous = list(positions)
         positions = advance_positions(positions, rng)
         ticks += 1
-    return positions, choose_winner(positions, rng), ticks
+        winner = crossing_winner(previous, positions, rng)
+        if winner is not None:
+            break
+    return positions, int(winner if winner is not None else choose_winner(positions, rng)), ticks

@@ -68,7 +68,7 @@ def _footer(draw: ImageDraw.ImageDraw, session: Any, note: str="") -> None:
     locale=_locale(session)
     current=_current(session); names=_names(session)
     turn=(names.get(current,"ABADDON") if current is not None else ("종료" if locale=="ko" else "Finished"))
-    text=(f"현재 차례: {turn} · 음수 잔액 허용 · 상한 없음" if locale=="ko" else f"Turn: {turn} · negative balance · uncapped")
+    text=(f"현재 차례: {turn} · 음수 잔액 허용 · 자유 레이즈(안전 한도)" if locale=="ko" else f"Turn: {turn} · negative balance · free raise with safety limit")
     if note:text += f" · {clean_text(note)}"
     draw.text((52,676), truncate(draw,text,font(17),1170), font=font(17), fill=MUTED)
     draw.text((1228,676), f"v{VERSION}", font=font(16,True), fill=PURPLE, anchor="ra")
@@ -262,28 +262,61 @@ def _generic(session: Any, embed: Any|None) -> BytesIO:
     _players_panel(draw,session,y=485,height=170);_footer(draw,session);return png(image)
 
 
+
+
+def _final_overlay(buffer: BytesIO, session: Any, embed: Any|None) -> BytesIO:
+    if not getattr(session, "done", False) or embed is None:
+        return buffer
+    try:
+        buffer.seek(0)
+        image=Image.open(buffer).convert("RGB")
+        draw=ImageDraw.Draw(image)
+        locale=_locale(session)
+        lines=[]
+        description=clean_text(getattr(embed,"description","") or "")
+        if description:
+            lines.append(description)
+        for field in list(getattr(embed,"fields",[]) or []):
+            name=clean_text(getattr(field,"name","") or "")
+            value=clean_text(getattr(field,"value","") or "")
+            if name or value:
+                lines.append(f"{name}: {value}" if name else value)
+        summary=" · ".join(lines)
+        # The final result must always be readable even when the game-specific
+        # table used this area for action information.
+        rounded(draw,(682,112,1236,482),22,fill=(25,23,31),outline=GREEN,width=4)
+        draw.text((710,136),"🏆 최종 승부 결과" if locale=="ko" else "🏆 Final Result",font=font(25,True),fill=GOLD)
+        draw_wrapped(draw,(710,184),summary,font(17),490,fill=TEXT,max_lines=11,spacing=7)
+        return png(image)
+    except Exception:
+        try: buffer.seek(0)
+        except Exception: pass
+        return buffer
+
 def render_session_table(session: Any, embed: Any|None=None) -> BytesIO | None:
     if session is None or not hasattr(session,"player_ids"):
         return None
     name=session.__class__.__name__
     try:
         if hasattr(session,"engine") and hasattr(getattr(session,"engine"),"floor"):
-            return _hwatu(session,embed)
-        if name in {"CaptureHwatuSession"}:
-            return _hwatu(session,embed)
-        if "Poker" in name or (hasattr(session,"betting") and hasattr(session,"hands") and hasattr(session,"board")):
-            return _poker(session,embed)
-        if "Blackjack" in name:
-            return _blackjack(session,embed)
-        if "Baccarat" in name:
-            return _baccarat(session,embed)
-        if "Seotda" in name or "KoreanShowdown" in name:
-            return _seotda(session,embed)
-        if "OneCard" in name:
-            return _onecard(session,embed)
-        if "Joker" in name or "OldMaid" in name:
-            return _joker(session,embed)
-        return _generic(session,embed)
+            result=_hwatu(session,embed)
+        elif name in {"CaptureHwatuSession"}:
+            result=_hwatu(session,embed)
+        elif "Poker" in name or (hasattr(session,"betting") and hasattr(session,"hands") and hasattr(session,"board")):
+            result=_poker(session,embed)
+        elif "Blackjack" in name:
+            result=_blackjack(session,embed)
+        elif "Baccarat" in name:
+            result=_baccarat(session,embed)
+        elif "Seotda" in name or "KoreanShowdown" in name:
+            result=_seotda(session,embed)
+        elif "OneCard" in name:
+            result=_onecard(session,embed)
+        elif "Joker" in name or "OldMaid" in name:
+            result=_joker(session,embed)
+        else:
+            result=_generic(session,embed)
+        return _final_overlay(result,session,embed)
     except Exception:
         return None
 

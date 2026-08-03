@@ -107,7 +107,7 @@ def _catalog_embed(bot: commands.Bot, locale: str) -> discord.Embed:
         embed.add_field(name=_t(locale, ko_name, en_name), value=value, inline=False)
     embed.add_field(
         name=_t(locale, "공통 경제 규칙", "Shared Economy Rules"),
-        value=_t(locale, "잔액 음수 허용 · 노리밋 · 베팅/배수/최종 정산 상한 없음 · 파산신청 연동", "Negative balances · no-limit · uncapped bets/multipliers/settlement · bankruptcy integration"),
+        value=_t(locale, "잔액 음수 허용 · 자유 레이즈 안전 한도 · 배수/최종 정산 상한 없음 · 파산신청 연동", "Negative balances · free-raise safety limit · uncapped multipliers/settlement · bankruptcy integration"),
         inline=False,
     )
     embed.set_footer(text=_t(locale, "아래 선택 메뉴에서 게임을 골라 상세 카드를 여세요.", "Choose a game below to open its detail card."))
@@ -167,7 +167,7 @@ def register_v1091_card_dashboard_hotfix(
             self.amount = discord.ui.TextInput(placeholder=str(MIN_BET), min_length=1, max_length=100)
             label_cls = getattr(discord.ui, "Label", None)
             if label_cls is not None:
-                self.add_item(label_cls(text=_t(locale, "판돈", "Stake"), description=_t(locale, "음수 잔액 허용 · 입력 상한 없음", "Negative balances allowed · no input cap"), component=self.amount))
+                self.add_item(label_cls(text=_t(locale, "판돈", "Stake"), description=_t(locale, "음수 잔액 허용 · 서버 안전 한도 안에서 자유 입력", "Negative balances · free input within the server safety limit"), component=self.amount))
             else:  # Compatibility only for older discord.py installations.
                 self.amount = discord.ui.TextInput(label=_t(locale, "판돈", "Stake"), placeholder=str(MIN_BET), min_length=1, max_length=100)
                 self.add_item(self.amount)

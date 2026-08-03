@@ -27,7 +27,7 @@ from apocalypse_bot.commands.v1060_authentic_card_games import (
     AuthenticBaccaratSession, AuthenticBlackjackSession, AuthenticGoStopSession,
     AuthenticJokerSession, AuthenticOneCardSession, AuthenticPokerSession,
     AuthenticSeotdaSession, DebtCardSession, V1060LobbyView, _AILobby, _display,
-    _hwatu_lite_text, _hwatu_summary_lite, _is_ai, _publish_final, _record,
+    _hwatu_lite_text, _hwatu_summary_lite, _is_ai, _publish_final, _record, _v1100_raise_limit,
 )
 from apocalypse_bot.commands.v1090_rules import (
     ai_risk, dashboard_health, dice_card_score, dori_rank, greedy_melds,
@@ -788,6 +788,10 @@ class NoLimitRaiseModal(discord.ui.Modal):
         except ValueError:
             await interaction.response.send_message(_t(self.locale, "숫자로 입력하세요.", "Enter a number."), ephemeral=True)
             return
+        limit = _v1100_raise_limit(self.session)
+        if value > limit:
+            await interaction.response.send_message(_t(self.locale, f"레이즈 안전 한도는 {limit:,}칩입니다. 잔액을 넘는 손실은 음수로 유지됩니다.", f"Raise safety limit is {limit:,} chips. Losses beyond the wallet remain negative."), ephemeral=True)
+            return
         await self.session.raise_to(interaction, self.uid, value)
 
 
@@ -825,7 +829,7 @@ class KoreanShowdownSession(LoggedDebtSession):
         embed.add_field(name=_t(self.locale, "공개 단계", "Reveal Stage"), value=f"{self.revealed}/{len(next(iter(self.hands.values())))}", inline=True)
         embed.add_field(name=_t(self.locale, "현재 콜", "Current Bet"), value=f"{self.betting.current_bet:,}", inline=True)
         embed.add_field(name=_t(self.locale, "팟", "Pot"), value=f"{self.pot:,}", inline=True)
-        embed.set_footer(text=_t(self.locale, "노리밋 · 잔액 음수 허용 · 폴드 시 납부액 반환 없음", "No-limit · negative balances · folded payments stay in the pot"))
+        embed.set_footer(text=_t(self.locale, "자유 레이즈 · 잔액 음수 허용 · 서버 안전 한도 · 폴드 시 납부액 반환 없음", "Free raise · negative balances · server safety limit · folded payments stay in the pot"))
         return embed
 
     async def start(self) -> None:
@@ -869,6 +873,10 @@ class KoreanShowdownSession(LoggedDebtSession):
 
     async def raise_to(self, interaction: discord.Interaction, uid: int, target: int) -> None:
         locale = _interaction_locale(self.bot, interaction)
+        limit = _v1100_raise_limit(self)
+        if int(target) > limit:
+            await interaction.response.send_message(_t(locale, f"레이즈 안전 한도는 {limit:,}칩입니다.", f"Raise safety limit is {limit:,} chips."), ephemeral=True)
+            return
         async with self.lock:
             if uid != self.current_uid:
                 await interaction.response.send_message(_t(locale, "차례가 바뀌었습니다.", "The turn changed."), ephemeral=True)
@@ -1288,7 +1296,7 @@ def register_v1090_integrated_renewal(
         public_locale = _locale(bot, 0, getattr(ctx.guild, "id", 0))
         lobby = V1060LobbyView(bot=bot, kind=kind, host=ctx.author, bet=int(bet), get_user=get_user, save_data=save_data, world_data=world_data, user_data=user_data, start_factory=factory.build, min_players=factory.minimum, max_players=factory.maximum, allow_abaddon=True, public_locale=public_locale)
         lobby.channel_id = channel_id
-        note = _t(public_locale, "🤖 아바돈 초대 가능 · 잔액 음수 허용 · 베팅/정산 상한 없음", "🤖 ABADDON available · negative balances · no betting/settlement cap")
+        note = _t(public_locale, "🤖 아바돈 초대 가능 · 잔액 음수 허용 · 자유 레이즈 안전 한도 · 정산 상한 없음", "🤖 ABADDON available · negative balances · free-raise safety limit · uncapped settlement")
         message = await ctx.send(embed=lobby.embed(note), view=lobby)
         lobby.message = message
         ACTIVE_LOBBIES[channel_id] = lobby
@@ -1462,7 +1470,7 @@ def register_v1090_integrated_renewal(
             locale = _ctx_locale(bot, ctx)
             embed = _dashboard(bot, locale, "🃏 ABADDON 카드게임 센터 · 25종", "🃏 ABADDON Card Center · 25 Modes", "실제 턴·선택·베팅으로 진행하며 혼자일 때 아바돈을 초대할 수 있습니다.", "Games use real turns, choices and betting; invite ABADDON when playing alone.")
             embed.add_field(name=_t(locale, "신규 9종", "Nine New Modes"), value=" · ".join(f"{GAME_EMOJI[k]} {_game_display(k,locale)}" for k in NEW_GAMES), inline=False)
-            embed.add_field(name=_t(locale, "경제", "Economy"), value=_t(locale, "잔액 음수 허용 · 노리밋 · 정산 상한 없음 · 파산신청 유지", "Negative balances · no-limit · uncapped settlement · bankruptcy preserved"), inline=False)
+            embed.add_field(name=_t(locale, "경제", "Economy"), value=_t(locale, "잔액 음수 허용 · 자유 레이즈 안전 한도 · 정산 상한 없음 · 파산신청 유지", "Negative balances · free-raise safety limit · uncapped settlement · bankruptcy preserved"), inline=False)
             embed.add_field(name=_t(locale, "관리", "Management"), value=_t(locale, "`!카드룸` · `!관전` · `!게임리플레이` · `!아바돈난이도`", "`!cardroom` · `!spectate` · `!gamereplay` · `!abaddondifficulty`"), inline=False)
             await ctx.send(embed=embed, view=AllGameMenu(locale))
         card_menu.callback = v1090_card_menu
@@ -1643,7 +1651,7 @@ def register_v1090_integrated_renewal(
             embed.add_field(name=_t(locale,"카지노 칩","Casino Chips"), value=f"**{chips:,}**", inline=True)
             embed.add_field(name=_t(locale,"식량","Food"), value=f"**{int(user.get('balance',0)):,}**", inline=True)
             embed.add_field(name=_t(locale,"상태","Status"), value=_t(locale,"파산 가능" if chips < 0 else "정상","Bankruptcy available" if chips < 0 else "Stable"), inline=True)
-            embed.add_field(name=_t(locale,"경제 규칙","Economy Rules"), value=_t(locale,"음수 허용 · 베팅/레이즈/배수/정산 상한 없음 · `!파산신청` 유지","Negative balances · uncapped bets/raises/multipliers/settlement · `!bankruptcy` preserved"), inline=False)
+            embed.add_field(name=_t(locale,"경제 규칙","Economy Rules"), value=_t(locale,"음수 허용 · 베팅/레이즈는 서버 안전 한도 · 배수/정산 상한 없음 · `!파산신청` 유지","Negative balances · server safety limit for bets/raises · uncapped multipliers/settlement · `!bankruptcy` preserved"), inline=False)
         elif panel == "companion":
             companions = user.get("v1010_companions", user.get("companions", {}))
             embed = _dashboard(bot, locale, "🤝 동료 대시보드", "🤝 Companion Dashboard", "영입·배치·훈련 상태를 카드형 패널로 표시합니다.", "Shows recruitment, assignment and training in one card.", discord.Color.dark_teal())

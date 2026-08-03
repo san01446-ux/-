@@ -10,6 +10,9 @@ import asyncio
 import random
 import re
 import time
+import hashlib
+import json
+import secrets
 from collections import Counter
 from dataclasses import dataclass
 from itertools import combinations
@@ -88,6 +91,20 @@ VERSION = "10.6.0"
 PATCH_DATE = "2026-08-03"
 AI_ID = -1060
 AI_ID_2 = -1061
+V1100_DEFAULT_RAISE_LIMIT = 1_000_000_000_000_000
+V1100_HARD_RAISE_LIMIT = 1_000_000_000_000_000_000
+
+def _v1100_raise_limit(session: Any) -> int:
+    try:
+        root = session.world_data.setdefault("v1100_game_city", {})
+        settings = root.setdefault("betting", {})
+        guilds = settings.setdefault("guilds", {})
+        guild_id = int(getattr(getattr(session.message, "guild", None), "id", 0) or 0)
+        row = guilds.get(str(guild_id), {}) if isinstance(guilds, Mapping) else {}
+        value = int(row.get("max_raise", settings.get("default_max_raise", V1100_DEFAULT_RAISE_LIMIT)))
+    except Exception:
+        value = V1100_DEFAULT_RAISE_LIMIT
+    return max(1_000, min(V1100_HARD_RAISE_LIMIT, value))
 AI_IDS = frozenset({AI_ID, AI_ID_2})
 Card = Tuple[int, str]
 
@@ -190,6 +207,51 @@ def _record(user: MutableMapping[str, Any], game: str, outcome: str, earnings: i
         pass
 
 
+def _fairness_snapshot(session: Any) -> str:
+    def serial(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {str(k): serial(v) for k, v in sorted(value.items(), key=lambda item: str(item[0]))}
+        if isinstance(value, (list, tuple)):
+            return [serial(v) for v in value]
+        if isinstance(value, set):
+            return sorted(serial(v) for v in value)
+        if hasattr(value, "__dict__"):
+            return serial(vars(value))
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        return repr(value)
+    state = {
+        "kind": getattr(session, "kind", "card"),
+        "variant": getattr(session, "variant", None),
+        "mode": getattr(session, "mode", None),
+        "players": list(getattr(session, "player_ids", [])),
+        "deck": serial(getattr(session, "deck", [])),
+        "hands": serial(getattr(session, "hands", {})),
+        "board": serial(getattr(session, "board", [])),
+        "dealer": serial(getattr(session, "dealer", [])),
+    }
+    engine = getattr(session, "engine", None)
+    if engine is not None:
+        state["engine"] = {
+            "stock": serial(getattr(engine, "stock", [])),
+            "floor": serial(getattr(engine, "floor", [])),
+            "hands": serial(getattr(engine, "hands", {})),
+        }
+    return json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+def _create_fairness_commitment(session: Any) -> None:
+    if getattr(session, "fairness_commit", None):
+        return
+    secret = secrets.token_hex(16)
+    payload = _fairness_snapshot(session)
+    commit = hashlib.sha256(f"{secret}|{payload}".encode("utf-8")).hexdigest()
+    session.fairness_secret = secret
+    session.fairness_payload = payload
+    session.fairness_commit = commit
+
+def _verify_fairness(secret: str, payload: str, commit: str) -> bool:
+    return hashlib.sha256(f"{secret}|{payload}".encode("utf-8")).hexdigest() == str(commit)
+
 class DebtCardSession(BaseCardSession):
     """Base session that intentionally permits negative wallets and uncapped bets."""
 
@@ -206,6 +268,7 @@ class DebtCardSession(BaseCardSession):
                 add_casino_chips(self.get_user(uid), -self.bet)
                 self.human_paid[uid] += self.bet
                 deducted.append(uid)
+            _create_fairness_commitment(self)
             root = _reservation_root(self.world_data)
             root["reservations"][self.game_id] = {
                 "kind": self.kind,
@@ -213,7 +276,9 @@ class DebtCardSession(BaseCardSession):
                 "players": list(self.player_ids),
                 "created_at": int(time.time()),
                 "negative_balance_allowed": True,
-                "uncapped": True,
+                "uncapped": False,
+                "raise_safety_limit": _v1100_raise_limit(self),
+                "fairness_commit": getattr(self, "fairness_commit", ""),
             }
             self.save_data()
         except Exception:
@@ -273,8 +338,47 @@ class DebtCardSession(BaseCardSession):
         return f"Game net **{sign}{net:,} chips** · balance **{before:,} → {current:,}**"
 
 
+def _enhance_final_result(session: DebtCardSession, embed: discord.Embed) -> discord.Embed:
+    locale = getattr(session, "locale", "ko")
+    description = str(embed.description or "")
+    winners = re.findall(r"🏆\s+\*\*(.+?)\*\*", description)
+    if not winners:
+        winners = re.findall(r"승리[:· ]+([^\n]+)", description) if locale == "ko" else re.findall(r"Winner[:· ]+([^\n]+)", description)
+    if winners and not any(str(field.name) in {"🏆 승자", "🏆 Winner"} for field in embed.fields):
+        embed.add_field(name=_t(locale, "🏆 승자", "🏆 Winner"), value=" · ".join(dict.fromkeys(winners))[:1024], inline=False)
+    settlement_rows=[]
+    ledger_players=[]
+    for uid in _human_ids(getattr(session, "player_ids", [])):
+        before=int(getattr(session, "opening_chips", {}).get(uid, casino_chips(session.get_user(uid))))
+        after=casino_chips(session.get_user(uid))
+        net=after-before
+        sign="+" if net>=0 else ""
+        name=str(getattr(session, "names", {}).get(uid, uid))
+        settlement_rows.append(_t(locale, f"**{name}** · {sign}{net:,}칩 · {before:,} → {after:,}칩", f"**{name}** · {sign}{net:,} chips · {before:,} → {after:,}"))
+        ledger_players.append({"user_id":uid,"name":name,"before":before,"after":after,"net":net})
+    if settlement_rows and not any(str(field.name) in {"💰 잔액 정산", "💰 Balance Settlement"} for field in embed.fields):
+        embed.add_field(name=_t(locale, "💰 잔액 정산", "💰 Balance Settlement"), value="\n".join(settlement_rows)[:1024], inline=False)
+    commit=str(getattr(session,"fairness_commit","") or "")
+    secret=str(getattr(session,"fairness_secret","") or "")
+    payload=str(getattr(session,"fairness_payload","") or "")
+    verified=bool(commit and secret and payload and _verify_fairness(secret,payload,commit))
+    if commit and not any(str(field.name) in {"🔐 공정성 검증", "🔐 Fairness"} for field in embed.fields):
+        embed.add_field(name=_t(locale,"🔐 공정성 검증","🔐 Fairness"),value=_t(locale,f"커밋 `{commit[:16]}` · 검증 {'성공' if verified else '실패'} · `!셔플검증 {session.game_id}`",f"Commit `{commit[:16]}` · {'verified' if verified else 'failed'} · `!shuffleverify {session.game_id}`"),inline=False)
+    root=session.world_data.setdefault("v1100_game_city",{})
+    ledger=root.setdefault("settlements",[])
+    if not any(str(row.get("game_id"))==str(session.game_id) for row in ledger if isinstance(row,Mapping)):
+        ledger.insert(0,{
+            "game_id":str(session.game_id),"kind":str(getattr(session,"variant",getattr(session,"mode",session.kind))),
+            "winners":list(dict.fromkeys(winners)),"pot":int(getattr(session,"pot",0) or 0),"players":ledger_players,
+            "commit":commit,"secret":secret,"payload":payload,"verified":verified,"at":int(time.time()),
+        })
+        del ledger[200:]
+        session.save_data()
+    return embed
+
 async def _publish_final(session: DebtCardSession, embed: discord.Embed) -> bool:
     """Publish a final result reliably, falling back to a new channel message."""
+    embed = _enhance_final_result(session, embed)
     published = await _safe_edit(session.message, embed=embed, view=session)
     if published:
         return True
@@ -321,6 +425,10 @@ class RaiseModal(discord.ui.Modal):
             target = int(str(self.amount.value).replace(",", "").strip())
         except ValueError:
             await interaction.response.send_message(_t(locale, "숫자로 입력하세요.", "Enter a number."), ephemeral=True)
+            return
+        limit = _v1100_raise_limit(self.session)
+        if target > limit:
+            await interaction.response.send_message(_t(locale, f"한 번에 입력할 수 있는 총 베팅 안전 한도는 {limit:,}칩입니다. 잔액과는 무관하며 패배 시 음수 잔액이 유지됩니다.", f"The per-action safety limit is {limit:,} chips. It is not tied to your balance, and losses may still make it negative."), ephemeral=True)
             return
         await self.session.raise_action(interaction, self.uid, target)
 
@@ -442,7 +550,7 @@ class AuthenticPokerSession(DebtCardSession):
         if self.exchange_pending:
             names = ", ".join(self.names[uid] for uid in self.exchange_pending)
             embed.add_field(name=_t(self.locale, "교환 선택 대기", "Waiting for Draw/Discard"), value=names, inline=False)
-        embed.set_footer(text=_t(self.locale, "노리밋 · 잔액 음수 허용 · 상한 없음 · 시간 초과 시 실제 납부액 환불", "No-limit · negative balances allowed · no cap · timeout refunds actual payments"))
+        embed.set_footer(text=_t(self.locale, "자유 레이즈 · 잔액 음수 허용 · 서버 안전 한도 · 시간 초과 시 실제 납부액 환불", "Free raise · negative balances allowed · server safety limit · timeout refunds actual payments"))
         return embed
 
     async def start(self) -> None:
@@ -536,6 +644,9 @@ class AuthenticPokerSession(DebtCardSession):
 
     async def raise_action(self, interaction: discord.Interaction, uid: int, target: int) -> None:
         locale = _interaction_locale(self.bot, interaction)
+        limit = _v1100_raise_limit(self)
+        if int(target) > limit:
+            await interaction.response.send_message(_t(locale, f"레이즈 안전 한도는 {limit:,}칩입니다.", f"Raise safety limit is {limit:,} chips."), ephemeral=True); return
         async with self.lock:
             if uid != self.current_uid or self.exchange_pending:
                 await interaction.response.send_message(_t(locale, "현재 레이즈할 수 없습니다.", "You cannot raise now."), ephemeral=True); return
@@ -1101,6 +1212,9 @@ class AuthenticSeotdaSession(DebtCardSession):
 
     async def raise_action(self, interaction: discord.Interaction, uid: int, target: int) -> None:
         locale = _interaction_locale(self.bot, interaction)
+        limit = _v1100_raise_limit(self)
+        if int(target) > limit:
+            await interaction.response.send_message(_t(locale, f"레이즈 안전 한도는 {limit:,}칩입니다.", f"Raise safety limit is {limit:,} chips."), ephemeral=True); return
         async with self.lock:
             if uid != self.current_uid:
                 await interaction.response.send_message(_t(locale, "현재 레이즈할 수 없습니다.", "You cannot raise now."), ephemeral=True); return
@@ -1525,7 +1639,7 @@ class V1060LobbyView(V1050LobbyView):
         )
         embed.add_field(
             name=_t(locale, "경제 규칙", "Economy"),
-            value=_t(locale, "잔액 음수 허용 · 노리밋 · 배수/정산 상한 없음 · 파산신청 가능", "Negative balances · no-limit · uncapped multipliers/settlement · bankruptcy available"),
+            value=_t(locale, "잔액 음수 허용 · 자유 레이즈(서버 안전 한도) · 배수/정산 상한 없음 · 파산신청 가능", "Negative balances · free raise with server safety limit · uncapped multipliers/settlement · bankruptcy available"),
             inline=False,
         )
         embed.add_field(
@@ -1620,7 +1734,7 @@ def register_v1060_authentic_card_games(
         if uid not in user_data and str(uid) not in user_data: return False, _t(locale, "먼저 가입하세요.", "Register first.")
         factory, minimum, maximum = factory_for(kind); public_locale = _locale(bot, 0, getattr(interaction.guild, "id", 0))
         lobby = V1060LobbyView(bot=bot, kind=kind, host=interaction.user, bet=int(bet), get_user=get_user, save_data=save_data, world_data=world_data, user_data=user_data, start_factory=factory, min_players=minimum, max_players=maximum, allow_abaddon=True, public_locale=public_locale)
-        lobby.channel_id = channel_id; message = await channel.send(embed=lobby.embed(_t(public_locale, "💳 잔액이 부족해도 시작 시 음수로 내려갑니다. 추가 베팅과 배수에는 상한이 없습니다.", "💳 The wallet may go negative at start. Extra bets and multipliers are uncapped.")), view=lobby); lobby.message = message; ACTIVE_LOBBIES[channel_id] = lobby
+        lobby.channel_id = channel_id; message = await channel.send(embed=lobby.embed(_t(public_locale, "💳 잔액이 부족해도 음수로 내려갑니다. 추가 베팅은 서버 안전 한도 안에서 자유 입력하며 화투 배수는 상한이 없습니다.", "💳 The wallet may go negative. Extra bets are free within the server safety limit; hwatu multipliers remain uncapped.")), view=lobby); lobby.message = message; ACTIVE_LOBBIES[channel_id] = lobby
         return True, _t(locale, f"✅ {_display(kind, locale)} 실전 방 생성: {message.jump_url}", f"✅ Created authentic {_display(kind, locale)} lobby: {message.jump_url}")
 
     async def create_lobby_ctx(ctx: commands.Context, kind: str, bet: int) -> None:
@@ -1631,7 +1745,7 @@ def register_v1060_authentic_card_games(
         if channel_id in ACTIVE_LOBBIES or channel_id in ACTIVE_GAMES: await ctx.send(_t(locale, "⚠️ 이 채널에서 이미 게임이 진행 중입니다.", "⚠️ A game is already active in this channel.")); return
         factory, minimum, maximum = factory_for(kind); public_locale = _locale(bot, 0, getattr(ctx.guild, "id", 0))
         lobby = V1060LobbyView(bot=bot, kind=kind, host=ctx.author, bet=int(bet), get_user=get_user, save_data=save_data, world_data=world_data, user_data=user_data, start_factory=factory, min_players=minimum, max_players=maximum, allow_abaddon=True, public_locale=public_locale)
-        lobby.channel_id = channel_id; message = await ctx.send(embed=lobby.embed(_t(public_locale, "💳 잔액 음수 허용 · 베팅/배수 상한 없음", "💳 Negative balances allowed · no betting/multiplier cap")), view=lobby); lobby.message = message; ACTIVE_LOBBIES[channel_id] = lobby
+        lobby.channel_id = channel_id; message = await ctx.send(embed=lobby.embed(_t(public_locale, "💳 잔액 음수 허용 · 자유 레이즈 안전 한도 · 배수 상한 없음", "💳 Negative balances · free-raise safety limit · uncapped multipliers")), view=lobby); lobby.message = message; ACTIVE_LOBBIES[channel_id] = lobby
 
     async def authentic_ai_starter(interaction: discord.Interaction, kind: str, bet: int) -> None:
         locale = _interaction_locale(bot, interaction); uid = int(interaction.user.id)
@@ -1777,7 +1891,7 @@ def register_v1060_authentic_card_games(
                 description=_t(locale, "미니게임 4종과 실전 카드게임 16종을 선택합니다. 카드게임은 자동 비교 없이 실제 턴·베팅·선택으로 진행됩니다.", "Choose four quick mini-games or 16 authentic card modes. Card games use real turns, betting and choices instead of instant comparison."),
                 color=discord.Color.purple(),
             )
-            embed.add_field(name=_t(locale, "카드 경제", "Card Economy"), value=_t(locale, "잔액 음수 허용 · 노리밋 · 배수/정산 상한 없음", "Negative balances · no-limit · uncapped multipliers/settlement"), inline=False)
+            embed.add_field(name=_t(locale, "카드 경제", "Card Economy"), value=_t(locale, "잔액 음수 허용 · 자유 레이즈 안전 한도 · 배수/정산 상한 없음", "Negative balances · free-raise safety limit · uncapped multipliers/settlement"), inline=False)
             await ctx.send(embed=embed, view=AuthenticAIMenu(locale, currency, amount))
         ai_menu_command.callback = authentic_ai_menu
 
@@ -1801,7 +1915,7 @@ def register_v1060_authentic_card_games(
         async def authentic_menu(ctx: commands.Context) -> None:
             locale = _ctx_locale(bot, ctx)
             embed = discord.Embed(title=_t(locale, f"🃏 ABADDON 실전 카드게임 {len(AUTHENTIC_GAMES)}종", f"🃏 ABADDON Authentic Card Games · {len(AUTHENTIC_GAMES)} Modes"), description=_t(locale, "자동 패 비교를 폐기했습니다. 각 게임의 턴·선택·베팅·공개 단계를 직접 진행합니다. 혼자면 아바돈을 초대할 수 있습니다.", "Automatic hand comparison has been removed. Play each game's turns, choices, betting streets and reveals. Invite ABADDON when alone."), color=discord.Color.dark_purple())
-            embed.add_field(name=_t(locale, "경제 규칙", "Economy"), value=_t(locale, "잔액 음수 허용 · 노리밋 · 배수 상한 없음 · 파산신청 연계", "Negative balances · no-limit · uncapped multipliers · bankruptcy remains available"), inline=False)
+            embed.add_field(name=_t(locale, "경제 규칙", "Economy"), value=_t(locale, "잔액 음수 허용 · 자유 레이즈 안전 한도 · 배수 상한 없음 · 파산신청 연계", "Negative balances · free-raise safety limit · uncapped multipliers · bankruptcy remains available"), inline=False)
             embed.add_field(name=_t(locale, "신규", "New"), value=_t(locale, "섯다 · 실제 고스톱/맞고 턴 엔진 · 전 포커 거리별 베팅", "Seotda · true Go-Stop/Matgo turns · street betting across poker modes"), inline=False)
             await ctx.send(embed=embed, view=AuthenticGameMenu(create_lobby_interaction, locale))
         menu_command.callback = authentic_menu
@@ -1838,7 +1952,7 @@ def register_v1060_authentic_card_games(
             (_t(locale, "카드게임 16종", "16 card modes"), len(AUTHENTIC_GAMES) == 16),
             (_t(locale, "섯다 등록", "Seotda registered"), bot.get_command("섯다") is not None),
             (_t(locale, "실전 고스톱 엔진", "Authentic Go-Stop engine"), GoStopEngine is not None),
-            (_t(locale, "노리밋 빚 베팅", "No-limit debt betting"), DebtBettingRound is not None),
+            (_t(locale, "자유 레이즈 빚 베팅", "Free-raise debt betting"), DebtBettingRound is not None),
             (_t(locale, "잔액 음수 저장", "Negative wallet storage"), casino_chips({"black_casino": {"chips": -1}}) <= 0),
             (_t(locale, "아바돈 실전 세션", "Authentic ABADDON sessions"), callable(getattr(bot, "v1060_start_ai_card", None))),
         ]

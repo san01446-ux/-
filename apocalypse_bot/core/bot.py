@@ -5800,7 +5800,14 @@ register_v1095_gameplay_polish_patch(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V10.9.5: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V11.0.0: 게임도시 · 승자/손익/잔액 통합 결과 · 자유 레이즈 안전 한도
+# 공통 경마 결승선 · ABADDON 전용 화투 48장 · 정산 장부/셔플 검증 · 테이블 장식
+from apocalypse_bot.commands.v1100_game_city_overhaul import register_v1100_game_city_overhaul
+register_v1100_game_city_overhaul(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.0.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

@@ -67,6 +67,20 @@ from apocalypse_bot.commands.v1051_rules import (
 )
 
 VERSION = "10.5.1"
+V1100_DEFAULT_RAISE_LIMIT = 1_000_000_000_000_000
+V1100_HARD_RAISE_LIMIT = 1_000_000_000_000_000_000
+
+def _v1100_raise_limit(session: Any) -> int:
+    try:
+        root = session.world_data.setdefault("v1100_game_city", {})
+        settings = root.setdefault("betting", {})
+        guilds = settings.setdefault("guilds", {})
+        guild_id = int(getattr(getattr(session.message, "guild", None), "id", 0) or 0)
+        row = guilds.get(str(guild_id), {}) if isinstance(guilds, Mapping) else {}
+        value = int(row.get("max_raise", settings.get("default_max_raise", V1100_DEFAULT_RAISE_LIMIT)))
+    except Exception:
+        value = V1100_DEFAULT_RAISE_LIMIT
+    return max(1_000, min(V1100_HARD_RAISE_LIMIT, value))
 Card = Tuple[int, str]
 
 
@@ -185,6 +199,10 @@ class RaiseModal(discord.ui.Modal):
         except ValueError:
             await interaction.response.send_message(_t(self.locale, "숫자로 입력하세요.", "Enter a number."), ephemeral=True)
             return
+        limit = _v1100_raise_limit(self.session)
+        if target > limit:
+            await interaction.response.send_message(_t(self.locale, f"레이즈 안전 한도는 {limit:,}칩입니다. 잔액보다 크게 잃으면 음수 잔액은 그대로 유지됩니다.", f"Raise safety limit is {limit:,} chips. Losses beyond the wallet still create a negative balance."), ephemeral=True)
+            return
         await self.session.raise_to(interaction, target)
 
 
@@ -288,6 +306,10 @@ class BettingSession(BaseCardSession):
                 await interaction.response.send_message(_t(locale, "현재 본인 차례가 아닙니다.", "It is not your turn."), ephemeral=True)
                 return
             target = int(target)
+            limit = _v1100_raise_limit(self)
+            if target > limit:
+                await interaction.response.send_message(_t(locale, f"레이즈 안전 한도는 {limit:,}칩입니다.", f"Raise safety limit is {limit:,} chips."), ephemeral=True)
+                return
             if target <= self.current_bet:
                 await interaction.response.send_message(_t(locale, f"현재 베팅 {self.current_bet:,}칩보다 크게 입력하세요.", f"Enter more than the current bet of {self.current_bet:,} chips."), ephemeral=True)
                 return

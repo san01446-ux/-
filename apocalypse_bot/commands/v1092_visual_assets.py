@@ -175,7 +175,7 @@ def build_card_catalog(*, locale: str, categories: Sequence[Tuple[str, str, Sequ
             gy = y + row * 46
             label = game if ko else game_en.get(game, game)
             draw.text((gx, gy), f"{gi + 1:02d}. {_fit(draw, label, _font(19, bold=True), 270)}", font=_font(19, bold=True), fill=TEXT)
-    draw.text((64, 886), "음수 잔액 · 노리밋 · 정산 상한 없음 · 모든 종목 ABADDON 지원" if ko else "Negative balances · no-limit · uncapped settlement · ABADDON in every mode", font=_font(18, bold=True), fill=GREEN)
+    draw.text((64, 886), "음수 잔액 · 자유 레이즈 안전 한도 · 정산 상한 없음 · 모든 종목 ABADDON 지원" if ko else "Negative balances · free-raise safety limit · uncapped settlement · ABADDON in every mode", font=_font(18, bold=True), fill=GREEN)
     return _png(image)
 
 
