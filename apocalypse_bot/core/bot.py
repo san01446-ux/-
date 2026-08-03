@@ -5786,7 +5786,14 @@ register_v1093_command_ui_audit(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V10.9.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.9.4: 카드게임 25종 진행 메시지 PNG · 비공개 손패 PNG · 한글 폰트/줄바꿈 안정화
+# 홈페이지 문장을 간단히 정리하고 최신 테스트·패치노트 범위를 v10.9.4로 교체합니다.
+from apocalypse_bot.commands.v1094_image_table_patch import register_v1094_image_table_patch
+register_v1094_image_table_patch(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V10.9.4: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

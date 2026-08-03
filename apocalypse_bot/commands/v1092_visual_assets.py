@@ -12,38 +12,10 @@ from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-_FONT_CANDIDATES = {
-    "regular": (
-        os.getenv("ABADDON_DASHBOARD_FONT", ""),
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Regular.otf",
-        "/usr/share/fonts/truetype/noto/NotoSansKR-Regular.ttf",
-        "/usr/local/share/fonts/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ),
-    "bold": (
-        os.getenv("ABADDON_DASHBOARD_FONT_BOLD", ""),
-        "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Bold.otf",
-        "/usr/share/fonts/truetype/noto/NotoSansKR-Bold.ttf",
-        "/usr/local/share/fonts/NotoSansCJK-Bold.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    ),
-}
-
-
-def _resolve_font(bold: bool) -> str | None:
-    key = "bold" if bold else "regular"
-    for candidate in _FONT_CANDIDATES[key]:
-        if candidate and Path(candidate).is_file():
-            return candidate
-    return None
-
-
-FONT_REGULAR = _resolve_font(False)
-FONT_BOLD = _resolve_font(True)
+from apocalypse_bot.commands.v1094_visual_core import (
+    font as _core_font, font_status as _core_font_status, truncate as _core_truncate,
+    rounded as _core_rounded, png as _core_png, draw_wrapped as _core_draw_wrapped,
+)
 
 BG = (18, 17, 22)
 PANEL = (37, 35, 42)
@@ -57,40 +29,20 @@ RED = (240, 94, 112)
 BLUE = (102, 176, 255)
 PURPLE = (180, 112, 255)
 
+FONT_REGULAR = _core_font_status().get("regular")
+FONT_BOLD = _core_font_status().get("bold")
 
 def _font(size: int, *, bold: bool = False) -> ImageFont.ImageFont:
-    path = FONT_BOLD if bold else FONT_REGULAR
-    if path:
-        try:
-            return ImageFont.truetype(path, size=size)
-        except OSError:
-            pass
-    try:
-        return ImageFont.load_default(size=size)
-    except TypeError:
-        return ImageFont.load_default()
-
+    return _core_font(size, bold)
 
 def dashboard_font_status() -> Mapping[str, str]:
-    return {
-        "regular": FONT_REGULAR or "Pillow default",
-        "bold": FONT_BOLD or "Pillow default",
-    }
+    return _core_font_status()
 
-
-def _fit(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, width: int) -> str:
-    value = str(text)
-    if draw.textlength(value, font=font) <= width:
-        return value
-    suffix = "…"
-    while value and draw.textlength(value + suffix, font=font) > width:
-        value = value[:-1]
-    return value + suffix
-
+def _fit(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, width: int) -> str:
+    return _core_truncate(draw, str(text), font, width)
 
 def _rounded(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int], radius: int = 24, *, fill=PANEL, outline=BORDER, width: int = 2) -> None:
-    draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
-
+    _core_rounded(draw, box, radius, fill=fill, outline=outline, width=width)
 
 def _bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, value: float, maximum: float, *, fill=GREEN) -> None:
     ratio = 0.0 if maximum <= 0 else max(0.0, min(1.0, float(value) / float(maximum)))
@@ -98,13 +50,8 @@ def _bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, value: float
     if ratio > 0:
         draw.rounded_rectangle((x, y, x + max(h, int(w * ratio)), y + h), radius=h // 2, fill=fill)
 
-
 def _png(image: Image.Image) -> BytesIO:
-    out = BytesIO()
-    image.save(out, format="PNG", optimize=True)
-    out.seek(0)
-    return out
-
+    return _core_png(image)
 
 def build_profile_card(*, locale: str, display_name: str, title: str, job: str, level: int, hp: int, max_hp: int,
                        stamina: int, max_stamina: int, infection: int, condition: str, power: int,
@@ -160,7 +107,7 @@ def build_profile_card(*, locale: str, display_name: str, title: str, job: str, 
         draw.text((x + 18, y + 13), label, font=_font(18, bold=True), fill=MUTED)
         draw.text((x + 18, y + 46), _fit(draw, value, _font(24, bold=True), 205), font=_font(24, bold=True), fill=color)
 
-    footer = "ABADDON v10.9.2 · 실시간 생존자 이미지 대시보드" if ko else "ABADDON v10.9.2 · Live survivor image dashboard"
+    footer = "ABADDON v10.9.4 · 실시간 생존자 이미지 대시보드" if ko else "ABADDON v10.9.4 · Live survivor image dashboard"
     draw.text((64, 651), footer, font=_font(17), fill=MUTED)
     return _png(image)
 
@@ -249,5 +196,5 @@ def build_card_detail(*, locale: str, name: str, rule: str, players: str, flow: 
     ]
     for label, value, y in sections:
         draw.text((68, y), label, font=_font(19, bold=True), fill=MUTED)
-        draw.text((255, y - 3), _fit(draw, value, _font(22, bold=True), 930), font=_font(22, bold=True), fill=TEXT if y < 500 else BLUE)
+        _core_draw_wrapped(draw, (255, y - 3), value, _font(22, bold=True), 930, fill=TEXT if y < 500 else BLUE, max_lines=2, spacing=3)
     return _png(image)

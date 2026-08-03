@@ -87,21 +87,38 @@ def _reservation_root(world_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _safe_edit(message: Optional[discord.Message], *, embed: discord.Embed, view: Optional[discord.ui.View]) -> bool:
-    """Edit a game message with one retry and report whether it was published.
+    """Edit a game message with a fresh v10.9.4 table PNG when possible.
 
-    Older callers intentionally ignore the return value.  Final-result paths in
-    v10.9 use it to send a fresh fallback message when Discord can no longer
-    edit the original interaction message.
+    The PNG is generated from the live session state. If rendering or uploading
+    fails, the original embed-only path remains available.
     """
     if message is None:
         return False
+
+    async def publish() -> None:
+        file = None
+        if view is not None and hasattr(view, "player_ids"):
+            try:
+                from apocalypse_bot.commands.v1094_card_table_images import render_session_table
+                image = render_session_table(view, embed)
+                if image is not None:
+                    filename = f"abaddon_table_{getattr(view, 'game_id', 'live')}.png"
+                    file = discord.File(image, filename=filename)
+                    embed.set_image(url=f"attachment://{filename}")
+            except Exception:
+                file = None
+        if file is not None:
+            await message.edit(embed=embed, view=view, attachments=[file])
+        else:
+            await message.edit(embed=embed, view=view)
+
     try:
-        await message.edit(embed=embed, view=view)
+        await publish()
         return True
     except (discord.HTTPException, OSError, asyncio.TimeoutError):
         await asyncio.sleep(0.8)
     try:
-        await message.edit(embed=embed, view=view)
+        await publish()
         return True
     except Exception:
         return False
@@ -638,8 +655,18 @@ class OneCardSession(BaseCardSession):
         if uid not in self.hands:
             await interaction.response.send_message("참가자가 아닙니다.", ephemeral=True)
             return
-        playable = [f"**{_card_text(card)}**" if self.playable(card) else _card_text(card) for card in self.hands[uid]]
-        await interaction.response.send_message("🎴 **내 패** · 굵은 카드는 현재 낼 수 있습니다.\n" + "  ".join(playable), ephemeral=True)
+        locale = getattr(self, "public_locale", "ko")
+        from apocalypse_bot.commands.v1094_card_table_images import render_private_hand
+        image = render_private_hand(
+            locale=locale,
+            title="원카드 · 내 패" if locale == "ko" else "One Card · My Hand",
+            cards=self.hands[uid],
+            note="현재 낼 수 있는 패는 카드 내기 메뉴에서 확인하세요." if locale == "ko" else "Use Play Card to see currently legal choices.",
+        )
+        filename = "abaddon_onecard_hand.png"
+        embed = discord.Embed(title="🎴 내 패" if locale == "ko" else "🎴 My Hand", color=discord.Color.blurple())
+        embed.set_image(url=f"attachment://{filename}")
+        await interaction.response.send_message(embed=embed, file=discord.File(image, filename=filename), ephemeral=True)
 
     @discord.ui.button(label="카드 내기", emoji="🃏", style=discord.ButtonStyle.primary)
     async def choose_card(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -800,7 +827,18 @@ class JokerSession(BaseCardSession):
             await interaction.response.send_message("참가자가 아닙니다.", ephemeral=True)
             return
         cards = self.hands[uid]
-        await interaction.response.send_message("🃏 **내 패**\n" + ("  ".join(_card_text(card) for card in cards) if cards else "짝을 모두 버려 대기 중입니다."), ephemeral=True)
+        locale = getattr(self, "public_locale", "ko")
+        from apocalypse_bot.commands.v1094_card_table_images import render_private_hand
+        image = render_private_hand(
+            locale=locale,
+            title="조커잡기 · 내 패" if locale == "ko" else "Old Maid · My Hand",
+            cards=cards,
+            note=("짝을 모두 버렸다면 다음 차례를 기다리세요." if locale == "ko" else "If all pairs are gone, wait for the next turn."),
+        )
+        filename = "abaddon_oldmaid_hand.png"
+        embed = discord.Embed(title="🃏 내 패" if locale == "ko" else "🃏 My Hand", color=discord.Color.fuchsia())
+        embed.set_image(url=f"attachment://{filename}")
+        await interaction.response.send_message(embed=embed, file=discord.File(image, filename=filename), ephemeral=True)
 
     @discord.ui.button(label="다음 사람에게서 뽑기", emoji="🎴", style=discord.ButtonStyle.primary)
     async def draw_from_next(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:

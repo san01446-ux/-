@@ -282,7 +282,15 @@ async def _publish_final(session: DebtCardSession, embed: discord.Embed) -> bool
     if channel is None or not hasattr(channel, "send"):
         return False
     try:
-        session.message = await channel.send(embed=embed, view=session)
+        from apocalypse_bot.commands.v1094_card_table_images import render_session_table
+        image = render_session_table(session, embed)
+        if image is not None:
+            filename = f"abaddon_table_{getattr(session, 'game_id', 'final')}.png"
+            file = discord.File(image, filename=filename)
+            embed.set_image(url=f"attachment://{filename}")
+            session.message = await channel.send(embed=embed, view=session, file=file)
+        else:
+            session.message = await channel.send(embed=embed, view=session)
         return True
     except Exception:
         return False
@@ -487,7 +495,20 @@ class AuthenticPokerSession(DebtCardSession):
             text = _t(locale, "내 카드는 승부 전까지 볼 수 없습니다.", "Your own card remains hidden until showdown.") + extra
         else:
             text = self._private_hand_text(uid)
-        await interaction.response.send_message(f"🂠 **{_t(locale, '내 패', 'My Hand')}**\n{text}", ephemeral=True)
+        from apocalypse_bot.commands.v1094_card_table_images import render_private_hand
+        cards = self.hands[uid]
+        hidden = {0} if self.variant == "인디언포커" else set()
+        image = render_private_hand(
+            locale=locale,
+            title=f"{_display(self.variant, locale)} · {_t(locale, '내 패', 'My Hand')}",
+            cards=cards,
+            note=text,
+            hidden_indices=hidden,
+        )
+        filename = "abaddon_poker_private_hand.png"
+        embed = discord.Embed(title=f"🂠 {_t(locale, '내 패', 'My Hand')}", color=discord.Color.dark_purple())
+        embed.set_image(url=f"attachment://{filename}")
+        await interaction.response.send_message(embed=embed, file=discord.File(image, filename=filename), ephemeral=True)
 
     @discord.ui.button(label="체크/콜", emoji="✅", style=discord.ButtonStyle.success)
     async def check_call(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -865,7 +886,13 @@ class AuthenticBlackjackSession(DebtCardSession):
         uid = int(interaction.user.id); locale = _interaction_locale(self.bot, interaction)
         if uid not in self.hands:
             await interaction.response.send_message(_t(locale, "참가자가 아닙니다.", "You are not a participant."), ephemeral=True); return
-        await interaction.response.send_message("  ".join(_card_text(c) for c in self.hands[uid]) + f" · **{self.value(self.hands[uid])}**", ephemeral=True)
+        from apocalypse_bot.commands.v1094_card_table_images import render_private_hand
+        total = self.value(self.hands[uid])
+        image = render_private_hand(locale=locale, title=_t(locale, "블랙잭 · 내 패", "Blackjack · My Hand"), cards=self.hands[uid], note=_t(locale, f"현재 합계 {total}", f"Current total {total}"))
+        filename = "abaddon_blackjack_private_hand.png"
+        embed = discord.Embed(title=_t(locale, "🃏 블랙잭 내 패", "🃏 Blackjack Hand"), color=discord.Color.dark_green())
+        embed.set_image(url=f"attachment://{filename}")
+        await interaction.response.send_message(embed=embed, file=discord.File(image, filename=filename), ephemeral=True)
 
     @discord.ui.button(label="히트", emoji="➕", style=discord.ButtonStyle.success)
     async def hit(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -1044,7 +1071,12 @@ class AuthenticSeotdaSession(DebtCardSession):
             await interaction.response.send_message(_t(locale, "참가자가 아닙니다.", "You are not a participant."), ephemeral=True); return
         cards = "  ".join(f"🎴{card.label}" for card in self.hands[uid])
         rank = seotda_rank(self.hands[uid]).name if len(self.hands[uid]) == 2 else _t(locale, "두 번째 장 대기", "Waiting for second card")
-        await interaction.response.send_message(f"{cards}\n**{rank}**", ephemeral=True)
+        from apocalypse_bot.commands.v1094_card_table_images import render_private_hand
+        image = render_private_hand(locale=locale, title=_t(locale, "섯다 · 내 패", "Seotda · My Hand"), cards=self.hands[uid], note=rank, hwatu=True)
+        filename = "abaddon_seotda_private_hand.png"
+        embed = discord.Embed(title=_t(locale, "🎴 섯다 내 패", "🎴 Seotda Hand"), color=discord.Color.orange())
+        embed.set_image(url=f"attachment://{filename}")
+        await interaction.response.send_message(embed=embed, file=discord.File(image, filename=filename), ephemeral=True)
 
     @discord.ui.button(label="체크/콜", emoji="✅", style=discord.ButtonStyle.success)
     async def call(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -1244,7 +1276,13 @@ class AuthenticGoStopSession(DebtCardSession):
             await interaction.response.send_message(_t(locale, "참가자가 아닙니다.", "You are not a participant."), ephemeral=True); return
         cards = "\n".join(f"{i+1}. {_hwatu_lite_text(card, locale)}" for i, card in enumerate(self.engine.hands[uid])) or _t(locale, "남은 패 없음", "No cards left")
         summary = self.score(uid)
-        await interaction.response.send_message(f"🎴 **{_t(locale, '내 패', 'My Hand')}**\n{cards}\n\n**{summary.score}{_t(locale, '점', ' pts')}** · {_hwatu_labels(summary.labels, locale)}", ephemeral=True)
+        from apocalypse_bot.commands.v1094_card_table_images import render_private_hand
+        note = f"{summary.score}{_t(locale, '점', ' pts')} · {_hwatu_labels(summary.labels, locale)}"
+        image = render_private_hand(locale=locale, title=f"{_display(self.mode, locale)} · {_t(locale, '내 패', 'My Hand')}", cards=self.engine.hands[uid], note=note, hwatu=True)
+        filename = "abaddon_hwatu_private_hand.png"
+        embed = discord.Embed(title=f"🎴 {_t(locale, '내 패', 'My Hand')}", color=discord.Color.dark_red())
+        embed.set_image(url=f"attachment://{filename}")
+        await interaction.response.send_message(embed=embed, file=discord.File(image, filename=filename), ephemeral=True)
 
     @discord.ui.button(label="패 내기", emoji="🎴", style=discord.ButtonStyle.primary)
     async def play_button(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
