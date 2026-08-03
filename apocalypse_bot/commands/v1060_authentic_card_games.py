@@ -282,18 +282,23 @@ async def _publish_final(session: DebtCardSession, embed: discord.Embed) -> bool
     if channel is None or not hasattr(channel, "send"):
         return False
     try:
-        from apocalypse_bot.commands.v1094_card_table_images import render_session_table
-        image = render_session_table(session, embed)
+        from apocalypse_bot.commands.v1095_visual_polish import render_session_media
+        image, extension = render_session_media(session, embed)
         if image is not None:
-            filename = f"abaddon_table_{getattr(session, 'game_id', 'final')}.png"
+            filename = f"abaddon_table_{getattr(session, 'game_id', 'final')}.{extension}"
             file = discord.File(image, filename=filename)
-            embed.set_image(url=f"attachment://{filename}")
-            session.message = await channel.send(embed=embed, view=session, file=file)
+            media_embed = embed.copy()
+            media_embed.set_image(url=f"attachment://{filename}")
+            session.message = await channel.send(embed=media_embed, view=session, file=file)
         else:
             session.message = await channel.send(embed=embed, view=session)
         return True
     except Exception:
-        return False
+        try:
+            session.message = await channel.send(embed=embed, view=session)
+            return True
+        except Exception:
+            return False
 
 
 class RaiseModal(discord.ui.Modal):

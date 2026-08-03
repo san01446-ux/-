@@ -107,7 +107,7 @@ def build_profile_card(*, locale: str, display_name: str, title: str, job: str, 
         draw.text((x + 18, y + 13), label, font=_font(18, bold=True), fill=MUTED)
         draw.text((x + 18, y + 46), _fit(draw, value, _font(24, bold=True), 205), font=_font(24, bold=True), fill=color)
 
-    footer = "ABADDON v10.9.4 · 실시간 생존자 이미지 대시보드" if ko else "ABADDON v10.9.4 · Live survivor image dashboard"
+    footer = "ABADDON v10.9.5 · 실시간 생존자 이미지 대시보드" if ko else "ABADDON v10.9.5 · Live survivor image dashboard"
     draw.text((64, 651), footer, font=_font(17), fill=MUTED)
     return _png(image)
 

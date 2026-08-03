@@ -24,6 +24,7 @@ PATCH_DATE = "2026-08-03"
 MIN_RACE_BET = 1_000
 FINISH = 34
 ACTIVE_RACES: set[int] = set()
+LIVE_RACE_STATES: Dict[int, Dict[str, Any]] = {}
 
 EN_TEXT = {
     "연구원": "Researcher", "의사": "Medic", "군인": "Soldier", "정비공": "Mechanic", "요리사": "Cook", "정찰병": "Scout",
@@ -327,6 +328,18 @@ def register_v1092_visual_status_horserace(
             for child in self.children:
                 child.disabled = True
             positions = [0] * len(HORSES)
+            LIVE_RACE_STATES[self.owner_id] = {
+                "owner_id": self.owner_id,
+                "guild_id": int(getattr(interaction.guild, "id", 0) or 0),
+                "locale": self.locale,
+                "bet": self.bet,
+                "selected": selected,
+                "selected_name": _name(HORSES[selected], self.locale),
+                "leader_name": _name(HORSES[0], self.locale),
+                "positions": list(positions),
+                "tick": 0,
+                "status": "starting",
+            }
             embed = _race_embed(bot, self.locale, title=_t(self.locale, "🏁 ABADDON 실시간 경마 · 출발", "🏁 ABADDON Live Horse Race · Start"), positions=positions, selected=selected, bet=self.bet, tick=0, note=_t(self.locale, "선택 완료. 전 말이 ABADDON 기수와 함께 출발합니다.", "Selection locked. Every horse starts with an ABADDON jockey."))
             await interaction.response.edit_message(embed=embed, view=self)
             message = interaction.message
@@ -339,6 +352,19 @@ def register_v1092_visual_status_horserace(
                 while max(positions) < FINISH:
                     tick += 1
                     positions = advance_positions(positions)
+                    leader_index = max(range(len(positions)), key=lambda idx: int(positions[idx]))
+                    LIVE_RACE_STATES[self.owner_id] = {
+                        "owner_id": self.owner_id,
+                        "guild_id": int(LIVE_RACE_STATES.get(self.owner_id, {}).get("guild_id", 0) or 0),
+                        "locale": self.locale,
+                        "bet": self.bet,
+                        "selected": selected,
+                        "selected_name": _name(HORSES[selected], self.locale),
+                        "leader_name": _name(HORSES[leader_index], self.locale),
+                        "positions": list(positions),
+                        "tick": tick,
+                        "status": "racing",
+                    }
                     embed = _race_embed(bot, self.locale, title=_t(self.locale, "🏇 ABADDON 실시간 경마 · 질주 중", "🏇 ABADDON Live Horse Race · Racing"), positions=positions, selected=selected, bet=self.bet, tick=tick, note=_t(self.locale, "순위가 실시간으로 바뀝니다. 결승선을 먼저 넘는 말이 승리합니다.", "Standings update live. First across the line wins."))
                     try:
                         await message.edit(embed=embed, view=self)
@@ -387,6 +413,19 @@ def register_v1092_visual_status_horserace(
                 embed.add_field(name=_t(self.locale, "우승마", "Winner"), value=f"**{winner + 1}. {_name(horse, self.locale)}** · x{horse['odds']:.1f}", inline=True)
                 embed.add_field(name=_t(self.locale, "내 선택", "Your Pick"), value=f"**{selected + 1}. {_name(HORSES[selected], self.locale)}**", inline=True)
                 embed.add_field(name=_t(self.locale, "정산", "Settlement"), value=_t(self.locale, f"총 지급 **{gross:+,}칩** · 이번 게임 **{net:+,}칩**\n잔액 **{before:,} → {after:,}칩**", f"Gross **{gross:+,} chips** · game net **{net:+,} chips**\nBalance **{before:,} → {after:,} chips**"), inline=False)
+                LIVE_RACE_STATES[self.owner_id] = {
+                    "owner_id": self.owner_id,
+                    "guild_id": int(LIVE_RACE_STATES.get(self.owner_id, {}).get("guild_id", 0) or 0),
+                    "locale": self.locale,
+                    "bet": self.bet,
+                    "selected": selected,
+                    "selected_name": _name(HORSES[selected], self.locale),
+                    "leader_name": _name(horse, self.locale),
+                    "positions": list(positions),
+                    "tick": tick,
+                    "status": "finished",
+                    "net": net,
+                }
                 try:
                     await message.edit(embed=embed, view=self)
                 except discord.HTTPException:
@@ -419,6 +458,7 @@ def register_v1092_visual_status_horserace(
                         pass
             finally:
                 ACTIVE_RACES.discard(self.owner_id)
+                LIVE_RACE_STATES.pop(self.owner_id, None)
                 self.stop()
 
     async def horse_race(ctx: commands.Context, 판돈: int = 10_000) -> None:

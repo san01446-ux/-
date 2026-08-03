@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Shared visual rendering helpers for ABADDON v10.9.4.
+"""Shared visual rendering helpers for ABADDON v10.9.5.
 
 No user image is persisted. Korean fonts are discovered from the host first. If
 Render does not provide one, Noto Sans CJK KR is cached in /tmp on first use.
@@ -16,7 +16,7 @@ from typing import Iterable, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "10.9.4"
+VERSION = "10.9.5"
 FONT_CACHE = Path(os.getenv("ABADDON_FONT_CACHE", "/tmp/abaddon-fonts"))
 FONT_URLS = {
     "regular": os.getenv(
@@ -62,7 +62,7 @@ def _download_font(kind: str) -> str | None:
         target = FONT_CACHE / FONT_NAMES[kind]
         if target.is_file() and target.stat().st_size > 100_000:
             return str(target)
-        req = urllib.request.Request(FONT_URLS[kind], headers={"User-Agent": "ABADDON/10.9.4"})
+        req = urllib.request.Request(FONT_URLS[kind], headers={"User-Agent": "ABADDON/10.9.5"})
         with urllib.request.urlopen(req, timeout=12) as response:
             data = response.read()
         if len(data) < 100_000:

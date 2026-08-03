@@ -5793,7 +5793,14 @@ register_v1094_image_table_patch(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V10.9.4: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.9.5: 진행 중 테이블 턴 GIF · 이미지 실패 시 임베드 복구 · 이미지 리플레이
+# 카드게임/경마 공통 실시간 보드 · 공개 테이블 이미지 관전 · 최신 범위 검수
+from apocalypse_bot.commands.v1095_gameplay_polish_patch import register_v1095_gameplay_polish_patch
+register_v1095_gameplay_polish_patch(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V10.9.5: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

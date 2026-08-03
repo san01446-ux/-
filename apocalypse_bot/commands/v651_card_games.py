@@ -87,38 +87,68 @@ def _reservation_root(world_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _safe_edit(message: Optional[discord.Message], *, embed: discord.Embed, view: Optional[discord.ui.View]) -> bool:
-    """Edit a game message with a fresh v10.9.4 table PNG when possible.
+    """Publish a game state with resilient v10.9.5 visual media.
 
-    The PNG is generated from the live session state. If rendering or uploading
-    fails, the original embed-only path remains available.
+    Active tables use a short public GIF turn pulse when enabled; finished
+    tables use PNG. Rendering/upload failure never stops gameplay: the function
+    retries once, then falls back to embed-only editing while recording a small
+    per-session diagnostic counter.
     """
     if message is None:
         return False
 
-    async def publish() -> None:
+    async def publish_media() -> None:
         file = None
+        media_embed = embed.copy()
         if view is not None and hasattr(view, "player_ids"):
             try:
-                from apocalypse_bot.commands.v1094_card_table_images import render_session_table
-                image = render_session_table(view, embed)
+                from apocalypse_bot.commands.v1095_visual_polish import render_session_media
+                image, extension = render_session_media(view, media_embed)
                 if image is not None:
-                    filename = f"abaddon_table_{getattr(view, 'game_id', 'live')}.png"
+                    filename = f"abaddon_table_{getattr(view, 'game_id', 'live')}.{extension}"
                     file = discord.File(image, filename=filename)
-                    embed.set_image(url=f"attachment://{filename}")
-            except Exception:
+                    media_embed.set_image(url=f"attachment://{filename}")
+                    setattr(view, "_v1095_last_render_ok", True)
+            except Exception as exc:
+                setattr(view, "_v1095_last_render_ok", False)
+                setattr(view, "_v1095_last_render_error", type(exc).__name__)
+                setattr(view, "_v1095_render_failures", int(getattr(view, "_v1095_render_failures", 0)) + 1)
                 file = None
         if file is not None:
-            await message.edit(embed=embed, view=view, attachments=[file])
+            await message.edit(embed=media_embed, view=view, attachments=[file])
         else:
             await message.edit(embed=embed, view=view)
 
+    # Capture a short public-only action history for table overlays. No cards or
+    # private modal values are stored here.
+    if view is not None:
+        try:
+            action = str(getattr(view, "last_action", "") or "").strip()
+            if action:
+                history = list(getattr(view, "_v1095_visual_history", []))
+                if not history or history[-1] != action:
+                    history.append(action)
+                    del history[:-6]
+                    setattr(view, "_v1095_visual_history", history)
+        except Exception:
+            pass
+
+    for delay in (0.0, 0.65):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            await publish_media()
+            return True
+        except (discord.HTTPException, OSError, asyncio.TimeoutError):
+            continue
+        except Exception:
+            break
+
+    # Final recovery path: do not let an attachment/GIF issue break the turn.
     try:
-        await publish()
-        return True
-    except (discord.HTTPException, OSError, asyncio.TimeoutError):
-        await asyncio.sleep(0.8)
-    try:
-        await publish()
+        await message.edit(embed=embed, view=view)
+        if view is not None:
+            setattr(view, "_v1095_embed_fallbacks", int(getattr(view, "_v1095_embed_fallbacks", 0)) + 1)
         return True
     except Exception:
         return False
