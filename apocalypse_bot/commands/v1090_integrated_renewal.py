@@ -50,7 +50,7 @@ NEW_GAME_EN: Dict[str, str] = {
 }
 NEW_GAME_EMOJI: Dict[str, str] = {
     "훌라": "🀄", "라미": "🧩", "대통령": "👑", "주사위카드": "🎲", "삼봉": "🎴",
-    "도리짓고땡": "🀙", "민화투": "🌺", "육백": "6️⃣", "블랙잭토너먼트": "🏆",
+    "도리짓고땡": "🎴", "민화투": "🌺", "육백": "6️⃣", "블랙잭토너먼트": "🏆",
 }
 NEW_RULES: Dict[str, Tuple[str, str]] = {
     "훌라": ("7장으로 시작해 한 장을 뽑고 세트·연속 조합을 내린 뒤 한 장을 버립니다. 첫 등록은 30점 이상이며 손패를 먼저 비우면 승리합니다.", "Start with seven cards, draw, lay sets/runs, then discard. The opening meld needs 30 points; empty your hand first."),
@@ -315,7 +315,7 @@ class MeldRaceSession(LoggedDebtSession):
         cards = "  ".join(f"{i+1}:{_card_text(card)}" for i, card in enumerate(self.hands[uid])) or _t(locale, "손패 없음", "No cards")
         await interaction.response.send_message(cards, ephemeral=True)
 
-    @discord.ui.button(label="더미 뽑기", emoji="🂠", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="더미 뽑기", emoji="🎴", style=discord.ButtonStyle.primary)
     async def draw_stock(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await self.draw(interaction, int(interaction.user.id), from_discard=False)
 
@@ -1501,6 +1501,7 @@ def register_v1090_integrated_renewal(
         invite.callback = v1090_invite
 
     bot.v1090_start_ai_card = start_ai_interaction  # type: ignore[attr-defined]
+    bot.v1090_create_card_lobby = create_lobby_interaction  # type: ignore[attr-defined]
     bot.v1060_start_ai_card = start_ai_interaction  # type: ignore[attr-defined]
 
     @bot.command(name="카드룸", aliases=["cardroom", "cardlobby"])

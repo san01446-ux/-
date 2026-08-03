@@ -825,8 +825,6 @@ GameFactory = Callable[[CardLobbyView], BaseCardSession]
 
 
 class ExpandedBetModal(discord.ui.Modal):
-    bet_input = discord.ui.TextInput(label="참가비", placeholder="10000", min_length=1, max_length=12)
-
     def __init__(self, *, bot: commands.Bot, kind: str, create_lobby: Callable[..., Any], locale: str) -> None:
         display = kind if locale == "ko" else _english_game_name(kind)
         super().__init__(title=f"{display} · " + ("방 만들기" if locale == "ko" else "Create Lobby"))
@@ -834,8 +832,15 @@ class ExpandedBetModal(discord.ui.Modal):
         self.kind = kind
         self.create_lobby = create_lobby
         self.locale = locale
-        self.bet_input.label = "참가비(칩)" if locale == "ko" else "Entry fee (chips)"
-        self.bet_input.placeholder = "예: 10000" if locale == "ko" else "Example: 10000"
+        placeholder = "예: 10000" if locale == "ko" else "Example: 10000"
+        caption = "참가비(칩)" if locale == "ko" else "Entry fee (chips)"
+        self.bet_input = discord.ui.TextInput(placeholder=placeholder, min_length=1, max_length=100)
+        label_cls = getattr(discord.ui, "Label", None)
+        if label_cls is not None:
+            self.add_item(label_cls(text=caption, component=self.bet_input))
+        else:
+            self.bet_input = discord.ui.TextInput(label=caption, placeholder=placeholder, min_length=1, max_length=100)
+            self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         locale = _interaction_locale(self.bot, interaction)

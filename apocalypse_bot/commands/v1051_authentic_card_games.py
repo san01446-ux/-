@@ -865,7 +865,7 @@ class AuthenticBlackjackSession(BaseCardSession):
     async def hit(self,i:discord.Interaction,b:discord.ui.Button)->None:await self._act(i,"hit")
     @discord.ui.button(label="스탠드",emoji="✋",style=discord.ButtonStyle.primary)
     async def stand(self,i:discord.Interaction,b:discord.ui.Button)->None:await self._act(i,"stand")
-    @discord.ui.button(label="더블",emoji="✖️2",style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="더블",emoji="✖️",style=discord.ButtonStyle.danger)
     async def double(self,i:discord.Interaction,b:discord.ui.Button)->None:await self._act(i,"double")
     async def run_ai(self)->None:
         if self._ai_running:return
@@ -978,9 +978,9 @@ class SeotdaSession(BettingSession):
     async def ping_button(self,i:discord.Interaction,b:discord.ui.Button)->None:await self.shortcut_raise(i,"ping")
     @discord.ui.button(label="따당",emoji="✌️",style=discord.ButtonStyle.secondary,row=2)
     async def ddadang_button(self,i:discord.Interaction,b:discord.ui.Button)->None:await self.shortcut_raise(i,"ddadang")
-    @discord.ui.button(label="쿼터",emoji="¼",style=discord.ButtonStyle.secondary,row=2)
+    @discord.ui.button(label="쿼터",emoji="🔹",style=discord.ButtonStyle.secondary,row=2)
     async def quarter_button(self,i:discord.Interaction,b:discord.ui.Button)->None:await self.shortcut_raise(i,"quarter")
-    @discord.ui.button(label="하프",emoji="½",style=discord.ButtonStyle.secondary,row=2)
+    @discord.ui.button(label="하프",emoji="🔸",style=discord.ButtonStyle.secondary,row=2)
     async def half_button(self,i:discord.Interaction,b:discord.ui.Button)->None:await self.shortcut_raise(i,"half")
     async def advance_phase(self,locale:str)->None:
         if self.street==1:
@@ -1279,7 +1279,7 @@ class AuthenticOneCardSession(OneCardSession):
 class OldMaidPositionSelect(discord.ui.Select):
     def __init__(self,session:"AuthenticJokerSession",uid:int,target:int,locale:str)->None:
         self.session,self.uid,self.target=session,uid,target
-        options=[discord.SelectOption(label=_t(locale,f"뒷면 카드 {i+1}",f"Face-down card {i+1}"),value=str(i),emoji="🂠") for i in range(min(25,len(session.hands[target])))]
+        options=[discord.SelectOption(label=_t(locale,f"뒷면 카드 {i+1}",f"Face-down card {i+1}"),value=str(i),emoji="🎴") for i in range(min(25,len(session.hands[target])))]
         super().__init__(placeholder=_t(locale,"뽑을 뒷면 카드 선택","Choose a face-down card"),min_values=1,max_values=1,options=options)
     async def callback(self,interaction:discord.Interaction)->None:await self.session.draw_position(interaction,self.uid,self.target,int(self.values[0]))
 class OldMaidPositionView(discord.ui.View):

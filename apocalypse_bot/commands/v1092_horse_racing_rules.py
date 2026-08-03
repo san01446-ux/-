@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+"""Pure, Discord-independent rules for ABADDON v10.9.2 horse racing."""
+
+import random
+from typing import Any, Dict, List, Mapping, MutableSequence, Sequence, Tuple
+
+FINISH = 34
+
+HORSES: Tuple[Dict[str, Any], ...] = (
+    {"name_ko": "검은 성가", "name_en": "Black Hymn", "emoji": "🐎", "rating": 1.14, "odds": 2.2},
+    {"name_ko": "재의 질주", "name_en": "Ash Sprint", "emoji": "🏇", "rating": 1.08, "odds": 2.8},
+    {"name_ko": "붉은 안개", "name_en": "Red Mist", "emoji": "🐴", "rating": 1.02, "odds": 3.4},
+    {"name_ko": "황혼 기관차", "name_en": "Twilight Engine", "emoji": "🏇", "rating": 0.98, "odds": 4.1},
+    {"name_ko": "공허의 발굽", "name_en": "Void Hoof", "emoji": "🐎", "rating": 0.94, "odds": 5.0},
+    {"name_ko": "아바돈-Ω", "name_en": "ABADDON-Ω", "emoji": "🏇", "rating": 0.90, "odds": 6.0},
+)
+
+
+def advance_positions(positions: Sequence[int], rng: random.Random | Any = random) -> List[int]:
+    """Advance one visible race tick without moving any horse backwards."""
+    if len(positions) != len(HORSES):
+        raise ValueError(f"expected {len(HORSES)} positions, got {len(positions)}")
+    leaders = max((int(v) for v in positions), default=0)
+    next_positions: List[int] = []
+    for index, horse in enumerate(HORSES):
+        current = max(0, int(positions[index]))
+        rating = float(horse["rating"])
+        burst = rng.choices([0, 1, 2, 3, 4], weights=[5, 28, 38, 22, 7], k=1)[0]
+        if current < leaders - 5:
+            burst += rng.choice([0, 1])
+        if rng.random() < max(0.02, rating - 0.9) * 0.16:
+            burst += 1
+        next_positions.append(current + max(0, int(burst)))
+    return next_positions
+
+
+def choose_winner(positions: Sequence[int], rng: random.Random | Any = random) -> int:
+    if len(positions) != len(HORSES):
+        raise ValueError(f"expected {len(HORSES)} positions, got {len(positions)}")
+    best = max(int(value) for value in positions)
+    candidates = [index for index, value in enumerate(positions) if int(value) == best]
+    return int(rng.choice(candidates))
+
+
+def race_settlement(bet: int, selected: int, winner: int) -> Tuple[int, int]:
+    """Return gross payout and net change from the balance before entry."""
+    stake = int(bet)
+    if stake <= 0:
+        raise ValueError("bet must be positive")
+    if selected not in range(len(HORSES)) or winner not in range(len(HORSES)):
+        raise ValueError("invalid horse index")
+    gross = int(round(stake * float(HORSES[winner]["odds"]))) if selected == winner else 0
+    return gross, gross - stake
+
+
+def simulate_race(seed: int, max_ticks: int = 30) -> Tuple[List[int], int, int]:
+    """Deterministic smoke-test simulation used by the patch audit."""
+    rng = random.Random(int(seed))
+    positions = [0] * len(HORSES)
+    ticks = 0
+    while max(positions) < FINISH and ticks < max_ticks:
+        positions = advance_positions(positions, rng)
+        ticks += 1
+    return positions, choose_winner(positions, rng), ticks

@@ -19,6 +19,8 @@ from apocalypse_bot.commands.v600_game_center import (
 VERSION = "7.2.0"
 MENU_TIMEOUT = 300
 PAGE_SIZE = 25
+_COMMAND_INDEX_CACHE: Dict[int, Dict[str, Any]] = {}
+V1093_COMMAND_CATALOG_FAST_ACK = True
 NEWCOMER_ROLE_NAME = "저 새로 들어왔어요, 환영해주세요!"
 NEWCOMER_ROLE_EMOJI = "🌱"
 
@@ -271,6 +273,25 @@ async def _safe_interaction_message(
             await interaction.followup.send(content=content or None, **kwargs)
         else:
             await interaction.response.send_message(content=content or None, **kwargs)
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        return
+
+
+async def _ack_component(interaction: discord.Interaction) -> bool:
+    """Acknowledge UI input before rebuilding the large command catalogue."""
+    try:
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        return True
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        return False
+
+
+async def _edit_component(interaction: discord.Interaction, *, embed: discord.Embed, view: discord.ui.View) -> None:
+    if not await _ack_component(interaction):
+        return
+    try:
+        await interaction.edit_original_response(embed=embed, view=view)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         return
 
@@ -543,6 +564,26 @@ def _category_meta(guide: Sequence[Dict[str, Any]]) -> List[Dict[str, str]]:
     return rows[:25]
 
 
+
+def _command_index(bot: commands.Bot, guide: Sequence[Dict[str, Any]]) -> Dict[str, List[commands.Command]]:
+    """Build the expensive command/category map once per running bot."""
+    key = id(bot)
+    cached = _COMMAND_INDEX_CACHE.get(key)
+    if cached is not None:
+        return cached["buckets"]
+    commands_list = _walk_commands(bot)
+    buckets: Dict[str, List[commands.Command]] = {"all": commands_list}
+    for row in _category_meta(guide):
+        buckets.setdefault(row["id"], [])
+    for command in commands_list:
+        buckets.setdefault(_command_category_id(command, guide), []).append(command)
+    _COMMAND_INDEX_CACHE[key] = {"buckets": buckets, "count": len(commands_list)}
+    return buckets
+
+
+def invalidate_command_catalog_cache(bot: commands.Bot) -> None:
+    _COMMAND_INDEX_CACHE.pop(id(bot), None)
+
 def _commands_for_category(
     bot: commands.Bot,
     guide: Sequence[Dict[str, Any]],
@@ -550,9 +591,8 @@ def _commands_for_category(
     *,
     query: str = "",
 ) -> List[commands.Command]:
-    commands_list = _walk_commands(bot)
-    if category_id != "all":
-        commands_list = [command for command in commands_list if _command_category_id(command, guide) == category_id]
+    buckets = _command_index(bot, guide)
+    commands_list = list(buckets.get(category_id, buckets.get("all", [])))
     token = "".join(str(query or "").casefold().split()).lstrip("!/")
     if token:
         filtered = []
@@ -655,6 +695,8 @@ class CuteOwnedView(discord.ui.View):
         return False
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item[Any]) -> None:
+        if isinstance(error, discord.NotFound) and int(getattr(error, "code", 0) or 0) == 10062:
+            return
         incident = _record_ui_error(self.world_data, self.save_data, interaction, error, type(item).__name__)
         await _safe_interaction_message(
             interaction,
@@ -737,7 +779,8 @@ class CommandDetailView(CuteOwnedView):
 
     @discord.ui.button(label="명령어 목록", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await _edit_component(
+            interaction,
             embed=_catalog_embed(self.bot, self.guide, self.category_id, self.page, query=self.query),
             view=CommandCatalogView(
                 self.bot,
@@ -778,8 +821,11 @@ class CategorySelect(discord.ui.Select):
         super().__init__(placeholder="🌸 먼저 분야를 골라주세요", options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if not await _ack_component(interaction):
+            return
         category_id = self.values[0]
-        await interaction.response.edit_message(
+        await _edit_component(
+            interaction,
             embed=_catalog_embed(self.parent_view.bot, self.parent_view.guide, category_id, 0),
             view=CommandCatalogView(
                 self.parent_view.bot,
@@ -824,7 +870,10 @@ class CommandSelect(discord.ui.Select):
         if command is None:
             await _safe_interaction_message(interaction, "🍃 명령어를 찾지 못했어요. 목록을 새로 열어주세요.")
             return
-        await interaction.response.edit_message(
+        if not await _ack_component(interaction):
+            return
+        await _edit_component(
+            interaction,
             embed=_command_detail_embed(command),
             view=CommandDetailView(
                 self.parent_view.bot,
@@ -854,7 +903,11 @@ class SearchModal(discord.ui.Modal, title="🔎 말랑 명령어 검색"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         query = str(self.query_input.value).strip()
-        await interaction.response.send_message(
+        try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return
+        await interaction.followup.send(
             embed=_catalog_embed(self.parent_view.bot, self.parent_view.guide, "all", 0, query=query),
             view=CommandCatalogView(
                 self.parent_view.bot,
@@ -899,7 +952,8 @@ class CommandCatalogView(CuteOwnedView):
     @discord.ui.button(label="이전", emoji="🌿", style=discord.ButtonStyle.secondary, row=2)
     async def previous(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         page = max(0, self.page - 1)
-        await interaction.response.edit_message(
+        await _edit_component(
+            interaction,
             embed=_catalog_embed(self.bot, self.guide, self.category_id, page, query=self.query),
             view=CommandCatalogView(
                 self.bot, self.owner_id, self.world_data, self.save_data, self.guide,
@@ -910,7 +964,8 @@ class CommandCatalogView(CuteOwnedView):
     @discord.ui.button(label="다음", emoji="🍀", style=discord.ButtonStyle.secondary, row=2)
     async def next(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         page = min(self.page_count - 1, self.page + 1)
-        await interaction.response.edit_message(
+        await _edit_component(
+            interaction,
             embed=_catalog_embed(self.bot, self.guide, self.category_id, page, query=self.query),
             view=CommandCatalogView(
                 self.bot, self.owner_id, self.world_data, self.save_data, self.guide,
@@ -924,7 +979,8 @@ class CommandCatalogView(CuteOwnedView):
 
     @discord.ui.button(label="처음 가이드", emoji="🌱", style=discord.ButtonStyle.success, row=2)
     async def beginner(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await _edit_component(
+            interaction,
             embed=_beginner_embed(),
             view=BeginnerQuickView(self.bot, self.owner_id, self.world_data, self.save_data, self.guide),
         )
@@ -979,7 +1035,8 @@ class BeginnerQuickView(CuteOwnedView):
 
     @discord.ui.button(label="명령어 도감", emoji="📚", style=discord.ButtonStyle.secondary, row=1)
     async def catalog(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await _edit_component(
+            interaction,
             embed=_catalog_embed(self.bot, self.guide, "all", 0),
             view=CommandCatalogView(
                 self.bot, self.owner_id, self.world_data, self.save_data, self.guide,

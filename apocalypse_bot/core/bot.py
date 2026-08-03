@@ -5763,7 +5763,30 @@ register_v1090_integrated_renewal(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V10.9.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V10.9.1: 카드게임 25종 상세 대시보드 · 일반/아바돈 즉시 시작 버튼
+# discord.py 2.7 TextInput.label 폐기 경고 제거 · 최신 패치 범위 테스트/패치노트 갱신
+from apocalypse_bot.commands.v1091_card_dashboard_hotfix import register_v1091_card_dashboard_hotfix
+register_v1091_card_dashboard_hotfix(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V10.9.2: 실제 PNG 정보/지도/카드 대시보드 재적용 · 실시간 경마 · 홈페이지 ONLINE 피드 보강
+# 기존 명령 이름은 유지하고 콜백만 최신 화면으로 교체하며, 경마는 음수 잔액과 무상한 판돈을 사용합니다.
+from apocalypse_bot.commands.v1092_visual_status_horserace import register_v1092_visual_status_horserace
+register_v1092_visual_status_horserace(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+    calculate_user_power, get_max_hp, get_max_stamina, refresh_vitals, refresh_conditions, condition_text,
+    JOBS, get_pet_record, get_pet_display_name,
+)
+
+# V10.9.3: 전체 명령 UI 안정화 · Invalid emoji 전수 정리 · 명령 도감 선응답/캐시
+# TextInput 폐기 경고 잔여 경로 제거 · Discord 프로필 PNG 합성 확인 · 최신 범위 검수 갱신
+from apocalypse_bot.commands.v1093_command_ui_audit import register_v1093_command_ui_audit
+register_v1093_command_ui_audit(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V10.9.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

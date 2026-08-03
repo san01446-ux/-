@@ -422,33 +422,143 @@ def _translate_embed(embed: Optional[discord.Embed], locale: str, bot: Optional[
         return embed
 
 
-def _translate_view(view: Any, locale: str, bot: Optional[commands.Bot]) -> Any:
-    if view is None or getattr(view, "_abaddon_no_localize", False):
-        return view
+
+V1093_COMPONENT_EMOJI_SANITIZER = True
+
+_UI_EMOJI_REPLACEMENTS: Mapping[str, str] = {
+    "🀙": "🎴",  # Mahjong tile glyph: Discord does not accept it as a component emoji.
+    "🂠": "🎴",  # Playing-card-back symbol is not an RGI emoji in Discord components.
+    "¼": "🔹",
+    "½": "🔸",
+    "✖️2": "✖️",
+}
+
+
+def _sanitize_ui_emoji(value: Any) -> Any:
+    """Return a Discord-safe component emoji.
+
+    Discord accepts custom emoji IDs and recognised Unicode emoji sequences, but
+    rejects several symbol glyphs that still render as text in Python.  A single
+    invalid option makes the whole message fail with HTTP 50035, so known unsafe
+    glyphs are normalised before every send/edit.  Unknown custom emojis are left
+    intact because their numeric ID is authoritative.
+    """
+    if value is None:
+        return None
+    emoji_id = getattr(value, "id", None)
+    if emoji_id is not None:
+        return value
+    name = str(getattr(value, "name", value) or "")
+    replacement = _UI_EMOJI_REPLACEMENTS.get(name)
+    if replacement:
+        return replacement
+    # Component emoji names must not contain ordinary ASCII text.  Keycap emoji
+    # are the sole useful exception (e.g. 6️⃣).
+    has_ascii_word = any(ch.isascii() and ch.isalnum() for ch in name)
+    is_keycap = bool(name) and name[-1:] == "⃣" and name[0] in "0123456789#*"
+    if has_ascii_word and not is_keycap:
+        return None
+    return value
+
+
+def _sanitize_component_emojis(item: Any) -> None:
     try:
-        for item in getattr(view, "children", []):
-            if hasattr(item, "label") and getattr(item, "label", None):
+        emoji = getattr(item, "emoji", None)
+        safe = _sanitize_ui_emoji(emoji)
+        if safe is not emoji:
+            item.emoji = safe
+    except Exception:
+        pass
+    try:
+        for option in getattr(item, "options", None) or []:
+            emoji = getattr(option, "emoji", None)
+            safe = _sanitize_ui_emoji(emoji)
+            if safe is not emoji:
+                option.emoji = safe
+    except Exception:
+        pass
+
+def _translate_view(view: Any, locale: str, bot: Optional[commands.Bot]) -> Any:
+    """Translate interactive UI without touching deprecated TextInput.label.
+
+    discord.py 2.6+ moved modal input captions to ``discord.ui.Label``.
+    Reading or assigning ``TextInput.label`` emits a DeprecationWarning in 2.7.
+    ABADDON modal inputs are already created in the selected locale, so the
+    runtime translator only needs to localize buttons, selects, placeholders,
+    options, and modern Label containers.
+    """
+    if view is None:
+        return view
+    # Emoji validation applies even to views that intentionally opt out of text
+    # localization; one bad glyph invalidates the entire Discord form body.
+    for child in getattr(view, "children", []):
+        _sanitize_component_emojis(child)
+    if getattr(view, "_abaddon_no_localize", False):
+        return view
+
+    text_input_type = getattr(getattr(discord, "ui", None), "TextInput", ())
+    label_type = getattr(getattr(discord, "ui", None), "Label", ())
+
+    def translate_component(item: Any) -> None:
+        _sanitize_component_emojis(item)
+        is_text_input = bool(text_input_type) and isinstance(item, text_input_type)
+        is_label_container = bool(label_type) and isinstance(item, label_type)
+
+        # discord.ui.Label uses ``text`` instead of the deprecated input label.
+        if is_label_container:
+            text = getattr(item, "text", None)
+            if text:
+                if not hasattr(item, "_abaddon_original_text"):
+                    item._abaddon_original_text = str(text)
+                item.text = translate_text(item._abaddon_original_text, locale, bot=bot)[:45]
+            description = getattr(item, "description", None)
+            if description:
+                if not hasattr(item, "_abaddon_original_description"):
+                    item._abaddon_original_description = str(description)
+                item.description = translate_text(item._abaddon_original_description, locale, bot=bot)[:100]
+            component = getattr(item, "component", None)
+            if component is not None:
+                translate_component(component)
+            return
+
+        # Buttons and selects still use label. TextInput.label is deliberately
+        # skipped because it is deprecated and already localized at creation.
+        if not is_text_input:
+            label = getattr(item, "label", None)
+            if label:
                 if not hasattr(item, "_abaddon_original_label"):
-                    item._abaddon_original_label = str(item.label)
+                    item._abaddon_original_label = str(label)
                 item.label = translate_text(item._abaddon_original_label, locale, bot=bot)[:80]
-            if hasattr(item, "placeholder") and getattr(item, "placeholder", None):
-                if not hasattr(item, "_abaddon_original_placeholder"):
-                    item._abaddon_original_placeholder = str(item.placeholder)
-                item.placeholder = translate_text(item._abaddon_original_placeholder, locale, bot=bot)[:150]
-            options = getattr(item, "options", None)
-            if options:
-                for option in options:
-                    if getattr(option, "label", None):
-                        if not hasattr(option, "_abaddon_original_label"):
-                            option._abaddon_original_label = str(option.label)
-                        option.label = translate_text(option._abaddon_original_label, locale, bot=bot)[:100]
-                    if getattr(option, "description", None):
-                        if not hasattr(option, "_abaddon_original_description"):
-                            option._abaddon_original_description = str(option.description)
-                        option.description = translate_text(option._abaddon_original_description, locale, bot=bot)[:100]
+
+        placeholder = getattr(item, "placeholder", None)
+        if placeholder:
+            if not hasattr(item, "_abaddon_original_placeholder"):
+                item._abaddon_original_placeholder = str(placeholder)
+            item.placeholder = translate_text(item._abaddon_original_placeholder, locale, bot=bot)[:150]
+
+        options = getattr(item, "options", None)
+        if options:
+            for option in options:
+                option_label = getattr(option, "label", None)
+                if option_label:
+                    if not hasattr(option, "_abaddon_original_label"):
+                        option._abaddon_original_label = str(option_label)
+                    option.label = translate_text(option._abaddon_original_label, locale, bot=bot)[:100]
+                option_description = getattr(option, "description", None)
+                if option_description:
+                    if not hasattr(option, "_abaddon_original_description"):
+                        option._abaddon_original_description = str(option_description)
+                    option.description = translate_text(option._abaddon_original_description, locale, bot=bot)[:100]
+
+    try:
+        for child in getattr(view, "children", []):
+            translate_component(child)
     except Exception:
         return view
     return view
+
+
+V1091_DEPRECATION_SAFE_LOCALIZER = True
 
 
 def _translate_modal(modal: Any, locale: str, bot: Optional[commands.Bot]) -> Any:
