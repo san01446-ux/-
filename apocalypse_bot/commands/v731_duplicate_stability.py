@@ -268,7 +268,7 @@ def register_v731_duplicate_stability(
         except Exception as exc:
             print(f"[v7.3.1 startup audit save warning] {type(exc).__name__}: {exc}", flush=True)
         print(
-            f"[ABADDON v{VERSION}] duplicate audit: commands={report['commands']['top_level_commands']} "
+            f"[INFO] [ABADDON v{VERSION}] duplicate audit: commands={report['commands']['top_level_commands']} "
             f"collisions={len(report['commands']['collisions'])} deletions=0",
             flush=True,
         )

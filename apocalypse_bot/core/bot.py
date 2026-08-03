@@ -5677,6 +5677,14 @@ register_v790_operations_disaster(
     COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
 )
 
+# V8.1.0: 통합 생존 단말기 · 서버 공동 탐험 지도 · 순차 지역 개척 · 거점 · 지역 보스 · 오류 사건 조회
+# v8.0 UX 계획을 흡수하되 기존 !게임/!명령어/!아바돈 대화는 삭제하거나 덮어쓰지 않습니다.
+from apocalypse_bot.commands.v810_world_map_ux import register_v810_world_map_ux
+register_v810_world_map_ux(
+    bot, get_user, check_registered, save_data, world_data, user_data,
+    COMMAND_GUIDE_CATEGORIES, calculate_user_power, add_title, add_season_points,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

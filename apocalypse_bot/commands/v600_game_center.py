@@ -16,7 +16,7 @@ from apocalypse_bot.commands.v430_story_expedition import ensure_v430
 from apocalypse_bot.commands.story_progression import can_access_season, locked_text
 
 
-VERSION = "7.9.0"
+VERSION = "8.1.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
@@ -420,6 +420,29 @@ GAME_CATEGORIES: Mapping[str, Tuple[str, str, Sequence[ActionSpec]]] = {
             _a("transfer", "송금", "대상 멘션/ID와 금액을 입력합니다.", "송금", "예: @상대 1000", force_modal=True),
         ),
     ),
+    "world_map": (
+        "🗺️ 탐험 지도·지역 개척",
+        "서버 공동 지도를 개척하고 정찰·기부·거점·지역 보스를 순차 진행합니다.",
+        (
+            _a("terminal_v810", "통합 생존 단말기", "현재 상태에 맞는 주요 기능을 한 선택창에서 엽니다.", "단말기"),
+            _a("world_map_v810", "공동 탐험 지도", "서버 지역 개척 진행도와 순차 해금 상태를 확인합니다.", "세계지도"),
+            _a("world_region_info_v810", "개척 지역 정보", "지역의 개척도·환경·거점·보스를 확인합니다.", "지역개척정보", "예: 대피소 외곽", force_modal=True),
+            _a("world_scout_v810", "지역 정찰", "스태미나를 사용해 현장 선택형 정찰을 시작합니다.", "지역정찰", "예: 대피소 외곽", force_modal=True),
+            _a("world_choice_v810", "정찰 선택", "재접속 뒤 진행 중인 정찰을 안전·신호·돌파 중 하나로 마무리합니다.", "지역선택", "예: 신호", force_modal=True),
+            _a("frontier_status_v810", "공동 개척 현황", "개방 지역의 진행도·안전도·오염도를 확인합니다.", "개척현황"),
+            _a("frontier_donate_v810", "개척 자원 기부", "개인 자원을 공동 개척도에 기부합니다.", "개척기부", "예: 외곽 고철 20", force_modal=True),
+            _a("outpost_v810", "지역 공동 거점", "감시탑·정화소·보급소 상태를 확인합니다.", "거점", "예: 외곽", force_modal=True),
+            _a("outpost_build_v810", "거점 건설·강화", "개인 자원으로 공동 거점 시설을 건설합니다.", "거점건설", "예: 외곽 감시탑", force_modal=True),
+            _a("region_boss_v810", "지역 보스", "개척 목표 달성 후 출현하는 지역 보스 상태를 확인합니다.", "지역보스", "예: 외곽", force_modal=True),
+            _a("region_boss_attack_v810", "지역 보스 공격", "활성 지역 보스를 공격하고 공동 피해를 누적합니다.", "지역보스공격", "예: 외곽", force_modal=True),
+            _a("region_reward_v810", "지역 개척 보상", "격파한 지역 보스의 개인 기여 보상을 받습니다.", "지역보상", "예: 외곽", force_modal=True),
+            _a("exploration_history_v810", "개인 탐험 기록", "최근 정찰 선택과 공동 개척 기여를 확인합니다.", "탐험기록"),
+            _a("admin_check_v810", "통합 관리자 점검", "최신 패치·데이터·메뉴·오류 점검 진입점을 엽니다.", "관리점검"),
+            _a("error_lookup_v810", "오류 사건 조회", "저장된 명령·UI 오류 사건 번호를 조회합니다.", "오류조회", "예: UI-02072778", force_modal=True),
+            _a("recent_errors_v810", "최근 오류 목록", "최근 보관된 명령·UI 오류 사건을 확인합니다.", "최근오류"),
+            _a("v810_stability", "v8.1 안정화 검수", "단말기·지도·정찰·거점·보스·오류 조회를 읽기 전용 검사합니다.", "810안정화검수"),
+        ),
+    ),
     "community_ops": (
         "🛡️ 운영·알림·커뮤니티",
         "통합 운영센터, 자동 재난 감시, 개인 알림, 공개 건의, 임시 음성방과 하이라이트를 관리합니다.",
@@ -580,6 +603,12 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
         ("party", "👥 파티", "파티 생성·가입·정보·사냥·탈퇴입니다.", ("party_create", "party_join", "party_info", "party_hunt", "party_leave")),
         ("trade", "💰 거래·경매", "개인 송금, 거래소 판매·구매와 경매를 관리합니다.", ("market", "sell", "market_buy", "sell_cancel", "auction_search", "auction_register", "auction_bid", "auction_finish", "auction_history", "transfer")),
     ),
+    "world_map": (
+        ("navigation", "🛰️ 단말기·공동 지도", "상태 맞춤 단말기와 지역 전체 현황·개인 기록입니다.", ("terminal_v810", "world_map_v810", "world_region_info_v810", "frontier_status_v810", "exploration_history_v810")),
+        ("scouting", "🧭 지역 정찰·개척 기부", "현장 선택형 정찰과 자원 기부로 공동 개척도를 올립니다.", ("world_scout_v810", "world_choice_v810", "frontier_donate_v810")),
+        ("outpost_boss", "🏕️ 거점·지역 보스", "감시탑·정화소·보급소 건설과 지역 보스 전투·보상입니다.", ("outpost_v810", "outpost_build_v810", "region_boss_v810", "region_boss_attack_v810", "region_reward_v810")),
+        ("map_admin", "🛡️ 지도·오류 안정화", "최신 패치 검사와 관리자 점검·오류 사건 조회입니다.", ("admin_check_v810", "error_lookup_v810", "recent_errors_v810", "v810_stability")),
+    ),
     "community_ops": (
         ("disaster_auto", "🚨 자동 재난·기상", "재난 예보·기상·기록과 관리자 자동 발생 설정입니다.", ("disaster_forecast_v790", "disaster_weather_v790", "disaster_history_v790", "disaster_auto_v790", "disaster_channel_v790")),
         ("notifications", "🔔 통합 알림·운영", "개인 알림 설정과 기존 운영 기능의 통합 진입점·분석입니다.", ("notification_center_v790", "my_notifications_v790", "operations_hub_v790", "operations_analytics_v790", "v790_stability")),
@@ -597,8 +626,8 @@ GAME_SECTIONS: Mapping[str, Sequence[Tuple[str, str, str, Sequence[str]]]] = {
 QUICK_PATHS: Mapping[str, Tuple[str, str, Sequence[str]]] = {
     "first_day": ("🌱 처음 시작", "가입 뒤 첫날에 필요한 정보·직업·출석·성장 보드·첫 전투 순서입니다.", ("info", "attendance", "jobs", "job_choose", "tutorial", "growth_board", "catchup_support_v710", "shop", "inventory", "equipment", "training")),
     "grow": ("📈 강해지고 싶어요", "성장 보드에서 목표를 확인하고 프리셋·강화·미션 보상으로 성장합니다.", ("growth_board", "mission_reward_v710", "info", "shop", "inventory", "equipment", "equipment_preset_v710", "equip", "enhance", "season_pass", "achievements")),
-    "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "region_list", "region_explore", "raid", "worldboss_status")),
-    "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 공동 재난으로 재화와 기여 보상을 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "disaster_status", "disaster_join", "dig", "treasure_appraise", "resource_market")),
+    "fight": ("⚔️ 전투하고 싶어요", "상태를 확인하고 훈련·던전·지역·레이드·월드보스에 도전합니다.", ("status", "rest", "training", "dungeon", "tactical_combat", "world_map_v810", "world_scout_v810", "region_list", "region_explore", "raid", "worldboss_status")),
+    "earn": ("🥫 식량과 자원이 필요해요", "지원금·생활 활동·폐허 파밍·납품 계약과 공동 재난으로 재화와 기여 보상을 모읍니다.", ("wallet", "support", "work", "gather", "fish", "lumber", "mine", "farming_menu", "contract_board", "world_scout_v810", "frontier_donate_v810", "disaster_status", "disaster_join", "dig", "treasure_appraise", "resource_market")),
     "story": ("📖 스토리를 보고 싶어요", "메인 시즌과 원정·유물·퀴즈 콘텐츠로 이동합니다.", ("story1", "story2", "story3", "expedition", "exp_start", "relic", "daily_quiz")),
     "community": ("🤝 같이 놀고 싶어요", "길드·공동 기지·레이드·파티·카드게임·거래로 이동합니다.", ("guild_dashboard", "guild_base", "guild_raid", "party_create", "card_game_menu", "market", "transfer")),
 }

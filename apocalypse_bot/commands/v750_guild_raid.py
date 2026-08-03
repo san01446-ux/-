@@ -2270,7 +2270,7 @@ def register_v750_guild_raid(
         except Exception as exc:
             print(f"[v7.5.1 guild migration save warning] {type(exc).__name__}: {exc}", flush=True)
         print(
-            f"[ABADDON v{VERSION}] guild migration guilds={report['guilds']} repairs={report['repairs_count']} "
+            f"[INFO] [ABADDON v{VERSION}] guild migration guilds={report['guilds']} repairs={report['repairs_count']} "
             f"critical={audit['critical']} warnings={audit['warning']} deletions=0",
             flush=True,
         )
