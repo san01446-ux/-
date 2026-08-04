@@ -5856,6 +5856,13 @@ register_v1152_traditional_hwatu_refresh(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V11.6.0: 진행 게임 타입 보존 체크포인트 · 재시작 복구 · 실제 납부액 안전 환불
+# 종료 결과 1회 보장 · 서버별 잠수 처리 · 화투 48장 전수검증 · 판정 요청 로그
+from apocalypse_bot.commands.v1160_game_recovery_validation import register_v1160_game_recovery_validation
+register_v1160_game_recovery_validation(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 # V11.5.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
