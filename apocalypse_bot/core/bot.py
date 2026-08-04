@@ -5835,7 +5835,21 @@ register_v1143_disaster_optin(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V11.4.3: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V11.5.0: 서버 운영센터 · 서버별 알림 구독/시간 · 서버 봇 권한 검수
+# 채널별 권한 프로필은 적용 전 자동 백업하며 권한·서버 설정을 복구 ID로 되돌릴 수 있습니다.
+from apocalypse_bot.commands.v1150_server_operations_permissions import register_v1150_server_operations_permissions
+register_v1150_server_operations_permissions(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.5.1: 서버 알림을 드롭다운 UI로 설정합니다.
+# 종류·상태/시간·채널·역할 멘션을 선택하고 적용 전 자동 백업과 UI 복구를 제공합니다.
+from apocalypse_bot.commands.v1151_alert_settings_ui import register_v1151_alert_settings_ui
+register_v1151_alert_settings_ui(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.5.1: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)
