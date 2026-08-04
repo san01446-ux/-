@@ -14,6 +14,7 @@ import discord
 from discord.ext import commands
 
 from apocalypse_bot.commands.v40_black_casino import casino_chips
+from apocalypse_bot.commands.v1152_hwatu_assets import hwatu_visual_uid as _asset_visual_uid
 from apocalypse_bot.commands.v651_card_games import (
     ACTIVE_GAMES,
     ACTIVE_LOBBIES,
@@ -531,6 +532,15 @@ def _hwatu_deck() -> List[HwatuCard]:
     random.shuffle(cards)
     return cards
 
+
+
+def _hwatu_visual_slot(card: HwatuCard, junk_seen: MutableMapping[int, int] | None = None) -> int:
+    """Return the traditional 1..4 artwork slot without changing game rules."""
+    return _asset_visual_uid(card.month, card.category, junk=card.junk, junk_seen=junk_seen) % 10
+
+
+def _hwatu_visual_uid(card: HwatuCard, junk_seen: MutableMapping[int, int] | None = None) -> int:
+    return _asset_visual_uid(card.month, card.category, junk=card.junk, junk_seen=junk_seen)
 
 def _hwatu_text(card: HwatuCard, locale: str) -> str:
     symbol = {"bright": "✨", "bright_rain": "🌧️", "animal": "🦌", "animal_godori": "🐦", "animal_doublejunk": "🍶", "ribbon_blue": "🔵", "ribbon_red_poetry": "🔴", "ribbon_red_plain": "🎀", "ribbon": "🎗️", "junk": "🍂"}.get(card.category, "🎴")

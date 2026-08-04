@@ -19,7 +19,7 @@ from discord.ext import commands
 
 from apocalypse_bot.commands.v40_black_casino import add_casino_chips, casino_chips
 from apocalypse_bot.commands.v651_card_games import ACTIVE_GAMES, ACTIVE_LOBBIES, MIN_BET, _card_text, _deck, _safe_edit
-from apocalypse_bot.commands.v1010_companion_card_games import HwatuCard, _ctx_locale, _hwatu_deck, _interaction_locale, _locale, _t
+from apocalypse_bot.commands.v1010_companion_card_games import HwatuCard, _ctx_locale, _hwatu_deck, _hwatu_visual_uid, _interaction_locale, _locale, _t
 from apocalypse_bot.commands.v1050_rules import HwatuSummary, record_game_result
 from apocalypse_bot.commands.v1051_rules import DebtBettingRound, GoStopEngine, HwatuCardLite, seotda_deck
 from apocalypse_bot.commands.v1060_authentic_card_games import (
@@ -1076,7 +1076,8 @@ class CaptureHwatuSession(AuthenticGoStopSession):
 
     def _reset_round(self) -> None:
         rich = _hwatu_deck()
-        lite = [HwatuCardLite(index, card.month, card.category, card.ko, card.junk) for index, card in enumerate(rich)]
+        junk_seen: Dict[int, int] = {}
+        lite = [HwatuCardLite(_hwatu_visual_uid(card, junk_seen), card.month, card.category, card.ko, card.junk) for card in rich]
         self.engine = GoStopEngine(self.player_ids, lite, matgo=False)
         self.pending_action.clear()
         self.pending_go = None

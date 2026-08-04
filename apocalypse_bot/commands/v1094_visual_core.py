@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Shared visual rendering helpers for ABADDON v11.4.0.
+"""Shared visual rendering helpers for ABADDON v11.5.2.
 
 No user image is persisted. Korean fonts are discovered from the host first. If
 Render does not provide one, Noto Sans CJK KR is cached in /tmp on first use.
@@ -15,9 +15,11 @@ import urllib.request
 import json
 from typing import Iterable, Sequence
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-VERSION = "11.4.0"
+from apocalypse_bot.commands.v1152_hwatu_assets import hwatu_visual_slot as _mapped_hwatu_slot
+
+VERSION = "11.5.2"
 FONT_CACHE = Path(os.getenv("ABADDON_FONT_CACHE", "/tmp/abaddon-fonts"))
 FONT_URLS = {
     "regular": os.getenv(
@@ -31,7 +33,7 @@ FONT_URLS = {
 }
 FONT_NAMES = {"regular": "NotoSansCJKkr-Regular.otf", "bold": "NotoSansCJKkr-Bold.otf"}
 
-HWATU_ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "hwatu_v1100"
+HWATU_ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "hwatu_v1152"
 HWATU_MANIFEST_PATH = HWATU_ASSET_ROOT / "manifest.json"
 
 @lru_cache(maxsize=1)
@@ -43,18 +45,13 @@ def _hwatu_manifest() -> dict[str, dict[str, str]]:
         return {}
 
 def _hwatu_slot(card: object) -> int:
-    """Map the live rule card to one of the four original ABADDON artworks."""
-    category = str(getattr(card, "category", "junk"))
-    uid = int(getattr(card, "uid", 0) or 0)
-    if category.startswith("bright"):
-        return 4
-    if category.startswith("ribbon"):
-        return 2
-    if category.startswith("animal"):
-        return 3
-    # Two junk cards exist in most months. Alternate the two remaining pieces
-    # without changing rule identity or exposing a predictable deck order.
-    return 1 if uid % 2 == 0 else 4
+    """Resolve the exact traditional artwork slot for live hwatu and Seotda cards."""
+    return _mapped_hwatu_slot(
+        int(getattr(card, "month", 0) or 0),
+        str(getattr(card, "category", getattr(card, "kind", "junk"))),
+        junk=int(getattr(card, "junk", 0) or 0),
+        uid=int(getattr(card, "uid", 0) or 0),
+    )
 
 @lru_cache(maxsize=64)
 def _hwatu_asset(month: int, slot: int) -> Image.Image | None:
@@ -294,7 +291,7 @@ def draw_hwatu_card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], c
         return
     x1, y1, x2, y2 = box
     month = int(getattr(card, "month", 0) or 0)
-    category = str(getattr(card, "category", "junk"))
+    category = str(getattr(card, "category", getattr(card, "kind", "junk")))
     palette = {
         "bright": (245, 202, 71), "bright_rain": (111, 172, 226),
         "animal": (97, 185, 128), "animal_godori": (97, 185, 128), "animal_doublejunk": (97, 185, 128),
@@ -305,8 +302,11 @@ def draw_hwatu_card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], c
     asset = _hwatu_asset(month, _hwatu_slot(card))
     if asset is not None:
         target_w, target_h = max(1, x2-x1), max(1, y2-y1)
-        rendered = asset.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        draw._image.paste(rendered, (x1, y1))
+        rendered = ImageOps.contain(asset, (max(1, target_w-4), max(1, target_h-4)), Image.Resampling.LANCZOS)
+        draw.rounded_rectangle(box, radius=10, fill=(247, 244, 235), outline=color, width=max(2, target_w//30))
+        px = x1 + (target_w-rendered.width)//2
+        py = y1 + (target_h-rendered.height)//2
+        draw._image.paste(rendered, (px, py))
         rounded(draw, box, 10, fill=None, outline=color, width=max(2, target_w//30))
     else:
         rounded(draw, box, 10, fill=(248, 240, 219), outline=color, width=3)
@@ -315,7 +315,7 @@ def draw_hwatu_card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], c
     short = {
         "bright": "광", "bright_rain": "비광", "animal": "열끗", "animal_godori": "고도리",
         "animal_doublejunk": "쌍피", "ribbon_blue": "청단", "ribbon_red_poetry": "홍단",
-        "ribbon_red_plain": "초단", "ribbon": "띠", "junk": "피",
+        "ribbon_red_plain": "초단", "ribbon": "띠", "junk": "쌍피" if int(getattr(card, "junk", 0) or 0) >= 2 else "피",
     }.get(category, "패")
     badge_w = max(30, int((x2-x1)*0.58))
     badge_h = max(18, int((y2-y1)*0.17))

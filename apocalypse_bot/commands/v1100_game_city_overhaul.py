@@ -24,7 +24,7 @@ from apocalypse_bot.commands.v1090_integrated_renewal import ALL_GAMES, _dashboa
 from apocalypse_bot.commands.v1092_horse_racing_rules import FINISH, HORSES, advance_positions, crossing_winner
 from apocalypse_bot.commands.v1094_visual_core import HWATU_ASSET_ROOT, font_status
 
-VERSION = "11.0.0"
+VERSION = "11.5.2"
 PATCH_DATE = "2026-08-04"
 THEMES = {
     "wasteland": ("폐허 카지노", "Wasteland Casino"),
@@ -193,10 +193,10 @@ def register_v1100_game_city_overhaul(
         locale=_ctx_locale(bot,ctx); reservations=_reservation_root(world_data).get("reservations",{})
         await ctx.send(_t(locale,f"🛟 현재 미정산 예약 **{len(reservations) if isinstance(reservations,Mapping) else 0}개**\n재시작 시 기존 예약 복구기가 실제 납부액을 안전 환불합니다. 진행 메시지가 남아 있으면 새 버튼으로 다시 시작하세요.",f"🛟 Pending reservations: **{len(reservations) if isinstance(reservations,Mapping) else 0}**\nOn restart, the reservation recovery safely refunds actual payments. Start a fresh UI if the old interaction expired."))
 
-    @bot.command(name="화투도감", aliases=["hwatucatalog", "hwatudeck"], help="ABADDON 전용 48장 화투 이미지 도감을 확인합니다.")
+    @bot.command(name="화투도감", aliases=["hwatucatalog", "hwatudeck"], help="전통 문양 기반 48장 화투 이미지 도감을 확인합니다.")
     async def hwatu_catalog(ctx: commands.Context) -> None:
-        locale=_ctx_locale(bot,ctx); path=HWATU_ASSET_ROOT/"ABADDON_HWATU_48_SHEET.png"
-        embed=_dashboard(bot,locale,"🎴 ABADDON 전용 화투 48장","🎴 ABADDON Original 48-Card Hwatu","맞고·고스톱·민화투·육백·섯다 화면에 사용하는 독자 화투 이미지입니다.","Original hwatu artwork used by Matgo, Go-Stop, Minhwatu, Yukbaek and Seotda.",discord.Color.red())
+        locale=_ctx_locale(bot,ctx); path=HWATU_ASSET_ROOT/"ABADDON_TRADITIONAL_HWATU_48_SHEET.png"
+        embed=_dashboard(bot,locale,"🎴 ABADDON 전통 문양 화투 48장","🎴 ABADDON Traditional 48-Card Hwatu","맞고·고스톱·민화투·육백·섯다·삼봉·도리짓고땡에 사용하는 전통 문양 화투입니다.","Traditional-pattern hwatu art used by all ABADDON hwatu games.",discord.Color.red())
         if path.is_file():
             filename="abaddon_hwatu_48.png"; embed.set_image(url=f"attachment://{filename}"); await ctx.send(embed=embed,file=discord.File(path,filename=filename))
         else: await ctx.send(embed=embed)
@@ -280,7 +280,7 @@ def register_v1100_game_city_overhaul(
             embed.add_field(name=_t(locale,"🏆 결과 화면","🏆 Results"),value=_t(locale,"모든 실전 카드 정산에 승자·팟·이번 손익·이전→현재 잔액·정산 ID를 고정 표시합니다.","Every authentic card settlement shows winner, pot, net, balance before→after and settlement ID."),inline=False)
             embed.add_field(name=_t(locale,"🎚️ 자유 레이즈","🎚️ Free Raise"),value=_t(locale,f"잔액과 무관한 자유 입력을 유지하고 1회 안전 한도 **{limit:,}칩**을 적용합니다. 손실은 음수까지 내려갑니다.",f"Free input remains independent of wallet, with a per-action safety limit of **{limit:,} chips**. Losses may go negative."),inline=False)
             embed.add_field(name=_t(locale,"🏁 경마 결승선","🏁 Race Finish"),value=_t(locale,"모든 레인을 같은 결승 좌표로 고정하고, 결승선을 처음 넘은 말만 우승 처리합니다.","All lanes share one finish coordinate; only a horse that first crosses it wins."),inline=False)
-            embed.add_field(name=_t(locale,"🎴 전용 화투","🎴 Original Hwatu"),value=_t(locale,"ABADDON 전용 48장 이미지를 맞고·고스톱·섯다·화투 도감에 연결했습니다.","Connected the original 48-card ABADDON art to hwatu tables, Seotda and the catalogue."),inline=False)
+            embed.add_field(name=_t(locale,"🎴 전용 화투","🎴 Original Hwatu"),value=_t(locale,"전통 문양 48장 이미지를 모든 화투 계열 게임과 도감에 연결했습니다.","Connected the original 48-card ABADDON art to hwatu tables, Seotda and the catalogue."),inline=False)
             embed.add_field(name=_t(locale,"🔐 장부·검증","🔐 Ledger & Verification"),value=_t(locale,"정산조회·셔플검증·게임세션·안전 복구 상태를 추가했습니다.","Added settlement lookup, shuffle verification, game session and safe recovery status."),inline=False)
             await ctx.send(embed=embed)
         patch_notes.callback=v1100_notes

@@ -5849,7 +5849,14 @@ register_v1151_alert_settings_ui(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V11.5.1: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V11.5.2: 새로 제작한 전통 문양 화투 48장을 모든 화투 계열 게임에 연결합니다.
+# 포커 규칙과 이미지는 유지하며 월·광/열끗/띠/피 이미지 슬롯만 정확히 교체합니다.
+from apocalypse_bot.commands.v1152_traditional_hwatu_refresh import register_v1152_traditional_hwatu_refresh
+register_v1152_traditional_hwatu_refresh(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.5.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

@@ -38,6 +38,7 @@ from apocalypse_bot.commands.v1010_companion_card_games import (
     _hwatu_labels,
     _hwatu_score,
     _hwatu_text,
+    _hwatu_visual_uid,
     _interaction_locale,
     _locale,
     _poker_label,
@@ -1034,7 +1035,8 @@ class SeotdaSession(BettingSession):
 # Authentic Go-Stop / Matgo with ambiguous floor choices and uncapped debt
 # ---------------------------------------------------------------------------
 def to_lite(cards:Sequence[HwatuCard])->List[HwatuCardLite]:
-    return [HwatuCardLite(i,c.month,c.category,f"{c.ko}\x1f{c.en}",c.junk) for i,c in enumerate(cards)]
+    junk_seen: Dict[int, int] = {}
+    return [HwatuCardLite(_hwatu_visual_uid(c,junk_seen),c.month,c.category,f"{c.ko}\x1f{c.en}",c.junk) for c in cards]
 def lite_to_full(c:HwatuCardLite)->HwatuCard:
     ko,en=(str(c.name).split("\x1f",1)+[str(c.name)])[:2] if "\x1f" in str(c.name) else (str(c.name),str(c.name))
     return HwatuCard(c.month,c.category,ko,en,c.junk)

@@ -47,6 +47,7 @@ from apocalypse_bot.commands.v1010_companion_card_games import (
     _hwatu_label,
     _hwatu_labels,
     _hwatu_score,
+    _hwatu_visual_uid,
     _interaction_locale,
     _locale,
     _poker_label,
@@ -1348,7 +1349,8 @@ class AuthenticGoStopSession(DebtCardSession):
     def __init__(self, lobby: CardLobbyView, *, bot: commands.Bot, mode: str, world_data: MutableMapping[str, Any]) -> None:
         super().__init__(lobby, timeout=900); self.bot = bot; self.mode = mode; self.locale = getattr(lobby, "public_locale", "ko"); self.world_data_ref = world_data
         rich = _hwatu_deck()
-        lite = [HwatuCardLite(index, card.month, card.category, card.ko, card.junk) for index, card in enumerate(rich)]
+        junk_seen: Dict[int, int] = {}
+        lite = [HwatuCardLite(_hwatu_visual_uid(card, junk_seen), card.month, card.category, card.ko, card.junk) for card in rich]
         self.engine = GoStopEngine(self.player_ids, lite, matgo=(mode == "맞고"))
         self.go_counts = {uid: 0 for uid in self.player_ids}; self.previous_scores = {uid: 0 for uid in self.player_ids}; self.pending_go: Optional[int] = None; self.declared_go: set[int] = set(); self.pending_action: Dict[int, Dict[str, Any]] = {}; self._ai_running = False
         self.last_action = _t(self.locale, "손패를 내고 더미 한 장을 뒤집어 같은 월 패를 직접 맞추세요.", "Play one hand card, flip one stock card, and match the same month.")
