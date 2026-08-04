@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 
 
-VERSION = "6.2.1"
+VERSION = "15.0.0"
 DATA_KEY = "dialogue_memory_v620"
 MENU_TIMEOUT = 300
 KST = ZoneInfo("Asia/Seoul")
@@ -21,10 +21,10 @@ MAX_PENDING_PER_USER = 10
 MAX_TRIGGER_LENGTH = 80
 MAX_RESPONSE_LENGTH = 700
 AUTO_REPLY_COOLDOWN = 8
-CONVERSATION_TIMEOUT_SECONDS = 15 * 60
-CONVERSATION_MAX_TURNS = 30
-CONVERSATION_HISTORY_LIMIT = 8
-CONVERSATION_MESSAGE_COOLDOWN = 1.5
+CONVERSATION_TIMEOUT_SECONDS = 60 * 60
+CONVERSATION_MAX_TURNS = 100
+CONVERSATION_HISTORY_LIMIT = 20
+CONVERSATION_MESSAGE_COOLDOWN = 0.8
 
 SECRET_PATTERNS: Tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)(?:password|passwd|비밀번호|토큰|token|secret|api[_ -]?key)\s*[:=]\s*\S+"),
@@ -891,6 +891,18 @@ def register_v620_dialogue_memory(
             state["stats"]["learned_hits"] = int(state["stats"].get("learned_hits", 0)) + 1
             save_data()
             return str(entry.get("response", "")), ("🧠", "📚", "✨"), "learned"
+        # v15.0 optional context engine: keeps the current conversation topic,
+        # supports Korean/English separately and avoids resetting on short follow-ups.
+        enhancer = getattr(bot, "_abaddon_v1500_conversation_reply", None)
+        if callable(enhancer):
+            try:
+                enhanced = enhancer(state, user, text, session)
+                if enhanced and isinstance(enhanced, tuple) and len(enhanced) == 3:
+                    state["stats"]["builtin_hits"] = int(state["stats"].get("builtin_hits", 0)) + 1
+                    save_data()
+                    return enhanced
+            except Exception as exc:
+                print(f"[ABADDON v15.0 CONVERSATION FALLBACK] {type(exc).__name__}: {exc}", flush=True)
         intent = _intent(text)
         state["stats"]["builtin_hits"] = int(state["stats"].get("builtin_hits", 0)) + 1
         save_data()
@@ -908,8 +920,16 @@ def register_v620_dialogue_memory(
     ) -> discord.Message:
         answer, reactions, source = await build_reply(guild, user, text, allow_contains=allow_contains, session=session)
         embed = discord.Embed(description=answer, color=0x4A235A if source == "learned" else 0x17202A)
-        embed.set_author(name="ABADDON · 기억 통신", icon_url=getattr(getattr(bot, "user", None), "display_avatar", None).url if getattr(getattr(bot, "user", None), "display_avatar", None) else None)
-        embed.set_footer(text="서버 승인 기억" if source == "learned" else "ABADDON 기본 대화 코어")
+        embed.set_author(name=("ABADDON · Context Link" if str(source).endswith("_en") else "ABADDON · 기억 통신"), icon_url=getattr(getattr(bot, "user", None), "display_avatar", None).url if getattr(getattr(bot, "user", None), "display_avatar", None) else None)
+        if source == "learned":
+            footer = "서버 승인 기억"
+        elif str(source).endswith("_en"):
+            footer = "ABADDON contextual conversation · English"
+        elif str(source).startswith("v1500"):
+            footer = "ABADDON 문맥형 연속 대화 · 한국어"
+        else:
+            footer = "ABADDON 기본 대화 코어"
+        embed.set_footer(text=footer)
         allowed = discord.AllowedMentions.none()
         if reply_to is not None:
             message = await reply_to.reply(embed=embed, mention_author=False, allowed_mentions=allowed)
@@ -1142,11 +1162,11 @@ def register_v620_dialogue_memory(
         embed.add_field(name="자동 정확일치", value="켜짐" if state["settings"].get("auto_exact") else "꺼짐", inline=True)
         await ctx.send(embed=embed, view=DialogueMenuView(ctx.author.id, actions))
 
-    @bot.command(name="대화", aliases=["대화센터", "아바돈대화"], help="아바돈 대화·기억 드롭다운 제어실을 엽니다.")
+    @bot.command(name="대화", aliases=["대화센터", "아바돈대화", "chatcenter", "conversationcenter"], help="아바돈 대화·기억 드롭다운 제어실을 엽니다.")
     async def dialogue_center(ctx: commands.Context) -> None:
         await open_menu(ctx)
 
-    @bot.command(name="아바돈", aliases=["말걸기"], help="모달 없이 아바돈과 연속 대화를 시작하거나 바로 질문합니다.")
+    @bot.command(name="아바돈", aliases=["말걸기", "chat", "talktoabaddon"], help="모달 없이 아바돈과 연속 대화를 시작하거나 바로 질문합니다.")
     async def talk_to_abaddon(ctx: commands.Context, *, 내용: str = "") -> None:
         if ctx.guild is None:
             await ctx.send("⚠️ 서버 안에서만 사용할 수 있습니다.")
@@ -1164,7 +1184,7 @@ def register_v620_dialogue_memory(
             return
         await send_public_reply(ctx.channel, ctx.guild, ctx.author, content, reply_to=ctx.message, session=session)
 
-    @bot.command(name="대화종료", aliases=["말걸기종료", "대화끝"], help="현재 채널에서 진행 중인 아바돈 연속 대화를 종료합니다.")
+    @bot.command(name="대화종료", aliases=["말걸기종료", "대화끝", "endchat", "stopconversation"], help="현재 채널에서 진행 중인 아바돈 연속 대화를 종료합니다.")
     async def end_conversation(ctx: commands.Context) -> None:
         if ctx.guild is None:
             return

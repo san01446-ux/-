@@ -5900,7 +5900,14 @@ register_v1320_black_city_complete(
 from apocalypse_bot.commands.v1330_command_registry_guard import register_v1330_command_registry_guard
 register_v1330_command_registry_guard(bot, COMMAND_GUIDE_CATEGORIES)
 
-# V13.3.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V15.0.0: v14.2 차원 항해 기능과 NEON ABYSS 시각·연출·문맥형 대화 통합.
+# 기존 도시 저장을 유지하면서 레이어 지도, 20종 부품, Unicode 연출, 차원/크루/공격대/창작소를 추가합니다.
+from apocalypse_bot.commands.v1500_neon_abyss import register_v1500_neon_abyss
+register_v1500_neon_abyss(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V15.0.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)
