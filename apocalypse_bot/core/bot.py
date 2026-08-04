@@ -5877,7 +5877,21 @@ register_v1220_chaos_festival_complete(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V11.5.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V12.2.1 / V13.2.0: Discord UI component HTTP 50035와 interaction 10062 재발 방지.
+# 전송 실패 시 이모지 없는 컴포넌트로 한 번 재시도하며 돌발 이벤트 버튼은 저장 전에 선응답합니다.
+from apocalypse_bot.commands.v1221_runtime_ui_hotfix import register_v1221_runtime_ui_hotfix
+register_v1221_runtime_ui_hotfix(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V13.2.0: BLACK CITY 살아 있는 서버 세계 완전판.
+# 도시·세력·영토·직업·제작·거래·아지트·범죄·NPC·뉴스·4주 시즌·8개 결말·공개 월드맵을 추가합니다.
+from apocalypse_bot.commands.v1320_black_city_complete import register_v1320_black_city_complete
+register_v1320_black_city_complete(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V13.2.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

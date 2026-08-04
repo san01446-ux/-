@@ -331,12 +331,12 @@ class FunHubSelect(discord.ui.Select):
     def __init__(self, locale: str):
         self.locale = locale
         options = [
-            discord.SelectOption(label=_t(locale, "돌발 이벤트", "Chaos Events"), value="events", emoji="☄️"),
-            discord.SelectOption(label=_t(locale, "파티게임", "Party Games"), value="party", emoji="🎉"),
-            discord.SelectOption(label=_t(locale, "NPC·동료", "NPCs & Companions"), value="life", emoji="🎩"),
-            discord.SelectOption(label=_t(locale, "탐험·사업", "Expedition & Business"), value="world", emoji="🧭"),
-            discord.SelectOption(label=_t(locale, "친목·꾸미기", "Social & Cosmetics"), value="social", emoji="🎨"),
-            discord.SelectOption(label=_t(locale, "비밀 콘텐츠", "Secret Content"), value="secret", emoji="🗝️"),
+            discord.SelectOption(label=_t(locale, "돌발 이벤트", "Chaos Events"), value="events"),
+            discord.SelectOption(label=_t(locale, "파티게임", "Party Games"), value="party"),
+            discord.SelectOption(label=_t(locale, "NPC·동료", "NPCs & Companions"), value="life"),
+            discord.SelectOption(label=_t(locale, "탐험·사업", "Expedition & Business"), value="world"),
+            discord.SelectOption(label=_t(locale, "친목·꾸미기", "Social & Cosmetics"), value="social"),
+            discord.SelectOption(label=_t(locale, "비밀 콘텐츠", "Secret Content"), value="secret"),
         ]
         super().__init__(placeholder=_t(locale, "놀거리를 선택하세요", "Choose an activity"), options=options)
 
@@ -373,8 +373,11 @@ class FunHubView(discord.ui.View):
 
 
 class EventActionButton(discord.ui.Button):
-    def __init__(self, locale: str, action: str, emoji: str, style: discord.ButtonStyle, ko: str, en: str):
-        super().__init__(label=_t(locale, ko, en), emoji=emoji, style=style)
+    def __init__(self, locale: str, action: str, emoji: Optional[str], style: discord.ButtonStyle, ko: str, en: str):
+        # Component emoji payloads can be rejected by Discord even when the glyph
+        # renders normally in chat.  Keep the label authoritative and let the
+        # global v13.2 fallback remove an emoji if the API rejects it.
+        super().__init__(label=_t(locale, ko, en), emoji=emoji or None, style=style)
         self.action = action
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -389,9 +392,9 @@ class ChaosEventView(discord.ui.View):
         self.locale = locale
         self.handler = handler
         self.add_item(EventActionButton(locale, "참가", "⚔️", discord.ButtonStyle.danger, "참가 / 공격", "Join / Attack"))
-        self.add_item(EventActionButton(locale, "1", "1️⃣", discord.ButtonStyle.secondary, "선택 1", "Choice 1"))
-        self.add_item(EventActionButton(locale, "2", "2️⃣", discord.ButtonStyle.secondary, "선택 2", "Choice 2"))
-        self.add_item(EventActionButton(locale, "3", "3️⃣", discord.ButtonStyle.secondary, "선택 3", "Choice 3"))
+        self.add_item(EventActionButton(locale, "1", None, discord.ButtonStyle.secondary, "선택 1", "Choice 1"))
+        self.add_item(EventActionButton(locale, "2", None, discord.ButtonStyle.secondary, "선택 2", "Choice 2"))
+        self.add_item(EventActionButton(locale, "3", None, discord.ButtonStyle.secondary, "선택 3", "Choice 3"))
 
 
 def register_v1220_chaos_festival_complete(
@@ -579,18 +582,33 @@ def register_v1220_chaos_festival_complete(
             await send(ctx, _t(loc, "현재 진행 중인 돌발 이벤트가 없습니다. 관리자는 `!돌발이벤트 시작 [종류]`로 열 수 있습니다.", "No chaos event is active. Admins can use `!chaosevent start [type]`.")); return
 
         async def handler(interaction: discord.Interaction, choice: str) -> None:
+            # Discord interactions expire quickly.  A large world-data save can
+            # take long enough to trigger error 10062, so acknowledge first.
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.defer(ephemeral=True, thinking=False)
+            except Exception:
+                pass
             text, changed = await apply_event_action(int(interaction.guild_id or 0), int(interaction.user.id), choice)
+            localized = text if _interaction_locale(bot, interaction) == "ko" else _auto_en(text)
+            try:
+                await interaction.followup.send(localized, ephemeral=True)
+            except Exception:
+                # Fallback for older discord.py builds where followup can be
+                # unavailable after a failed defer.
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message(localized, ephemeral=True)
+                except Exception:
+                    pass
             if changed:
                 current = _guild(root, int(interaction.guild_id or 0)).get("active_event")
                 embed = event_embed(loc, current) if isinstance(current, Mapping) else None
-                await interaction.response.send_message(text if _interaction_locale(bot, interaction) == "ko" else _auto_en(text), ephemeral=True)
                 if embed is not None:
                     try:
                         await interaction.message.edit(embed=embed, view=self_view)
                     except Exception:
                         pass
-            else:
-                await interaction.response.send_message(text if _interaction_locale(bot, interaction) == "ko" else _auto_en(text), ephemeral=True)
 
         self_view = ChaosEventView(loc, handler)
         await send(ctx, embed=event_embed(loc, event), view=self_view)
