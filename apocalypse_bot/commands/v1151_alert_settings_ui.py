@@ -197,18 +197,16 @@ class AlertModeSelect(discord.ui.Select):
 
 class AlertChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, owner: "AlertSettingsView") -> None:
-        current = owner.guild.get_channel(owner.channel_id)
-        defaults: Sequence[discord.abc.Snowflake] = [current] if isinstance(current, discord.TextChannel) else []
-        kwargs: Dict[str, Any] = {}
-        if defaults:
-            kwargs["default_values"] = defaults
+        # v16.2 compatibility: some Discord UI builds expose no generic
+        # Select.default_values attribute.  The current channel is already
+        # shown in the embed, so preselection is optional and is deliberately
+        # omitted to keep the menu portable across discord.py UI revisions.
         super().__init__(
             placeholder=_t(owner.locale, "3) 알림 채널 선택", "3) Choose an alert channel"),
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=1,
             row=2,
-            **kwargs,
         )
         self.owner = owner
 
@@ -222,13 +220,12 @@ class AlertChannelSelect(discord.ui.ChannelSelect):
 
 class AlertRoleSelect(discord.ui.RoleSelect):
     def __init__(self, owner: "AlertSettingsView") -> None:
-        role = owner.guild.get_role(owner.role_id)
-        defaults: Sequence[discord.abc.Snowflake] = [role] if role is not None and role != owner.guild.default_role else []
+        # See AlertChannelSelect: avoid default_values for cross-version UI
+        # compatibility.  The saved role remains visible in the summary embed.
         super().__init__(
             placeholder=_t(owner.locale, "4) 멘션 역할 선택 · 선택 해제 시 없음", "4) Choose mention role · clear for none"),
             min_values=0,
             max_values=1,
-            default_values=defaults,
             row=3,
         )
         self.owner = owner

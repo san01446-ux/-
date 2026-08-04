@@ -5907,7 +5907,14 @@ register_v1500_neon_abyss(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V15.0.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V16.2.0: LIVING LEGENDS 완전판.
+# 기존 기능과 저장을 삭제하지 않고 통합 명령어 센터, 채집센터, 개인 전설, 운명 사건, 탈것, 크루 합동기와 편의 기능을 연결합니다.
+from apocalypse_bot.commands.v1620_living_legends import register_v1620_living_legends
+register_v1620_living_legends(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V16.2.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)
