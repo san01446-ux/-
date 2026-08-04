@@ -5828,7 +5828,14 @@ register_v1142_dynamic_horse_odds(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V11.4.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V11.4.3: 자동 공동 재난 알림을 전체 서버 기본 노출에서 서버별 명시적 구독 방식으로 전환합니다.
+# 관리자가 지정한 채널에만 게시하며 키워드·시스템 채널 자동 선택을 제거합니다.
+from apocalypse_bot.commands.v1143_disaster_optin import register_v1143_disaster_optin
+register_v1143_disaster_optin(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V11.4.3: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)
