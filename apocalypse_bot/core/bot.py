@@ -42,6 +42,10 @@ load_dotenv()
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
+# V13.3.0: install before every extension so a duplicate alias cannot abort boot.
+from apocalypse_bot.commands.v1330_command_registry_guard import install_command_registry_guard
+install_command_registry_guard(bot)
+
 DATA_FILE = os.getenv("DATA_FILE", "/var/data/survival_data.json")
 DATA_BACKUP_DIR = os.getenv("DATA_BACKUP_DIR", os.path.join(os.path.dirname(DATA_FILE) or ".", "backups"))
 BACKUP_RETENTION = max(5, int(os.getenv("BACKUP_RETENTION", "30") or 30))
@@ -5891,7 +5895,12 @@ register_v1320_black_city_complete(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V13.2.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
+# V13.3.0: 실제 Render 로그에서 확인된 prefix 명령/별칭 충돌을 격리하고 진단합니다.
+# 기존 명령 이름을 우선 보존하며 충돌 별칭 한 개 때문에 전체 부팅이 중단되지 않습니다.
+from apocalypse_bot.commands.v1330_command_registry_guard import register_v1330_command_registry_guard
+register_v1330_command_registry_guard(bot, COMMAND_GUIDE_CATEGORIES)
+
+# V13.3.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)

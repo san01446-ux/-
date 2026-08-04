@@ -89,7 +89,7 @@ COMMAND_EN: Dict[str, str] = {
     "!세력외교": "!factiondiplomacy", "!도시직업": "!cityjobs", "!도시직업선택": "!choosecityjob",
     "!도시채집": "!citygather", "!도시제작": "!citycraft", "!도시제작법": "!cityrecipes",
     "!도시거래소": "!citymarket", "!판매등록": "!marketlist", "!판매취소": "!marketcancel",
-    "!거래구매": "!marketbuy", "!도시시세": "!marketprices", "!내아지트": "!myhideout",
+    "!거래구매": "!citymarketbuy", "!도시시세": "!marketprices", "!내아지트": "!myhideout",
     "!아지트꾸미기": "!decoratehideout", "!아지트공개": "!publishhideout", "!아지트방문": "!visithideout",
     "!도시건설": "!citybuild", "!공동시설": "!cityfacilities", "!건설기부": "!donateconstruction",
     "!범죄": "!citycrime", "!현상수배": "!citybounty", "!수사": "!cityinvestigate", "!체포": "!arrest",
@@ -507,7 +507,7 @@ def register_v1320_black_city_complete(
         if result.get("ok"): save_data()
         await send(ctx, "✅ 판매를 취소하고 물품을 돌려받았습니다." if result.get("ok") else f"❌ {result.get('message')}")
 
-    @bot.command(name="거래구매", aliases=["marketbuy", "buycitylisting"], help="도시 거래소의 판매 글을 구매합니다.")
+    @bot.command(name="거래구매", aliases=["citymarketbuy", "buycitylisting"], help="도시 거래소의 판매 글을 구매합니다.")
     async def market_buy_cmd(ctx: commands.Context, 판매ID: str) -> None:
         buyer = await require_user(ctx)
         if buyer is None: return

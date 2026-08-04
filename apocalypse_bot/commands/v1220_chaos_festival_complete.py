@@ -85,10 +85,10 @@ _COMMAND_EN = {
     "!라이어게임":"!liargame", "!라이어참가":"!joinliar", "!라이어시작":"!startliar", "!라이어투표":"!liarvote", "!그림자추리":"!shadowquiz", "!그림자정답":"!shadowanswer",
     "!생존룰렛":"!survivalroulette", "!생존선택":"!survivalpick", "!심리전":"!mindgame", "!심리선택":"!mindchoice", "!축제대화":"!talkabaddon", "!딜러대화":"!dealertalk", "!딜러선물":"!dealergift",
     "!관계도":"!festivalrelations", "!축제인물도감":"!npccatalog", "!오늘의대화":"!dailytalk", "!펫센터":"!petcenter", "!동료뽑기":"!drawcompanion", "!동료먹이":"!feedcompanion", "!동료탐험":"!petexpedition",
-    "!동료진화":"!evolvecompanion", "!동료도감":"!companioncatalog", "!펫레이스":"!petrace", "!탐험":"!expedition", "!파티탐험":"!partyexpedition", "!탐험참가":"!joinpartyexpedition", "!탐험선택":"!expeditionchoice",
+    "!동료진화":"!evolvecompanion", "!동료도감":"!companioncatalog", "!펫레이스":"!petrace", "!탐험":"!festivalexpedition", "!파티탐험":"!partyexpedition", "!탐험참가":"!joinpartyexpedition", "!탐험선택":"!expeditionchoice",
     "!탐험가방":"!expeditionbag", "!보물도감":"!treasurecatalog", "!던전순위":"!dungeonranking", "!내사업":"!mybusiness", "!사업개설":"!openbusiness", "!상품설정":"!setproduct", "!직원고용":"!hirestaff",
     "!가게방문":"!visitshop", "!서버상권":"!servermarket", "!사업순위":"!businessranking", "!오늘의명장면":"!dailyhighlight", "!주간예능":"!weeklyvariety", "!월간시상식":"!monthlyawards", "!불운왕":"!unluckiest",
-    "!역전왕":"!comebackking", "!블러프분석":"!bluffanalysis", "!축제운세":"!fortune", "!궁합":"!compatibility", "!축제밸런스":"!chaosbalance", "!밸런스선택":"!balancechoice", "!월드컵":"!worldcup", "!월드컵선택":"!worldcupchoice",
+    "!역전왕":"!comebackking", "!블러프분석":"!bluffanalysis", "!축제운세":"!festivalfortune", "!궁합":"!compatibility", "!축제밸런스":"!chaosbalance", "!밸런스선택":"!balancechoice", "!월드컵":"!worldcup", "!월드컵선택":"!worldcupchoice",
     "!랜덤벌칙":"!randompenalty", "!칭찬릴레이":"!praiserelay", "!친목설정":"!socialsettings", "!익명응원":"!anonymouscheer", "!익명응원로그":"!anonymouslog", "!익명응원신고":"!reportanonymous", "!비밀친구":"!secretfriend",
     "!비밀친구참가":"!joinsecretfriend", "!비밀친구시작":"!startsecretfriend", "!서버빙고":"!serverbingo", "!빙고체크":"!bingocheck", "!출석도장":"!attendance", "!생일카드":"!birthdaycard", "!꾸미기센터":"!cosmeticcenter",
     "!프로필꾸미기":"!customizeprofile", "!칭호도감":"!titlecatalog", "!배경도감":"!backgroundcatalog", "!카드뒷면":"!cardbacks", "!테이블스킨":"!tableskins", "!트로피룸":"!chaostrophyroom", "!공동트로피룸":"!guildtrophyroom",
@@ -347,8 +347,8 @@ class FunHubSelect(discord.ui.Select):
             "events": _t(loc, "`!돌발이벤트` · `!이벤트참가` · `!이벤트순위`", "`!chaosevent` · `!joinevent` · `!eventranking`"),
             "party": _t(loc, "`!폭탄돌리기` · `!마피아` · `!라이어게임` · `!생존룰렛` · `!심리전`", "`!hotpotato` · `!mafia` · `!liargame` · `!survivalroulette` · `!mindgame`"),
             "life": _t(loc, "`!딜러대화` · `!딜러선물` · `!관계도` · `!펫센터` · `!동료뽑기`", "`!dealertalk` · `!dealergift` · `!relationships` · `!petcenter` · `!drawcompanion`"),
-            "world": _t(loc, "`!탐험` · `!파티탐험` · `!내사업` · `!사업개설` · `!서버상권`", "`!expedition` · `!partyexpedition` · `!mybusiness` · `!openbusiness` · `!servermarket`"),
-            "social": _t(loc, "`!축제운세` · `!궁합` · `!축제밸런스` · `!서버빙고` · `!꾸미기센터`", "`!fortune` · `!compatibility` · `!balancegame` · `!serverbingo` · `!cosmeticcenter`"),
+            "world": _t(loc, "`!탐험` · `!파티탐험` · `!내사업` · `!사업개설` · `!서버상권`", "`!festivalexpedition` · `!partyexpedition` · `!mybusiness` · `!openbusiness` · `!servermarket`"),
+            "social": _t(loc, "`!축제운세` · `!궁합` · `!축제밸런스` · `!서버빙고` · `!꾸미기센터`", "`!festivalfortune` · `!compatibility` · `!balancegame` · `!serverbingo` · `!cosmeticcenter`"),
             "secret": _t(loc, "`!비밀힌트`만 공개합니다. 조건을 만족하면 숨겨진 명령과 유물이 열립니다.", "Only `!secrethint` is public. Hidden commands and relics unlock through play."),
         }
         embed = discord.Embed(title=_t(loc, "🎪 혼돈의 축제", "🎪 Chaos Festival"), description=texts[value], color=discord.Color.dark_purple())
@@ -1247,7 +1247,7 @@ def register_v1220_chaos_festival_complete(
         label = zone.get("ko") if loc == "ko" else zone.get("en")
         return _t(loc, f"{zone.get('emoji','🧭')} **{label}** · 단계 {int(session.get('step',0))}/{int(zone.get('steps',0))} · HP {int(session.get('hp',0))} · 상태 {session.get('status')}", f"{zone.get('emoji','🧭')} **{label}** · Step {int(session.get('step',0))}/{int(zone.get('steps',0))} · HP {int(session.get('hp',0))} · {session.get('status')}")
 
-    @bot.command(name="탐험", aliases=["expedition", "adventure"], help="개인 선택형 탐험을 시작하거나 현재 상태를 확인합니다.")
+    @bot.command(name="탐험", aliases=["festivalexpedition", "chaosadventure"], help="개인 선택형 탐험을 시작하거나 현재 상태를 확인합니다.")
     async def expedition(ctx: commands.Context, 지역: str = "") -> None:
         if not await check_registered(ctx): return
         user = get_user(int(ctx.author.id)); fun = _fun(user); session = fun.get("expedition", {})
@@ -1589,7 +1589,7 @@ def register_v1220_chaos_festival_complete(
         )
         await send(ctx, f"🎭 **{_safe_name(member)} 블러프 지수 {score}/100**\n{stable_pick(comments,member.id,_today())}\n※ 비공개 손패는 읽지 않는 예능용 지표입니다.")
 
-    @bot.command(name="축제운세", aliases=["fortune", "dailyfortune"], help="사용자별 오늘의 운세와 행운 숫자를 확인합니다.")
+    @bot.command(name="축제운세", aliases=["festivalfortune", "dailyfestivalfortune"], help="사용자별 오늘의 운세와 행운 숫자를 확인합니다.")
     async def daily_fortune(ctx: commands.Context) -> None:
         if not await check_registered(ctx): return
         loc = locale(ctx); ko_grade, ko_text, en_grade, en_text, lucky = fortune_for(int(ctx.author.id), _today())
@@ -1803,7 +1803,7 @@ def register_v1220_chaos_festival_complete(
             _award(get_user(int(ctx.author.id)), f"bingo:{ctx.guild.id}:{season}:{ctx.author.id}", reward, score=3)
         save_data(); await send(ctx, f"🎯 `{state['board'][index]}` 체크 · 현재 {lines}줄" + (f" · 첫 빙고 +{reward:,}칩" if reward else ""))
 
-    @bot.command(name="출석도장", aliases=["attendance", "checkin"], help="하루 한 번 축제 출석 도장을 받습니다.")
+    @bot.command(name="출석도장", aliases=["festivalattendance", "festivalcheckin"], help="하루 한 번 축제 출석 도장을 받습니다.")
     async def attendance(ctx: commands.Context) -> None:
         if not await check_registered(ctx): return
         user = get_user(int(ctx.author.id)); fun = _fun(user); daily = fun.setdefault("daily", {}); key = f"attendance:{_today()}"
