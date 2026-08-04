@@ -5863,6 +5863,20 @@ register_v1160_game_recovery_validation(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V11.9.0: v11.7~v11.9 통합 — 서버 이벤트 달력/게임 예약 · 공개 경기 중계
+# 업적·화투/포커/경마/딜러/장식 수집 도감 · 최신 패치 전용 검수
+from apocalypse_bot.commands.v1190_event_broadcast_collection import register_v1190_event_broadcast_collection
+register_v1190_event_broadcast_collection(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V12.2.0: v12.0~v12.2 통합 — 혼돈의 축제 완전판
+# 돌발 이벤트 · 파티게임 · NPC/동료 · 탐험/사업 · 예능/친목 · 꾸미기/비밀을 서버별 복구 가능한 상태로 제공합니다.
+from apocalypse_bot.commands.v1220_chaos_festival_complete import register_v1220_chaos_festival_complete
+register_v1220_chaos_festival_complete(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 # V11.5.2: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
