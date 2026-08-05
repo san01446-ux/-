@@ -126,7 +126,7 @@ def _guild(root: MutableMapping[str, Any], guild_id: int, guild_name: str = "") 
             {"id": "street_lamp", "x": 1040, "y": 610, "scale": 0.36},
             {"id": "airship", "x": 1030, "y": 105, "scale": 0.36},
         ],
-        "decor_backups": [], "dimensions": {"active": None, "discovered": [], "history": []},
+        "decor_backups": [], "decor_history": [], "dimensions": {"active": None, "discovered": [], "history": []},
         "campaign": {"active": False, "chapter": 0, "members": [], "choices": [], "ending": None},
         "ship": {"name": "ABYSS-01", "level": 1, "xp": 0, "facilities": {"차원엔진": 1, "관측실": 1, "제작공방": 0, "유물보관고": 0}},
         "crews": {}, "raid": None, "studio": {"drafts": {}, "published": {}}, "lineage": [], "replays": [],
@@ -221,7 +221,7 @@ def render_city_map(city: Mapping[str, Any], neon: Mapping[str, Any], *, locale:
         _fit_text(cd,sub,(10,150,220,181),15,(190,185,210))
         bg.alpha_composite(card,(x,y))
 
-    for decor in neon.get("decorations",[])[:20]:
+    for decor in neon.get("decorations",[])[:40]:
         p=_safe_component_path(str(decor.get("id","")))
         if p: _paste_scaled(bg,p,int(decor.get("x",0)),int(decor.get("y",0)),float(decor.get("scale",0.35)))
 
@@ -230,7 +230,7 @@ def render_city_map(city: Mapping[str, Any], neon: Mapping[str, Any], *, locale:
         pd.rounded_rectangle((2,2,1328,138),20,fill=(9,12,31,235),outline=(107,74,180),width=3)
         pd.text((24,24),"✨ "+("도시 장식" if locale=='ko' else "City Decorations"),font=_font(23),fill=(236,220,255))
         names=[]
-        for d in neon.get("decorations",[])[:10]:
+        for d in neon.get("decorations",[])[:12]:
             ko,en=COMPONENT_LABELS.get(str(d.get('id')), (str(d.get('id')),str(d.get('id'))))
             names.append(ko if locale=='ko' else en)
         pd.text((24,62)," · ".join(names) or ("장식 없음" if locale=='ko' else "No decorations"),font=_font(18),fill=(200,199,220))
@@ -242,49 +242,236 @@ def render_city_map(city: Mapping[str, Any], neon: Mapping[str, Any], *, locale:
 
 class DecorSelect(discord.ui.Select):
     def __init__(self, view: "DecorView"):
-        self.owner_view=view
-        options=[]
-        for cid,(ko,en) in COMPONENT_LABELS.items():
-            options.append(discord.SelectOption(label=ko if view.locale=='ko' else en,value=cid,description=cid))
-        super().__init__(placeholder=_text(view.locale,"도시 부품 선택","Choose a city part"),options=options[:25])
+        self.owner_view = view
+        options = []
+        for cid, (ko, en) in COMPONENT_LABELS.items():
+            options.append(
+                discord.SelectOption(
+                    label=ko if view.locale == "ko" else en,
+                    value=cid,
+                    description=_text(view.locale, f"{cid} · 도시 지도에 바로 배치", f"{cid} · place directly on the city map"),
+                )
+            )
+        super().__init__(placeholder=_text(view.locale, "도시 부품 선택", "Choose a city part"), options=options[:25], row=0)
+
     async def callback(self, interaction: discord.Interaction) -> None:
-        self.owner_view.selected=self.values[0]
-        await interaction.response.edit_message(embed=self.owner_view.embed(),view=self.owner_view)
+        view = self.owner_view
+        previous = view.selected
+        view.selected = self.values[0]
+        ko, en = COMPONENT_LABELS[view.selected]
+        old_ko, old_en = COMPONENT_LABELS.get(previous, (previous, previous))
+        view.last_action = _text(
+            view.locale,
+            f"부품 선택 변경 · {old_ko} → {ko}",
+            f"Part selection changed · {old_en} → {en}",
+        )
+        view.action_count += 1
+        view.rebuild()
+        path = _safe_component_path(view.selected)
+        await interaction.response.defer()
+        kwargs = {"embed": view.embed(), "view": view}
+        if path:
+            kwargs["attachments"] = [discord.File(path, filename=path.name)]
+        try:
+            await interaction.edit_original_response(**kwargs)
+        except (TypeError, discord.HTTPException):
+            kwargs.pop("attachments", None)
+            await interaction.edit_original_response(**kwargs)
 
 
 class DecorView(discord.ui.View):
-    def __init__(self, *, owner_id:int, locale:str, row:MutableMapping[str,Any], save_data:Callable[[],None]):
-        super().__init__(timeout=600); self.owner_id=int(owner_id); self.locale=locale; self.row=row; self.save_data=save_data
-        self.selected="neon_gate"; self.x=530; self.y=570; self.scale=0.38
+    def __init__(
+        self,
+        *,
+        owner_id: int,
+        locale: str,
+        row: MutableMapping[str, Any],
+        city: MutableMapping[str, Any],
+        save_data: Callable[[], None],
+    ):
+        super().__init__(timeout=600)
+        self.owner_id = int(owner_id)
+        self.locale = locale
+        self.row = row
+        self.city = city
+        self.save_data = save_data
+        self.selected = "neon_gate"
+        self.x = 530
+        self.y = 570
+        self.scale = 0.38
+        self.last_action = _text(locale, "공방을 열었습니다. 배치할 부품을 선택하세요.", "Workshop opened. Choose a part to place.")
+        self.action_count = 0
+        self.rebuild()
+
+    def rebuild(self) -> None:
+        self.clear_items()
         self.add_item(DecorSelect(self))
-        for label,dx,dy in [("⬅️",-40,0),("➡️",40,0),("⬆️",0,-40),("⬇️",0,40)]:
-            b=discord.ui.Button(label=label,style=discord.ButtonStyle.secondary)
-            async def cb(interaction:discord.Interaction,dx=dx,dy=dy):
-                await interaction.response.defer(); self.x=max(0,min(1200,self.x+dx)); self.y=max(150,min(700,self.y+dy)); await interaction.edit_original_response(embed=self.embed(),view=self)
-            b.callback=cb; self.add_item(b)
-        apply=discord.ui.Button(label=_text(locale,"적용","Apply"),style=discord.ButtonStyle.success)
-        undo=discord.ui.Button(label=_text(locale,"최근 복구","Undo"),style=discord.ButtonStyle.danger)
-        async def apply_cb(interaction:discord.Interaction):
+        for label, dx, dy, action_ko, action_en in (
+            ("⬅️", -40, 0, "왼쪽 이동", "Move left"),
+            ("➡️", 40, 0, "오른쪽 이동", "Move right"),
+            ("⬆️", 0, -40, "위로 이동", "Move up"),
+            ("⬇️", 0, 40, "아래로 이동", "Move down"),
+        ):
+            button = discord.ui.Button(label=label, style=discord.ButtonStyle.secondary, row=1)
+
+            async def move_callback(interaction: discord.Interaction, dx=dx, dy=dy, action_ko=action_ko, action_en=action_en):
+                self.x = max(0, min(1200, self.x + dx))
+                self.y = max(150, min(700, self.y + dy))
+                ko, en = COMPONENT_LABELS[self.selected]
+                self.last_action = _text(
+                    self.locale,
+                    f"{ko} {action_ko} · X {self.x} / Y {self.y}",
+                    f"{en} · {action_en} · X {self.x} / Y {self.y}",
+                )
+                self.action_count += 1
+                await interaction.response.edit_message(embed=self.embed(), view=self)
+
+            button.callback = move_callback
+            self.add_item(button)
+
+        apply_button = discord.ui.Button(label=_text(self.locale, "✨ 적용", "✨ Apply"), style=discord.ButtonStyle.success, row=2)
+        undo_button = discord.ui.Button(label=_text(self.locale, "↩️ 최근 복구", "↩️ Undo"), style=discord.ButtonStyle.danger, row=2)
+        smaller_button = discord.ui.Button(label=_text(self.locale, "➖ 축소", "➖ Smaller"), style=discord.ButtonStyle.secondary, row=2)
+        larger_button = discord.ui.Button(label=_text(self.locale, "➕ 확대", "➕ Larger"), style=discord.ButtonStyle.secondary, row=2)
+        preview_button = discord.ui.Button(label=_text(self.locale, "🏙️ 도시 미리보기", "🏙️ City Preview"), style=discord.ButtonStyle.primary, row=2)
+
+        async def apply_callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            self.row.setdefault('decor_backups',[]).append(deepcopy(self.row.get('decorations',[]))); self.row['decor_backups']=self.row['decor_backups'][-10:]
-            self.row.setdefault('decorations',[]).append({'id':self.selected,'x':self.x,'y':self.y,'scale':self.scale}); self.row['decorations']=self.row['decorations'][-20:]
-            self.save_data(); await interaction.followup.send(_text(self.locale,"✅ 도시 부품을 적용했습니다.","✅ City part applied."),ephemeral=True)
-        async def undo_cb(interaction:discord.Interaction):
+            ko, en = COMPONENT_LABELS[self.selected]
+            before_count = len(self.row.get("decorations", []))
+            self.row.setdefault("decor_backups", []).append(deepcopy(self.row.get("decorations", [])))
+            self.row["decor_backups"] = self.row["decor_backups"][-10:]
+            placed = {
+                "id": self.selected,
+                "label": ko,
+                "x": self.x,
+                "y": self.y,
+                "scale": round(self.scale, 3),
+                "created_by": int(interaction.user.id),
+                "created_at": int(time.time()),
+                "action": "place",
+            }
+            self.row.setdefault("decorations", []).append(placed)
+            self.row["decorations"] = self.row["decorations"][-40:]
+            history = self.row.setdefault("decor_history", [])
+            history.append({
+                "at": int(time.time()),
+                "by": int(interaction.user.id),
+                "action": "place",
+                "part": self.selected,
+                "label": ko,
+                "x": self.x,
+                "y": self.y,
+                "scale": round(self.scale, 3),
+                "before": before_count,
+                "after": len(self.row["decorations"]),
+            })
+            self.row["decor_history"] = history[-100:]
+            self.last_action = _text(
+                self.locale,
+                f"배치 완료 · {ko} 1개 추가 · 총 {len(self.row['decorations'])}개",
+                f"Placed · {en} added · {len(self.row['decorations'])} total",
+            )
+            self.action_count += 1
+            self.save_data()
+            path = _safe_component_path(self.selected)
+            edit_kwargs = {"embed": self.embed(), "view": self}
+            if path:
+                edit_kwargs["attachments"] = [discord.File(path, filename=path.name)]
+            try:
+                await interaction.edit_original_response(**edit_kwargs)
+            except (TypeError, discord.HTTPException):
+                edit_kwargs.pop("attachments", None)
+                await interaction.edit_original_response(**edit_kwargs)
+            result = discord.Embed(
+                title=_text(self.locale, "✅ 도시 장식 배치 완료", "✅ City Decoration Placed"),
+                description=_text(
+                    self.locale,
+                    f"**한 행동:** 공방에서 `{ko}` 배치\n**추가된 부품:** `{self.selected}` · {ko}",
+                    f"**Action:** placed `{en}` in the workshop\n**Added part:** `{self.selected}` · {en}",
+                ),
+                color=0x2ECC71,
+            )
+            result.add_field(name=_text(self.locale, "배치 위치", "Position"), value=f"X `{self.x}` · Y `{self.y}` · Scale `{self.scale:.2f}`", inline=False)
+            result.add_field(name=_text(self.locale, "도시 장식 수", "Decoration Count"), value=f"`{before_count}` → **{len(self.row['decorations'])}**", inline=True)
+            result.add_field(name=_text(self.locale, "기록", "History"), value=_text(self.locale, "도시 장식 작업 기록에 저장됨", "Saved to city decoration history"), inline=True)
+            await interaction.followup.send(embed=result, ephemeral=True)
+
+        async def undo_callback(interaction: discord.Interaction) -> None:
             await interaction.response.defer(ephemeral=True)
-            backups=self.row.setdefault('decor_backups',[])
-            if not backups: await interaction.followup.send(_text(self.locale,"복구할 장식 백업이 없습니다.","No decoration backup is available."),ephemeral=True); return
-            self.row['decorations']=backups.pop(); self.save_data(); await interaction.followup.send(_text(self.locale,"↩️ 최근 장식 상태로 복구했습니다.","↩️ Restored the latest decoration backup."),ephemeral=True)
-        apply.callback=apply_cb; undo.callback=undo_cb; self.add_item(apply); self.add_item(undo)
-    async def interaction_check(self,interaction:discord.Interaction)->bool:
-        if int(interaction.user.id)==self.owner_id:return True
-        await interaction.response.send_message(_text(self.locale,"이 꾸미기 화면은 실행자만 사용할 수 있습니다.","Only the user who opened this decorator can use it."),ephemeral=True); return False
-    def embed(self)->discord.Embed:
-        ko,en=COMPONENT_LABELS[self.selected]
-        e=discord.Embed(title=_text(self.locale,"🎨 도시 꾸미기 공방","🎨 City Decoration Workshop"),description=_text(self.locale,"부품을 선택하고 방향 버튼으로 배치 위치를 조정한 뒤 적용하세요.","Choose a part, adjust its position, then apply it."),color=0x8E44AD)
-        e.add_field(name=_text(self.locale,"선택 부품","Selected Part"),value=(ko if self.locale=='ko' else en)+f" (`{self.selected}`)",inline=False)
-        e.add_field(name=_text(self.locale,"배치 좌표","Position"),value=f"X `{self.x}` · Y `{self.y}` · Scale `{self.scale:.2f}`",inline=False)
-        p=_safe_component_path(self.selected)
-        if p:e.set_thumbnail(url=f"attachment://{p.name}")
+            backups = self.row.setdefault("decor_backups", [])
+            if not backups:
+                await interaction.followup.send(_text(self.locale, "복구할 장식 백업이 없습니다.", "No decoration backup is available."), ephemeral=True)
+                return
+            before = len(self.row.get("decorations", []))
+            self.row["decorations"] = backups.pop()
+            after = len(self.row.get("decorations", []))
+            self.row.setdefault("decor_history", []).append({"at": int(time.time()), "by": int(interaction.user.id), "action": "undo", "before": before, "after": after})
+            self.row["decor_history"] = self.row["decor_history"][-100:]
+            self.last_action = _text(self.locale, f"최근 장식 상태 복구 · {before}개 → {after}개", f"Restored decoration backup · {before} → {after}")
+            self.action_count += 1
+            self.save_data()
+            await interaction.edit_original_response(embed=self.embed(), view=self)
+            await interaction.followup.send(_text(self.locale, f"↩️ 최근 장식 상태로 복구했습니다. 현재 {after}개입니다.", f"↩️ Restored the latest decoration backup. {after} parts remain."), ephemeral=True)
+
+        async def resize_callback(interaction: discord.Interaction, delta: float) -> None:
+            self.scale = max(0.18, min(0.80, round(self.scale + delta, 2)))
+            ko, en = COMPONENT_LABELS[self.selected]
+            self.last_action = _text(self.locale, f"{ko} 크기 조정 · Scale {self.scale:.2f}", f"{en} resized · Scale {self.scale:.2f}")
+            self.action_count += 1
+            await interaction.response.edit_message(embed=self.embed(), view=self)
+
+        async def smaller_callback(interaction: discord.Interaction):
+            await resize_callback(interaction, -0.05)
+
+        async def larger_callback(interaction: discord.Interaction):
+            await resize_callback(interaction, 0.05)
+
+        async def preview_callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            preview = render_city_map(self.city, self.row, locale=self.locale, clean=True)
+            await interaction.followup.send(
+                _text(self.locale, "🏙️ 현재 저장된 장식 기준 도시 미리보기입니다.", "🏙️ City preview using the currently saved decorations."),
+                file=discord.File(preview, filename="ABADDON_CITY_WORKSHOP_PREVIEW.png"),
+                ephemeral=True,
+            )
+
+        apply_button.callback = apply_callback
+        undo_button.callback = undo_callback
+        smaller_button.callback = smaller_callback
+        larger_button.callback = larger_callback
+        preview_button.callback = preview_callback
+        for item in (apply_button, undo_button, smaller_button, larger_button, preview_button):
+            self.add_item(item)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if int(interaction.user.id) == self.owner_id:
+            return True
+        await interaction.response.send_message(_text(self.locale, "이 꾸미기 화면은 실행자만 사용할 수 있습니다.", "Only the user who opened this decorator can use it."), ephemeral=True)
+        return False
+
+    def embed(self) -> discord.Embed:
+        ko, en = COMPONENT_LABELS[self.selected]
+        decorations = self.row.get("decorations", [])
+        history = self.row.get("decor_history", [])
+        e = discord.Embed(
+            title=_text(self.locale, "🎨 도시 꾸미기 공방", "🎨 City Decoration Workshop"),
+            description=_text(
+                self.locale,
+                "부품 선택 → 위치/크기 조정 → 적용 순서로 사용합니다. 모든 적용·복구 행동은 작업 기록에 남습니다.",
+                "Choose a part → adjust position/size → apply. Every placement and undo is recorded.",
+            ),
+            color=0x8E44AD,
+        )
+        e.add_field(name=_text(self.locale, "선택 부품", "Selected Part"), value=(ko if self.locale == "ko" else en) + f" (`{self.selected}`)", inline=False)
+        e.add_field(name=_text(self.locale, "배치 좌표", "Position"), value=f"X `{self.x}` · Y `{self.y}` · Scale `{self.scale:.2f}`", inline=False)
+        e.add_field(name=_text(self.locale, "방금 한 행동", "Latest Action"), value=self.last_action[:1024], inline=False)
+        e.add_field(name=_text(self.locale, "적용 시 추가", "On Apply"), value=_text(self.locale, f"{ko} 1개가 도시 레이어에 추가됩니다.", f"One {en} will be added to the city layer."), inline=True)
+        e.add_field(name=_text(self.locale, "현재 저장", "Saved"), value=f"장식 **{len(decorations)}/40** · 기록 **{len(history)}/100**", inline=True)
+        path = _safe_component_path(self.selected)
+        if path:
+            e.set_thumbnail(url=f"attachment://{path.name}")
+        e.set_footer(text=_text(self.locale, "선택을 바꾸면 첨부 이미지도 즉시 교체됩니다.", "Changing the selection also replaces the attached preview image."))
         return e
 
 
@@ -411,13 +598,19 @@ def register_v1500_neon_abyss(
         lines=[]
         for cid,(ko,en) in COMPONENT_LABELS.items(): lines.append(f"`{cid}` · {ko if l=='ko' else en}")
         e=discord.Embed(title=_text(l,'🧩 도시 부품 20종','🧩 20 City Parts'),description='\n'.join(lines),color=0x7D3C98)
-        e.set_footer(text=_text(l,'상세: !도시부품 부품ID','Detail: !cityparts part_id'))
-        await ctx.send(embed=e)
+        e.set_footer(text=_text(l,'상세: !도시부품 부품ID · 배치: !도시꾸미기','Detail: !cityparts part_id · Place: !citydecorate'))
+        catalog=ASSET_ROOT.parent/'v1630'/'previews'/('city_parts_catalog_ko.png' if l=='ko' else 'city_parts_catalog_en.png')
+        if catalog.exists():
+            catalog_name='city_parts_catalog_ko.png' if l=='ko' else 'city_parts_catalog_en.png'
+            e.set_image(url=f'attachment://{catalog_name}')
+            await ctx.send(embed=e,file=discord.File(catalog,filename=catalog_name))
+        else:
+            await ctx.send(embed=e)
 
     @bot.command(name='도시꾸미기',aliases=['citydecorate','decoratecity'],help='드롭다운과 방향 버튼으로 도시 부품을 배치합니다.')
     @commands.has_guild_permissions(manage_guild=True)
     async def city_decorate(ctx:commands.Context)->None:
-        n=row(ctx); view=DecorView(owner_id=ctx.author.id,locale=loc(ctx),row=n,save_data=save_data); p=_safe_component_path(view.selected)
+        n=row(ctx); view=DecorView(owner_id=ctx.author.id,locale=loc(ctx),row=n,city=black_city(ctx),save_data=save_data); p=_safe_component_path(view.selected)
         await ctx.send(embed=view.embed(),view=view,file=discord.File(p,filename=p.name) if p else None)
 
     @bot.command(name='도시꾸미기복구',aliases=['citydecorrestore'],help='가장 최근 도시 장식 백업을 복구합니다.')

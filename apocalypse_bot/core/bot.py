@@ -5947,6 +5947,13 @@ register_v1621_visual_command_hotfix(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V16.3.0: 메인 아포칼립스 RPG 시즌 1~5를 전면에 복구하고 전체 런타임 명령을 자동 분류합니다.
+# 큰 영역 → 기능군 → 명령 → 즉시 실행 흐름, 도시 공방 20종 1:1 리뉴얼, 정보 버튼과 자동 이모지 확장을 제공합니다.
+from apocalypse_bot.commands.v1630_core_rpg_command_city_overhaul import register_v1630_core_rpg_command_city_overhaul
+register_v1630_core_rpg_command_city_overhaul(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 # V16.2.0: 모든 prefix 명령의 영문/ASCII 접근 경로를 최종 등록 순서에서 동기화합니다.
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases

@@ -1051,7 +1051,7 @@ def register_v1620_living_legends(
         checks = [
             ("unique category ids", len(ids) == len(set(ids)), f"{len(ids)} total"),
             ("all sections reachable", all(split[key] for key, _, _ in HELP_SECTIONS), ", ".join(f"{k}:{len(v)}" for k, v in split.items())),
-            ("select page limit", all(len(v[i:i+LivingHelpView.PAGE_SIZE]) <= 24 for v in split.values() for i in range(0, max(1, len(v)), LivingHelpView.PAGE_SIZE)), "max 24"),
+            ("select page limit", all(len(v[i:i+LivingHelpView.PAGE_SIZE]) <= 25 for v in split.values() for i in range(0, max(1, len(v)), LivingHelpView.PAGE_SIZE)), "max 25"),
             ("korean help patched", bot.get_command("명령어") is not None and "v1620_previous_callback" in getattr(bot.get_command("명령어"), "extras", {}), "!명령어"),
             ("english help patched", bot.get_command("help") is not None and "v1620_previous_callback" in getattr(bot.get_command("help"), "extras", {}), "!help"),
         ]

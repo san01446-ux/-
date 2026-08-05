@@ -152,6 +152,39 @@ def register_v1092_visual_status_horserace(
     if recovered_races:
         save_data()
 
+    from apocalypse_bot.commands.v600_game_center import _invoke_command
+
+    class ProfileQuickActionView(discord.ui.View):
+        def __init__(self, owner_id: int, locale: str) -> None:
+            super().__init__(timeout=300)
+            self.owner_id = int(owner_id)
+            self.locale = locale
+            actions = (
+                ("🥫", "지갑", "Wallet", "지갑", discord.ButtonStyle.success),
+                ("🎮", "게임", "Games", "게임대시보드", discord.ButtonStyle.primary),
+                ("💰", "경제", "Economy", "경제대시보드", discord.ButtonStyle.primary),
+                ("🗺️", "세계지도", "World Map", "세계지도", discord.ButtonStyle.secondary),
+                ("📚", "전체 명령어", "All Commands", "명령어", discord.ButtonStyle.secondary),
+            )
+            for emoji, ko, en, command_name, style in actions:
+                button = discord.ui.Button(label=_t(locale, ko, en), emoji=emoji, style=style, row=0)
+
+                async def callback(interaction: discord.Interaction, command_name=command_name) -> None:
+                    if int(interaction.user.id) != self.owner_id:
+                        await interaction.response.send_message(_t(self.locale, "이 정보 화면은 실행자만 사용할 수 있습니다.", "Only the opener can use this dashboard."), ephemeral=True)
+                        return
+                    await interaction.response.defer(thinking=True, ephemeral=True)
+                    await _invoke_command(bot, interaction, command_name)
+
+                button.callback = callback
+                self.add_item(button)
+
+        async def interaction_check(self, interaction: discord.Interaction) -> bool:
+            if int(interaction.user.id) == self.owner_id:
+                return True
+            await interaction.response.send_message(_t(self.locale, "이 정보 화면은 실행자만 사용할 수 있습니다.", "Only the opener can use this dashboard."), ephemeral=True)
+            return False
+
     async def send_profile_dashboard(ctx: commands.Context) -> None:
         if not await check_registered(ctx):
             return
@@ -206,8 +239,8 @@ def register_v1092_visual_status_horserace(
         )
         file = discord.File(image, filename="abaddon_survivor_dashboard.png")
         embed.set_image(url="attachment://abaddon_survivor_dashboard.png")
-        embed.add_field(name=_t(locale, "바로가기", "Quick Actions"), value=_t(locale, "`!지갑` · `!게임대시보드` · `!경제대시보드` · `!세계지도`", "`!wallet` · `!gamedashboard` · `!economydashboard` · `!worldmap`"), inline=False)
-        await ctx.send(embed=embed, file=file)
+        embed.add_field(name=_t(locale, "바로가기", "Quick Actions"), value=_t(locale, "아래 버튼으로 즉시 실행 · 복사할 필요 없음", "Use the buttons below · no copy/paste required"), inline=False)
+        await ctx.send(embed=embed, file=file, view=ProfileQuickActionView(ctx.author.id, locale))
         save_data()
 
     info_command = bot.get_command("정보")
