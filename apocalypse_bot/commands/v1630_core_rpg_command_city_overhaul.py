@@ -449,11 +449,11 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         ("main", "codex", ("도감", "연대기", "기록", "진행", "할일", "다음 행동")),
         ("system", "server_setup", ("서버설정", "서버리뉴얼", "채널설정", "채널가이드", "역할설정", "설치")),
         ("system", "security", ("권한", "보안", "안티레이드", "격리", "잠금", "차단", "경고", "관리자")),
-        ("system", "alerts", ("알림", "구독", "운영센터", "운영대시보드")),
+        ("system", "alerts", ("알림", "구독", "운영센터", "운영대시보드", "운영광택")),
         ("system", "help", ("명령어", "도움말", "언어", "english", "접근성", "검색", "대시보드")),
-        ("system", "audit", ("검수", "진단", "오류", "테스트", "감사", "점검")),
+        ("system", "audit", ("검수", "진단", "오류", "테스트", "감사", "점검", "실사용통계", "commandmetrics")),
         ("system", "recovery", ("백업", "복구", "복원", "재시작", "안정화")),
-        ("system", "admin", ("지급", "회수", "강제", "데이터", "초기화", "운영자")),
+        ("system", "admin", ("지급", "회수", "강제", "데이터", "초기화", "운영자", "메시지정리", "청소센터", "cleanupcenter")),
     )
     for section, group, tokens in ordered_rules:
         if _has(blob, *tokens):

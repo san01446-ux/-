@@ -5980,6 +5980,13 @@ register_v1661_runtime_interaction_hotfix(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V16.7.0: LIVE OPS & POLISH.
+# Button-driven operations, confirmed cleanup, runtime usage visibility, dead-link audits and mobile-safe UI polish.
+from apocalypse_bot.commands.v1670_live_ops_polish import register_v1670_live_ops_polish
+register_v1670_live_ops_polish(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
