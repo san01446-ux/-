@@ -2608,11 +2608,37 @@ async def 돈주세요(ctx):
     final.add_field(name="🎬 상황", value=situation, inline=True)
     final.add_field(name="💡 TIP", value=visual_tip("support"), inline=False)
     final.set_footer(text="ABADDON 긴급 지원 · 하루 50회 · 특별 교섭은 정상 지원 뒤 랜덤 등장")
-    if visual_edit:
-        await visual_edit(message, final, f"activities/support/{asset_kind}")
-    else:
-        try: await message.edit(embed=final, content=None)
-        except (discord.Forbidden, discord.HTTPException, AttributeError): await ctx.send(embed=final)
+
+    # v16.2.1: replace the text-heavy/broken image family with a Korean-safe
+    # dynamic information card. If rendering or attachment editing fails, the
+    # existing embed + activity artwork path remains as the safe fallback.
+    rendered_support = False
+    support_renderer = getattr(bot, "v1621_render_support_card", None)
+    if support_renderer is not None:
+        try:
+            card = support_renderer(
+                ctx.author.display_name,
+                title,
+                description,
+                int(delta),
+                int(u["balance"]),
+                int(remaining),
+                situation,
+                visual_tip("support"),
+            )
+            support_file = discord.File(card, filename="abaddon_support_result_v1621.png")
+            image_embed = discord.Embed(color=color, timestamp=datetime.now())
+            image_embed.set_image(url="attachment://abaddon_support_result_v1621.png")
+            await message.edit(content=None, embed=image_embed, attachments=[support_file])
+            rendered_support = True
+        except (TypeError, discord.Forbidden, discord.HTTPException, AttributeError, OSError, ValueError):
+            rendered_support = False
+    if not rendered_support:
+        if visual_edit:
+            await visual_edit(message, final, f"activities/support/{asset_kind}")
+        else:
+            try: await message.edit(embed=final, content=None)
+            except (discord.Forbidden, discord.HTTPException, AttributeError): await ctx.send(embed=final)
     for emoji in {"failure": ("💸", "❌"), "empty": ("📭", "🫥"), "success": ("🎁", "✅"), "jackpot": ("💎", "🎊")}[outcome]:
         try: await message.add_reaction(emoji)
         except (discord.Forbidden, discord.HTTPException, AttributeError): break
@@ -5911,6 +5937,13 @@ register_v1500_neon_abyss(
 # 기존 기능과 저장을 삭제하지 않고 통합 명령어 센터, 채집센터, 개인 전설, 운명 사건, 탈것, 크루 합동기와 편의 기능을 연결합니다.
 from apocalypse_bot.commands.v1620_living_legends import register_v1620_living_legends
 register_v1620_living_legends(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V16.2.1: 정보 이미지 한글 폰트 깨짐 전면 보강 · 동적 채집/프로필/지원 카드 재렌더링.
+# !명령어를 큰 영역 → 세부 그룹 → 기능의 3단계 구조로 축소하고 각 선택지에 짧은 설명을 제공합니다.
+from apocalypse_bot.commands.v1621_visual_command_hotfix import register_v1621_visual_command_hotfix
+register_v1621_visual_command_hotfix(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
