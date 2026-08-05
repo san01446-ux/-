@@ -22,7 +22,13 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping,
 import discord
 from discord.ext import commands
 
-from apocalypse_bot.commands.v600_game_center import _command_requires_input, _invoke_command
+from apocalypse_bot.commands.v600_game_center import (
+    _command_requires_input,
+    _invoke_command,
+    _safe_embed,
+    _safe_select_options,
+    _safe_view,
+)
 
 VERSION = "16.6.0"
 EXPECTED_DECLARATIONS = 1346

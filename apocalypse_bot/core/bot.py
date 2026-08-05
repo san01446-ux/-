@@ -5987,6 +5987,13 @@ register_v1670_live_ops_polish(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V16.7.1: COMMAND CENTER NAMEERROR HOTFIX.
+# Restores the explicitly imported select/embed/view sanitizers used by the rebuilt command hub.
+from apocalypse_bot.commands.v1671_command_center_nameerror_hotfix import register_v1671_command_center_nameerror_hotfix
+register_v1671_command_center_nameerror_hotfix(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
