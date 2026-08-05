@@ -5947,8 +5947,8 @@ register_v1621_visual_command_hotfix(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
-# V16.3.0: 메인 아포칼립스 RPG 시즌 1~5를 전면에 복구하고 전체 런타임 명령을 자동 분류합니다.
-# 큰 영역 → 기능군 → 명령 → 즉시 실행 흐름, 도시 공방 20종 1:1 리뉴얼, 정보 버튼과 자동 이모지 확장을 제공합니다.
+# V16.3.1: 메인 RPG 전체 명령을 유지하면서 카지노와 비카지노 도박을 분리합니다.
+# 첫 화면 카테고리 설명, 신규 입장 버튼, 정부지원금과 채집 획득·변화 표시를 추가합니다.
 from apocalypse_bot.commands.v1630_core_rpg_command_city_overhaul import register_v1630_core_rpg_command_city_overhaul
 register_v1630_core_rpg_command_city_overhaul(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
@@ -5958,6 +5958,20 @@ register_v1630_core_rpg_command_city_overhaul(
 # 기존 별칭을 덮어쓰지 않고 충돌은 건너뛰며, 모든 명령에 최소 1개 영문 접근 경로를 보장합니다.
 from apocalypse_bot.commands.v652_english_access import synchronize_all_english_aliases
 synchronize_all_english_aliases(bot)
+
+# V16.5.0: SURVIVOR CORE COMPLETE.
+# English aliases are finalized first, then the command registry is rebuilt so Korean and English menus remain fully separated.
+from apocalypse_bot.commands.v1650_survivor_core_complete import register_v1650_survivor_core_complete
+register_v1650_survivor_core_complete(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
+# V16.6.0: FIRST SURVIVAL & LIVE QA.
+# Resumable beginner journey, visible gains/changes, state-aware buttons, live incident center, economy settlement audit and glossary.
+from apocalypse_bot.commands.v1660_first_survival_live_qa import register_v1660_first_survival_live_qa
+register_v1660_first_survival_live_qa(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
 
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)

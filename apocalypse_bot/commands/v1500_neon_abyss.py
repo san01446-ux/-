@@ -167,11 +167,13 @@ def _fit_text(draw: ImageDraw.ImageDraw, text: str, box: Tuple[int, int, int, in
     draw.text(((x1+x2)//2, (y1+y2)//2), text[:18], font=_font(12), fill=fill, anchor=anchor)
 
 
-def _paste_scaled(base: Image.Image, path: Path, x: int, y: int, scale: float) -> None:
+def _paste_scaled(base: Image.Image, path: Path, x: int, y: int, scale: float, rotation: int = 0) -> None:
     try:
         im = Image.open(path).convert("RGBA")
         size = max(40, int(256 * float(scale)))
         im = im.resize((size, size), Image.Resampling.LANCZOS)
+        if int(rotation) % 360:
+            im = im.rotate(-int(rotation) % 360, resample=Image.Resampling.BICUBIC, expand=True)
         base.alpha_composite(im, (int(x), int(y)))
     except Exception:
         pass
@@ -221,9 +223,9 @@ def render_city_map(city: Mapping[str, Any], neon: Mapping[str, Any], *, locale:
         _fit_text(cd,sub,(10,150,220,181),15,(190,185,210))
         bg.alpha_composite(card,(x,y))
 
-    for decor in neon.get("decorations",[])[:40]:
+    for decor in sorted(neon.get("decorations",[])[:40], key=lambda d: int(d.get("layer", 0) or 0)):
         p=_safe_component_path(str(decor.get("id","")))
-        if p: _paste_scaled(bg,p,int(decor.get("x",0)),int(decor.get("y",0)),float(decor.get("scale",0.35)))
+        if p: _paste_scaled(bg,p,int(decor.get("x",0)),int(decor.get("y",0)),float(decor.get("scale",0.35)),int(decor.get("rotation",0) or 0))
 
     if not clean:
         panel=Image.new("RGBA",(1330,140),(7,9,24,225)); pd=ImageDraw.Draw(panel)
@@ -299,6 +301,8 @@ class DecorView(discord.ui.View):
         self.x = 530
         self.y = 570
         self.scale = 0.38
+        self.rotation = 0
+        self.layer = 0
         self.last_action = _text(locale, "공방을 열었습니다. 배치할 부품을 선택하세요.", "Workshop opened. Choose a part to place.")
         self.action_count = 0
         self.rebuild()
@@ -347,6 +351,8 @@ class DecorView(discord.ui.View):
                 "x": self.x,
                 "y": self.y,
                 "scale": round(self.scale, 3),
+                "rotation": int(self.rotation),
+                "layer": int(self.layer),
                 "created_by": int(interaction.user.id),
                 "created_at": int(time.time()),
                 "action": "place",
@@ -363,6 +369,8 @@ class DecorView(discord.ui.View):
                 "x": self.x,
                 "y": self.y,
                 "scale": round(self.scale, 3),
+                "rotation": int(self.rotation),
+                "layer": int(self.layer),
                 "before": before_count,
                 "after": len(self.row["decorations"]),
             })
@@ -392,7 +400,7 @@ class DecorView(discord.ui.View):
                 ),
                 color=0x2ECC71,
             )
-            result.add_field(name=_text(self.locale, "배치 위치", "Position"), value=f"X `{self.x}` · Y `{self.y}` · Scale `{self.scale:.2f}`", inline=False)
+            result.add_field(name=_text(self.locale, "배치 위치", "Position"), value=f"X `{self.x}` · Y `{self.y}` · Scale `{self.scale:.2f}` · Rotate `{self.rotation}°` · Layer `{self.layer}`", inline=False)
             result.add_field(name=_text(self.locale, "도시 장식 수", "Decoration Count"), value=f"`{before_count}` → **{len(self.row['decorations'])}**", inline=True)
             result.add_field(name=_text(self.locale, "기록", "History"), value=_text(self.locale, "도시 장식 작업 기록에 저장됨", "Saved to city decoration history"), inline=True)
             await interaction.followup.send(embed=result, ephemeral=True)
@@ -444,6 +452,56 @@ class DecorView(discord.ui.View):
         for item in (apply_button, undo_button, smaller_button, larger_button, preview_button):
             self.add_item(item)
 
+        rotate_button = discord.ui.Button(label=_text(self.locale, "🔄 회전", "🔄 Rotate"), style=discord.ButtonStyle.secondary, row=3)
+        layer_down = discord.ui.Button(label=_text(self.locale, "⬇ 뒤로", "⬇ Layer Down"), style=discord.ButtonStyle.secondary, row=3)
+        layer_up = discord.ui.Button(label=_text(self.locale, "⬆ 앞으로", "⬆ Layer Up"), style=discord.ButtonStyle.secondary, row=3)
+        remove_last = discord.ui.Button(label=_text(self.locale, "🗑 최근 삭제", "🗑 Remove Last"), style=discord.ButtonStyle.danger, row=3)
+        history_button = discord.ui.Button(label=_text(self.locale, "📜 작업 기록", "📜 History"), style=discord.ButtonStyle.primary, row=3)
+
+        async def rotate_callback(interaction: discord.Interaction) -> None:
+            self.rotation = (self.rotation + 45) % 360
+            ko, en = COMPONENT_LABELS[self.selected]
+            self.last_action = _text(self.locale, f"{ko} 회전 · {self.rotation}°", f"{en} rotated · {self.rotation}°")
+            await interaction.response.edit_message(embed=self.embed(), view=self)
+
+        async def layer_callback(interaction: discord.Interaction, delta: int) -> None:
+            self.layer = max(-10, min(10, self.layer + delta))
+            self.last_action = _text(self.locale, f"배치 레이어 조정 · {self.layer}", f"Placement layer changed · {self.layer}")
+            await interaction.response.edit_message(embed=self.embed(), view=self)
+
+        async def remove_callback(interaction: discord.Interaction) -> None:
+            await interaction.response.defer(ephemeral=True)
+            decorations = self.row.setdefault("decorations", [])
+            if not decorations:
+                await interaction.followup.send(_text(self.locale, "삭제할 도시 부품이 없습니다.", "There is no city part to remove."), ephemeral=True)
+                return
+            self.row.setdefault("decor_backups", []).append(deepcopy(decorations))
+            removed = decorations.pop()
+            self.row.setdefault("decor_history", []).append({"at": int(time.time()), "by": int(interaction.user.id), "action": "remove", "part": removed.get("id"), "before": len(decorations)+1, "after": len(decorations)})
+            self.row["decor_history"] = self.row["decor_history"][-100:]
+            self.save_data()
+            ko, en = COMPONENT_LABELS.get(str(removed.get("id")), (str(removed.get("id")), str(removed.get("id"))))
+            self.last_action = _text(self.locale, f"최근 부품 삭제 · {ko} · 현재 {len(decorations)}개", f"Removed last part · {en} · {len(decorations)} remain")
+            await interaction.edit_original_response(embed=self.embed(), view=self)
+            await interaction.followup.send(_text(self.locale, f"🗑 `{ko}`를 도시에서 제거했습니다.", f"🗑 Removed `{en}` from the city."), ephemeral=True)
+
+        async def history_callback(interaction: discord.Interaction) -> None:
+            rows = list(self.row.get("decor_history", []))[-10:]
+            lines = []
+            for item in reversed(rows):
+                part = str(item.get("part", "-")); ko, en = COMPONENT_LABELS.get(part, (part, part))
+                action = str(item.get("action", "update"))
+                lines.append(f"• {action} · {ko if self.locale == 'ko' else en} · {item.get('before','?')}→{item.get('after','?')}")
+            await interaction.response.send_message("\n".join(lines) or _text(self.locale, "작업 기록이 없습니다.", "No workshop history."), ephemeral=True)
+
+        rotate_button.callback = rotate_callback
+        layer_down.callback = lambda interaction: layer_callback(interaction, -1)
+        layer_up.callback = lambda interaction: layer_callback(interaction, 1)
+        remove_last.callback = remove_callback
+        history_button.callback = history_callback
+        for item in (rotate_button, layer_down, layer_up, remove_last, history_button):
+            self.add_item(item)
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.owner_id:
             return True
@@ -464,7 +522,7 @@ class DecorView(discord.ui.View):
             color=0x8E44AD,
         )
         e.add_field(name=_text(self.locale, "선택 부품", "Selected Part"), value=(ko if self.locale == "ko" else en) + f" (`{self.selected}`)", inline=False)
-        e.add_field(name=_text(self.locale, "배치 좌표", "Position"), value=f"X `{self.x}` · Y `{self.y}` · Scale `{self.scale:.2f}`", inline=False)
+        e.add_field(name=_text(self.locale, "배치 좌표", "Position"), value=f"X `{self.x}` · Y `{self.y}` · Scale `{self.scale:.2f}` · Rotate `{self.rotation}°` · Layer `{self.layer}`", inline=False)
         e.add_field(name=_text(self.locale, "방금 한 행동", "Latest Action"), value=self.last_action[:1024], inline=False)
         e.add_field(name=_text(self.locale, "적용 시 추가", "On Apply"), value=_text(self.locale, f"{ko} 1개가 도시 레이어에 추가됩니다.", f"One {en} will be added to the city layer."), inline=True)
         e.add_field(name=_text(self.locale, "현재 저장", "Saved"), value=f"장식 **{len(decorations)}/40** · 기록 **{len(history)}/100**", inline=True)

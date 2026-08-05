@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""ABADDON v16.3.0 core-RPG navigation, city workshop and reaction expansion.
+"""ABADDON v16.3.1 core-RPG navigation, city workshop and reaction expansion.
 
 Additive patch goals:
 - classify every runtime command exactly once instead of relying on the manually
@@ -14,6 +14,7 @@ Additive patch goals:
 
 import inspect
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
@@ -23,8 +24,8 @@ from discord.ext import commands
 
 from apocalypse_bot.commands.v600_game_center import _command_requires_input, _invoke_command
 
-VERSION = "16.3.0"
-EXPECTED_DECLARATIONS = 1339
+VERSION = "16.6.0"
+EXPECTED_DECLARATIONS = 1346
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets"
 CITY_COMPONENT_ROOT = ASSET_ROOT / "v1500" / "city" / "components"
 V1630_PREVIEW_ROOT = ASSET_ROOT / "v1630" / "previews"
@@ -44,6 +45,39 @@ def _clean(value: Any, limit: int = 4000) -> str:
 def _short(value: Any, limit: int = 96) -> str:
     text = _clean(value, limit + 20)
     return text if len(text) <= limit else text[: max(1, limit - 1)] + "…"
+
+
+_HANGUL_RE = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]")
+_ASCII_COMMAND_RE = re.compile(r"^[A-Za-z0-9_ .-]+$")
+
+
+def _english_alias(entry: "CommandEntry") -> str:
+    candidates = list(entry.aliases) + [entry.qualified_name]
+    for candidate in candidates:
+        text = _clean(candidate, 100)
+        if text and _ASCII_COMMAND_RE.fullmatch(text) and any(ch.isalpha() for ch in text):
+            return text
+    return f"command-{entry.index + 1}"
+
+
+def _display_command(locale: str, entry: "CommandEntry") -> str:
+    return _english_alias(entry) if locale == "en" else entry.qualified_name
+
+
+def _display_help(locale: str, entry: "CommandEntry") -> str:
+    if locale != "en":
+        return entry.help_text
+    text = _clean(entry.help_text, 500)
+    if text and not _HANGUL_RE.search(text):
+        return text
+    _section, _ko, _en, _dko, den, _emoji = _group_spec(entry.group)
+    return f"{den}. Opens the preserved `{_english_alias(entry)}` command without mixing Korean UI text."
+
+
+def _display_signature(locale: str, entry: "CommandEntry") -> str:
+    if locale != "en" or not _HANGUL_RE.search(entry.signature or ""):
+        return entry.signature
+    return "[arguments]" if entry.signature else ""
 
 
 SECTION_SPECS: Tuple[Tuple[str, str, str, str], ...] = (
@@ -73,8 +107,9 @@ GROUP_SPECS: Dict[str, Tuple[Tuple[str, str, str, str, str, str], ...]] = {
         ("gear", "상점·장비·강화·제작", "Shop, Gear, Enhance & Craft", "아이템 구매, 장착, 강화, 제작과 공방", "Buy, equip, enhance and craft items", "🛠️"),
         ("combat", "전투·보스·던전", "Combat, Boss & Dungeon", "일반 전투, 결투, 던전, 보스와 공격대", "Combat, duels, dungeons, bosses and raids", "⚔️"),
         ("economy", "경제·거래·사업", "Economy, Trade & Business", "지갑, 송금, 시장, 거래소, 무역과 사업", "Wallet, transfers, markets, trade and business", "💰"),
-        ("cards", "카드·화투 게임", "Cards & Hwatu", "포커, 화투, 블랙잭 등 실전 카드게임", "Poker, hwatu, blackjack and card games", "🎴"),
-        ("casino", "카지노·경마·도박", "Casino, Racing & Gambling", "카지노 게임, 경마, 룰렛과 배팅 기록", "Casino games, racing, roulette and betting records", "🎰"),
+        ("cards", "화투·일반 카드게임", "Hwatu & Casual Cards", "맞고, 고스톱, 섯다, 훌라, 라미 등 비카지노 카드게임", "Hwatu, gostop, seotda, hula, rummy and casual card games", "🎴"),
+        ("casino", "BLACK CASINO·포커", "BLACK CASINO & Poker", "카지노 로비, 포커, 블랙잭, 바카라, 슬롯, VIP와 잭팟", "Casino lobby, poker, blackjack, baccarat, slots, VIP and jackpots", "🎰"),
+        ("gambling", "도박·배팅·경마", "Gambling, Betting & Racing", "탐색·주파수·생존 룰렛·경마 등 비카지노 배팅과 재기 지원", "Non-casino betting, survival roulette, racing and recovery support", "🎲"),
         ("party_games", "파티게임·축제·미니게임", "Party Games & Festival", "서버 파티게임, 혼돈 이벤트와 가벼운 놀이", "Server party games, chaos events and mini games", "🎉"),
         ("collections", "수집·꾸미기·보상", "Collections, Cosmetics & Rewards", "수집품, 칭호, 배경, 트로피와 꾸미기", "Collections, titles, backgrounds, trophies and cosmetics", "🏆"),
     ),
@@ -198,6 +233,36 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
     if module == "v411_server_guard_plus" and _has(blob, "이모지", "반응", "reaction", "emoji"):
         return "system", "auto_emoji"
 
+    # Casino and non-casino gambling are intentionally separated.
+    # Qualified names such as `카지노 룰렛` remain in BLACK CASINO, while
+    # standalone survival betting such as `룰렛`, `탐색` and `주파수` stays
+    # in the gambling category.
+    casino_tokens = (
+        "카지노", "casino", "텍사스홀덤", "오마하홀덤", "세븐카드스터드",
+        "파인애플홀덤", "숏덱홀덤", "하이로우포커", "인디언포커",
+        "카드블랙잭", "카드바카라", "포커", "blackjack", "baccarat",
+    )
+    gambling_tokens = (
+        "도박정보", "도박잔액", "도박자금", "도박통계", "파산신청",
+        "정부지원금", "경마", "horse", "탐색", "주파수", "생존 룰렛",
+    )
+    if _has(blob, "정부지원금", "재기지원금", "생존지원금"):
+        return "play", "gambling"
+    if qname.casefold().startswith(("카지노 ", "casino ")) or module == "v40_black_casino":
+        return "play", "casino"
+    if module == "v37_gambling_experience":
+        if _has(blob, "알바", "일하기"):
+            return "play", "life"
+        if _has(blob, "코인", "암시장알림"):
+            return "play", "economy"
+        return "play", "gambling"
+    if module in {"v1092_horse_racing_rules", "v1142_dynamic_horse_odds"}:
+        return "play", "gambling"
+    if module == "v36_gambling_market":
+        return ("play", "gambling") if _has(blob, *gambling_tokens) else ("play", "economy")
+    if _has(blob, *casino_tokens):
+        return "play", "casino"
+
     # Module families provide strong hints before generic keyword scoring.
     if module in {"v631_life_visuals", "v632_life_visuals", "v610_digging_treasure", "v770_ruin_farming"}:
         return "play", "life"
@@ -207,7 +272,7 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         return "play", "combat"
     if module in {"v651_card_games", "v1010_companion_card_games", "v1051_authentic_card_games", "v1060_authentic_card_games", "v1090_rules", "v1094_card_table_images", "v1100_game_city_overhaul", "v1152_traditional_hwatu_refresh"}:
         return "play", "cards"
-    if module in {"v39_casino", "v40_black_casino", "v37_gambling_experience", "v1092_horse_racing_rules", "v1142_dynamic_horse_odds"}:
+    if module == "v39_casino":
         return "play", "casino"
     if module in {"v1220_fun_core", "v1220_chaos_festival_complete"}:
         if _has(blob, "동료", "펫", "npc"):
@@ -254,8 +319,8 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
     if module == "v1000_global_survivor":
         return ("main", "exploration") if _has(blob, "탐사") else ("main", "onboarding")
     if module == "v1050_unified_expansion":
-        if _has(blob, "게임장", "빠른참가", "게임전적", "게임랭킹", "토너먼트"):
-            return "play", "cards"
+        if _has(blob, "파인애플홀덤", "숏덱홀덤", "바둑이", "하이로우포커", "인디언포커", "카드블랙잭", "카드바카라", "게임장", "빠른참가", "게임전적", "게임랭킹", "토너먼트"):
+            return "play", "casino"
         if _has(blob, "무료시즌"):
             return "main", "quests"
         return "play", "cards"
@@ -287,7 +352,7 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         return "play", "combat"
     if module == "v32_codex_settings_tutorial":
         return ("system", "server_setup") if _has(blob, "서버") else ("main", "codex")
-    if module in {"v36_gambling_market", "v40_finance"}:
+    if module == "v40_finance":
         return "play", "economy"
     if module == "v421_utility_pack":
         return "system", "server_setup"
@@ -348,7 +413,7 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
             return "main", "quests"
         if _has(blob, "랭킹", "가방조회"):
             return "main", "codex"
-    if module == "v1630_core_rpg_command_city_overhaul" and _has(blob, "이모지"):
+    if module == "v1631_casino_gambling_onboarding_overhaul" and _has(blob, "이모지"):
         return "system", "auto_emoji"
 
     # Name/help scoring catches core.bot and small legacy modules.
@@ -368,8 +433,9 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         ("social", "voice", ("음성", "tts", "하이라이트", "미디어")),
         ("social", "support", ("문의", "건의", "신고", "제보", "지원센터")),
         ("social", "chat", ("대화", "칭찬", "궁합", "비밀친구", "월드컵")),
-        ("play", "cards", ("카드", "포커", "화투", "맞고", "고스톱", "훌라", "라미", "섯다", "블랙잭", "바둑이", "대통령", "삼봉", "도리짓고땡", "육백", "토너먼트", "관전", "재대결")),
-        ("play", "casino", ("카지노", "경마", "룰렛", "도박", "배팅", "바카라", "슬롯")),
+        ("play", "casino", ("카지노", "포커", "홀덤", "블랙잭", "바카라", "슬롯", "vip", "잭팟", "딜러", "럭키휠")),
+        ("play", "gambling", ("도박", "배팅", "경마", "탐색", "주파수", "파산신청", "정부지원금", "생존 룰렛")),
+        ("play", "cards", ("카드", "화투", "맞고", "고스톱", "훌라", "라미", "섯다", "대통령", "삼봉", "도리짓고땡", "육백", "민화투")),
         ("play", "party_games", ("파티게임", "마피아", "라이어", "룰렛게임", "폭탄돌리기", "축제")),
         ("play", "combat", ("전투", "공격", "보스", "던전", "레이드", "결투", "방어")),
         ("play", "gear", ("장비", "아이템", "강화", "제작", "상점", "수리", "감정", "분해")),
@@ -553,7 +619,32 @@ def _overview_embed(locale: str, entries: Sequence[CommandEntry], section: str, 
     embed.add_field(name=_t(locale, "별칭", "Aliases"), value=f"**{alias_count:,}개**", inline=True)
     embed.add_field(name=_t(locale, "누락", "Missing"), value="**0개**", inline=True)
     embed.add_field(name=_t(locale, "메인 진행", "Main Progression"), value="📻 시즌 1 → 🚢 시즌 2 → 👑 시즌 3 → 🚂 시즌 4 → 📡 시즌 5", inline=False)
-    preview = "\n".join(f"• `!{e.qualified_name}` — {_short(e.help_text, 72)}" for e in visible[:8])
+    if special_title is None and section == "main" and group == "story1" and page == 0:
+        section_counts = {key: sum(1 for e in entries if e.section == key) for key, *_ in SECTION_SPECS}
+        category_guide = _t(
+            locale,
+            "\n".join((
+                f"📖 **메인 RPG** · {section_counts.get('main', 0)}개 — 시즌 1~5, 성장, 탐험, 기지와 진행 기록",
+                f"⚔️ **플레이** · {section_counts.get('play', 0)}개 — 생활, 장비, 전투, 경제, 카드, 카지노와 도박",
+                f"🌌 **세계** · {section_counts.get('world', 0)}개 — BLACK CITY, 도시 공방, 차원, 세력과 재난",
+                f"🤝 **소셜** · {section_counts.get('social', 0)}개 — 길드, 동료, NPC, 일정, 방송과 친목",
+                f"🛠️ **운영** · {section_counts.get('system', 0)}개 — 서버 설정, 보안, 알림, 자동 이모지와 검수",
+            )),
+            "\n".join((
+                f"📖 **Core RPG** · {section_counts.get('main', 0)} — Seasons 1–5, growth, exploration and progress",
+                f"⚔️ **Play** · {section_counts.get('play', 0)} — life, gear, combat, economy, casino and gambling",
+                f"🌌 **World** · {section_counts.get('world', 0)} — BLACK CITY, workshop, dimensions, factions and disasters",
+                f"🤝 **Social** · {section_counts.get('social', 0)} — guilds, companions, NPCs, schedules and community",
+                f"🛠️ **System** · {section_counts.get('system', 0)} — setup, security, alerts, reactions and audits",
+            )),
+        )
+        embed.add_field(name=_t(locale, "🧭 첫 화면 카테고리 안내", "🧭 Category Guide"), value=category_guide[:1024], inline=False)
+        embed.add_field(
+            name=_t(locale, "🎰 도박 콘텐츠 빠른 구분", "🎰 Gambling Quick Split"),
+            value=_t(locale, "**BLACK CASINO·포커**는 카지노 버튼 · **경마·탐색·주파수·재기 지원**은 도박 버튼", "Use Casino for poker/table games and Gambling for racing/survival bets/recovery support."),
+            inline=False,
+        )
+    preview = "\n".join(f"• `!{_display_command(locale, e)}` — {_short(_display_help(locale, e), 72)}" for e in visible[:8])
     if not preview:
         preview = _t(locale, "이 기능군에 표시할 명령이 없습니다.", "No commands in this group.")
     embed.add_field(name=f"{emoji} {_t(locale, gko, gen)} · {len(visible)}", value=f"{_t(locale, gdko, gden)}\n{preview}"[:1024], inline=False)
@@ -564,18 +655,19 @@ def _overview_embed(locale: str, entries: Sequence[CommandEntry], section: str, 
 
 def _detail_embed(locale: str, entry: CommandEntry, favorite: bool) -> discord.Embed:
     _section, gko, gen, gdko, gden, emoji = _group_spec(entry.group)
+    display_name = _display_command(locale, entry)
     embed = discord.Embed(
-        title=f"{emoji} !{entry.qualified_name}",
-        description=f"**{_t(locale, '무엇을 하나요?', 'What does it do?')}**\n{entry.help_text}",
+        title=f"{emoji} !{display_name}",
+        description=f"**{_t(locale, '무엇을 하나요?', 'What does it do?')}**\n{_display_help(locale, entry)}",
         color=0x4F8CFF if not entry.restricted else 0xE39B36,
     )
     embed.add_field(name=_t(locale, "분류", "Category"), value=_t(locale, gko, gen), inline=True)
     embed.add_field(name=_t(locale, "실행 방식", "Execution"), value=_t(locale, "입력창 또는 즉시 실행", "Input modal or instant execution"), inline=True)
     embed.add_field(name=_t(locale, "권한", "Access"), value=_t(locale, "관리/조건 확인" if entry.restricted else "일반 사용", "Restricted/checks" if entry.restricted else "General"), inline=True)
-    usage = f"!{entry.qualified_name}" + (f" {entry.signature}" if entry.signature else "")
+    usage = f"!{display_name}" + (f" {_display_signature(locale, entry)}" if _display_signature(locale, entry) else "")
     embed.add_field(name=_t(locale, "직접 입력", "Direct Command"), value=f"`{usage[:1000]}`", inline=False)
     if entry.aliases:
-        embed.add_field(name=_t(locale, "별칭", "Aliases"), value=" · ".join(f"`!{x}`" for x in entry.aliases[:12])[:1024], inline=False)
+        embed.add_field(name=_t(locale, "별칭", "Aliases"), value=" · ".join(f"`!{x}`" for x in ([a for a in entry.aliases if locale != "en" or (_ASCII_COMMAND_RE.fullmatch(a) and not _HANGUL_RE.search(a))][:12]))[:1024] or _t(locale, "등록된 별칭 없음", "No additional English aliases"), inline=False)
     embed.add_field(name=_t(locale, "버튼 사용", "Button Use"), value=_t(locale, "아래 **실행**을 누르세요. 필수 입력값이 있으면 입력창이 열립니다.", "Press **Execute** below. A modal opens when arguments are required."), inline=False)
     embed.add_field(name=_t(locale, "즐겨찾기", "Favorite"), value="⭐" if favorite else "☆", inline=True)
     embed.add_field(name=_t(locale, "원본 모듈", "Source Module"), value=f"`{entry.source}`", inline=True)
@@ -586,10 +678,10 @@ def _detail_embed(locale: str, entry: CommandEntry, favorite: bool) -> discord.E
 
 class CommandArgsModal(discord.ui.Modal):
     def __init__(self, owner: "CompleteCommandCenterView", entry: CommandEntry) -> None:
-        super().__init__(title=_short(f"!{entry.qualified_name} 입력", 45), timeout=MENU_TIMEOUT)
+        super().__init__(title=_short(_t(owner.locale, f"!{entry.qualified_name} 입력", f"!{_display_command(owner.locale, entry)} arguments"), 45), timeout=MENU_TIMEOUT)
         self.owner_view = owner
         self.entry = entry
-        placeholder = entry.signature or _t(owner.locale, "입력값이 없으면 비워두세요", "Leave blank when no value is needed")
+        placeholder = _display_signature(owner.locale, entry) or _t(owner.locale, "입력값이 없으면 비워두세요", "Leave blank when no value is needed")
         self.raw = discord.ui.TextInput(
             label=_t(owner.locale, "명령어 입력값", "Command Arguments"),
             placeholder=_short(placeholder, 100),
@@ -691,10 +783,10 @@ class CommandSelect(discord.ui.Select):
         for entry in page_rows:
             _section, _ko, _en, _dko, _den, emoji = _group_spec(entry.group)
             options.append(discord.SelectOption(
-                label=_short(f"!{entry.qualified_name}", 100),
+                label=_short(f"!{_display_command(owner.locale, entry)}", 100),
                 value=str(entry.index),
                 emoji=emoji,
-                description=_short(entry.help_text, 100),
+                description=_short(_display_help(owner.locale, entry), 100),
                 default=entry.index == owner.selected_index,
             ))
         if not options:
@@ -745,6 +837,39 @@ class NavButton(discord.ui.Button):
             return
         elif action == "story":
             view.set_special(_story_route(view.entries), _t(view.locale, "📖 메인 스토리 · 시즌 1→5", "📖 Main Story · Season 1→5"))
+        elif action == "casino":
+            view.section, view.group = "play", "casino"
+            view.special_entries = None; view.special_title = None; view.selected_index = None; view.page = 0
+        elif action == "gambling":
+            view.section, view.group = "play", "gambling"
+            view.special_entries = None; view.special_title = None; view.selected_index = None; view.page = 0
+        elif action == "beginner":
+            command = view.bot.get_command("초보생존") or view.bot.get_command("firstsurvival") or view.bot.get_command("초보센터")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+            rows = [e for e in view.entries if e.group in {"onboarding", "story1"}]
+            view.set_special(rows, _t(view.locale, "🌱 신규 생존자 첫걸음", "🌱 New Survivor Start"))
+        elif action == "quick_more":
+            view.quick_page = 1
+        elif action == "quick_back":
+            view.quick_page = 0
+        elif action == "story_continue":
+            command = view.bot.get_command("스토리나침반") or view.bot.get_command("storycompass")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+            view.set_special(_story_route(view.entries), _t(view.locale, "📖 메인 스토리 · 시즌 1→5", "📖 Main Story · Season 1→5"))
+        elif action == "survivor":
+            command = view.bot.get_command("생존허브") or view.bot.get_command("survivorhub")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+            rows = [e for e in view.entries if e.group in {"onboarding", "quests", "codex"}]
+            view.set_special(rows, _t(view.locale, "👤 생존자 통합 허브", "👤 Survivor Hub"))
         elif action == "today":
             view.set_special(_today_route(view.entries), _t(view.locale, "☀️ 오늘 먼저 할 일", "☀️ Today's Recommended Actions"))
         elif action in {"favorites", "recent"}:
@@ -830,6 +955,7 @@ class CompleteCommandCenterView(discord.ui.View):
         self.selected_index: Optional[int] = None
         self.special_entries: Optional[List[CommandEntry]] = None
         self.special_title: Optional[str] = None
+        self.quick_page = 0
         self.rebuild()
 
     def command_requires_input(self, entry: CommandEntry) -> bool:
@@ -908,11 +1034,18 @@ class CompleteCommandCenterView(discord.ui.View):
             self.add_item(NavButton(self, "related", "관련 명령", "Related", "🔗", row=4))
             self.add_item(NavButton(self, "close", "닫기", "Close", "✖️", discord.ButtonStyle.danger, row=4))
         else:
-            self.add_item(NavButton(self, "today", "오늘 추천", "Today", "☀️", discord.ButtonStyle.success, row=4))
-            self.add_item(NavButton(self, "favorites", "즐겨찾기", "Favorites", "⭐", row=4))
-            self.add_item(NavButton(self, "recent", "최근 실행", "Recent", "🕘", row=4))
-            self.add_item(NavButton(self, "city", "도시 공방", "City Workshop", "🎨", discord.ButtonStyle.primary, row=4))
-            self.add_item(NavButton(self, "emoji", "자동 이모지", "Auto Emoji", "✨", discord.ButtonStyle.primary, row=4))
+            if self.quick_page == 0:
+                self.add_item(NavButton(self, "beginner", "처음 안내", "Beginner", "🌱", discord.ButtonStyle.success, row=4))
+                self.add_item(NavButton(self, "casino", "카지노", "Casino", "🎰", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "gambling", "도박", "Gambling", "🎲", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "favorites", "즐겨찾기", "Favorites", "⭐", row=4))
+                self.add_item(NavButton(self, "quick_more", "더보기", "More", "➡️", row=4))
+            else:
+                self.add_item(NavButton(self, "story_continue", "스토리 계속", "Continue Story", "📖", discord.ButtonStyle.success, row=4))
+                self.add_item(NavButton(self, "today", "오늘 할 일", "Today", "🎯", row=4))
+                self.add_item(NavButton(self, "survivor", "생존 허브", "Survivor Hub", "👤", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "city", "도시 공방", "City Workshop", "🎨", row=4))
+                self.add_item(NavButton(self, "quick_back", "기본 메뉴", "Main Shortcuts", "⬅️", row=4))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if int(interaction.user.id) == self.owner_id:
@@ -979,6 +1112,59 @@ def register_v1630_core_rpg_command_city_overhaul(
         return
     bot._abaddon_v1630_registered = True
 
+    @bot.command(name="정부지원금", aliases=["재기지원금", "생존지원금"], help="보유 식량이 -10,000 이하일 때 24시간마다 최대 250,000 식량의 재기 지원을 받습니다.")
+    async def government_relief(ctx: commands.Context) -> None:
+        if not await check_registered(ctx):
+            return
+        user = get_user(ctx.author.id)
+        if not isinstance(user, MutableMapping):
+            await ctx.send("⚠️ 생존자 데이터를 찾지 못했습니다.")
+            return
+        before = int(user.get("balance", 0) or 0)
+        if before > -10_000:
+            await ctx.send(f"🏛️ 지원 대상이 아닙니다. 현재 잔액 **{before:,} 식량** · 대상 기준 **-10,000 이하**")
+            return
+        state = user.setdefault("v1631_government_relief", {})
+        now = int(time.time())
+        last = int(state.get("last_claim_at", 0) or 0)
+        cooldown = 24 * 60 * 60
+        remaining = cooldown - (now - last)
+        if last and remaining > 0:
+            hours, rem = divmod(remaining, 3600); minutes = rem // 60
+            await ctx.send(f"⏳ 정부 재기 지원은 **24시간에 1회**입니다. 다음 신청까지 **{hours}시간 {minutes}분** 남았습니다.")
+            return
+        amount = min(250_000, abs(before))
+        after = before + amount
+        user["balance"] = after
+        state["last_claim_at"] = now
+        state["claim_count"] = int(state.get("claim_count", 0) or 0) + 1
+        state["total_received"] = int(state.get("total_received", 0) or 0) + amount
+        history = state.setdefault("history", [])
+        if isinstance(history, list):
+            history.append({"at": now, "before": before, "amount": amount, "after": after})
+            del history[:-30]
+        save_data()
+        embed = discord.Embed(title="🏛️ ABADDON 정부 재기 지원금", description="도박·카지노 손실로 생존 자금이 마이너스인 생존자에게 긴급 지원이 지급됐습니다.", color=0x2ECC71)
+        embed.add_field(name="🎁 이번 획득", value=f"**+{amount:,} 식량**", inline=True)
+        embed.add_field(name="📉 부채 감소", value=f"**{abs(before) - abs(after):,} 식량**", inline=True)
+        embed.add_field(name="🧾 잔액 변화", value=f"{before:,} → **{after:,} 식량**", inline=False)
+        embed.add_field(name="📊 누적 지원", value=f"{int(state['claim_count'])}회 · {int(state['total_received']):,} 식량", inline=True)
+        embed.add_field(name="⏱️ 다음 신청", value="24시간 후", inline=True)
+        embed.add_field(name="ℹ️ 기준", value="잔액 -10,000 이하 · 1회 최대 250,000 · 지원 후 잔액이 0을 넘지 않음", inline=False)
+        embed.set_footer(text="BLACK CASINO·도박 재기 안전망 · 현금 가치 및 환전 기능 없음")
+        await ctx.send(embed=embed)
+
+    @bot.command(name="초보센터", aliases=["신규안내", "첫걸음센터"], help="처음 들어온 생존자를 위한 RPG 시작 순서와 주요 카테고리를 안내합니다.")
+    async def beginner_center(ctx: commands.Context) -> None:
+        embed = discord.Embed(title="🌱 ABADDON 신규 생존자 첫걸음", description="이 봇의 메인은 **시즌 1부터 이어지는 아포칼립스 RPG**입니다. 아래 순서대로 시작하면 됩니다.", color=0x55C9A5)
+        embed.add_field(name="📖 1. 메인 스토리", value="`!스토리 시작` → `!스토리 선택 번호` · 시즌 1부터 진행", inline=False)
+        embed.add_field(name="📊 2. 생존 준비", value="`!가입 생존자` · `!정보` · `!출석` · `!오늘할일`", inline=False)
+        embed.add_field(name="⚔️ 3. 플레이", value="채집·장비·전투·경제·화투·카지노·도박을 `!명령어`에서 선택", inline=False)
+        embed.add_field(name="🎰 카지노 / 🎲 도박", value="카지노: 포커·블랙잭·바카라·슬롯·VIP / 도박: 경마·탐색·주파수·생존 룰렛·정부지원금", inline=False)
+        embed.add_field(name="🌌 세계 / 🤝 소셜 / 🛠️ 운영", value="BLACK CITY·차원·도시 공방 / 길드·동료·NPC / 서버 설정·보안·알림", inline=False)
+        embed.set_footer(text="!명령어 첫 화면의 버튼과 드롭다운으로 모든 기능을 바로 실행할 수 있습니다.")
+        await ctx.send(embed=embed)
+
     entries = _build_registry(bot)
     setattr(bot, "v1630_command_entries", entries)
     setattr(bot, "v1630_command_index", {e.qualified_name: e for e in entries})
@@ -1034,6 +1220,82 @@ def register_v1630_core_rpg_command_city_overhaul(
     except Exception:
         pass
 
+    # Expand the actual member-join panel with a clear RPG/category explanation
+    # and direct buttons for the command center, casino and non-casino gambling.
+    try:
+        from apocalypse_bot.commands import v711_cute_interactions as welcome_mod
+        original_welcome_embed = welcome_mod._welcome_embed
+
+        def v1631_welcome_embed(member: discord.Member, days: int, theme_key: str, *, settings: Optional[Dict[str, Any]] = None) -> discord.Embed:
+            embed = original_welcome_embed(member, days, theme_key, settings=settings)
+            embed.add_field(
+                name="📚 ABADDON에는 무엇이 있나요?",
+                value=(
+                    "📖 메인 RPG — 시즌 1~5 스토리·성장·탐험\n"
+                    "⚔️ 플레이 — 채집·장비·전투·경제·화투\n"
+                    "🎰 카지노 — 포커·블랙잭·바카라·슬롯·VIP\n"
+                    "🎲 도박 — 경마·탐색·주파수·생존 룰렛·재기 지원\n"
+                    "🌌 세계 — BLACK CITY·차원·도시 공방\n"
+                    "🤝 소셜 / 🛠️ 운영 — 길드·동료·서버 관리"
+                ),
+                inline=False,
+            )
+            embed.add_field(name="🚀 가장 쉬운 시작", value="아래 **스토리 시작** 또는 **전체 명령** 버튼을 누르세요.", inline=False)
+            embed.set_footer(text=f"ABADDON v{VERSION} · 신규 생존자 통합 안내")
+            return embed
+
+        class V1631WelcomeQuickView(discord.ui.View):
+            def __init__(self, bot_obj: commands.Bot, owner_id: int, world: Dict[str, Any], saver: Any, guide_rows: Sequence[Dict[str, Any]]) -> None:
+                super().__init__(timeout=900)
+                self.bot = bot_obj; self.owner_id = int(owner_id)
+
+            async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                if int(interaction.user.id) == self.owner_id:
+                    return True
+                await interaction.response.send_message("본인의 환영 패널이나 `!초보센터`를 이용해주세요.", ephemeral=True)
+                return False
+
+            async def run(self, interaction: discord.Interaction, name: str, raw: str = "") -> None:
+                await interaction.response.defer(thinking=True)
+                await _invoke_command(self.bot, interaction, name, raw)
+
+            @discord.ui.button(label="가입하기", emoji="🪪", style=discord.ButtonStyle.success, row=0)
+            async def register_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "가입", "생존자")
+
+            @discord.ui.button(label="스토리 시작", emoji="📖", style=discord.ButtonStyle.success, row=0)
+            async def story_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "스토리 시작")
+
+            @discord.ui.button(label="전체 명령", emoji="📚", style=discord.ButtonStyle.primary, row=0)
+            async def help_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "명령어")
+
+            @discord.ui.button(label="내 정보", emoji="📊", style=discord.ButtonStyle.secondary, row=1)
+            async def info_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "정보")
+
+            @discord.ui.button(label="오늘 할 일", emoji="☀️", style=discord.ButtonStyle.secondary, row=1)
+            async def today_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "오늘할일")
+
+            @discord.ui.button(label="카지노", emoji="🎰", style=discord.ButtonStyle.primary, row=1)
+            async def casino_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "카지노")
+
+            @discord.ui.button(label="도박 안내", emoji="🎲", style=discord.ButtonStyle.primary, row=2)
+            async def gambling_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "도박정보")
+
+            @discord.ui.button(label="초보센터", emoji="🌱", style=discord.ButtonStyle.secondary, row=2)
+            async def beginner_btn(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+                await self.run(interaction, "초보센터")
+
+        welcome_mod._welcome_embed = v1631_welcome_embed
+        welcome_mod.WelcomeQuickView = V1631WelcomeQuickView
+    except Exception as exc:
+        print(f"[ABADDON v{VERSION}] welcome expansion warning: {type(exc).__name__}: {exc}", flush=True)
+
     # Expand automatic reactions. Existing nested listeners read these module
     # globals at message time, so updating them here immediately affects runtime.
     presets, rules, extra_channels = _expanded_reaction_data()
@@ -1069,18 +1331,18 @@ def register_v1630_core_rpg_command_city_overhaul(
     except Exception as exc:
         print(f"[ABADDON v{VERSION}] auto-reaction expansion warning: {type(exc).__name__}: {exc}", flush=True)
 
-    if not any(str(row.get("id")) == "v1630_core_rpg_command_city" for row in guide):
+    if not any(str(row.get("id")) == "v1631_casino_gambling_onboarding" for row in guide):
         guide.append({
-            "id": "v1630_core_rpg_command_city",
+            "id": "v1631_casino_gambling_onboarding",
             "emoji": "📖",
-            "title": "v16.3.0 CORE RPG COMMAND & CITY OVERHAUL",
-            "hint": "시즌 1~5 메인 RPG 복구, 전체 등록 명령 자동 분류·실행, 도시 공방 20종 1:1 리뉴얼, 자동 이모지 확장",
+            "title": "v16.3.1 CORE RPG COMMAND & CITY OVERHAUL",
+            "hint": "카지노·도박 분리, 첫 화면 카테고리 설명, 신규 입장 버튼, 정부지원금과 채집 획득·변화 표시",
             "commands": [
                 "!명령어",
                 "!명령어전수검수 상세",
                 "!도시부품검수 상세",
                 "!이모지확장설정",
-                "!1630통합검수 상세",
+                "!1631통합검수 상세",
             ],
         })
 
@@ -1096,7 +1358,7 @@ def register_v1630_core_rpg_command_city_overhaul(
             except Exception:
                 pass
             embed = discord.Embed(
-                title=_t(locale, "📜 ABADDON v16.3.0 패치노트", "📜 ABADDON v16.3.0 Patch Notes"),
+                title=_t(locale, "📜 ABADDON v16.3.1 패치노트", "📜 ABADDON v16.3.1 Patch Notes"),
                 description=_t(
                     locale,
                     "메인 아포칼립스 RPG의 시즌 1~5 진행을 명령어 센터 최상단에 복구하고, 전체 등록 명령을 자동 분류·검색·실행하도록 전면 개편했습니다.",
@@ -1104,18 +1366,18 @@ def register_v1630_core_rpg_command_city_overhaul(
                 ),
                 color=0x7137C8,
             )
-            embed.add_field(name=_t(locale, "📖 메인 RPG 복구", "📖 Core RPG Restored"), value=_t(locale, "시즌 1 검은 주파수 → 시즌 5 잿빛 연합전선을 순서대로 바로 탐색", "Direct Season 1 Black Frequency → Season 5 Ashen Front progression"), inline=False)
-            embed.add_field(name=_t(locale, "📚 전체 명령 센터", "📚 Complete Command Center"), value=_t(locale, f"런타임 등록 명령 {len(entries):,}개 자동 분류 · 5개 영역 · 43개 기능군 · 25개 자동 페이지 · 검색/즐겨찾기/최근 실행", f"{len(entries):,} runtime commands classified · 5 sections · 43 groups · automatic pages · search/favorites/recent"), inline=False)
-            embed.add_field(name=_t(locale, "🚀 버튼 즉시 실행", "🚀 Execute Buttons"), value=_t(locale, "명령 선택 후 실행 버튼 · 필수 인수는 입력창 · 기존 직접 명령도 유지", "Select then execute · argument modal when required · direct commands preserved"), inline=False)
-            embed.add_field(name=_t(locale, "🎨 도시 꾸미기 공방", "🎨 City Workshop"), value=_t(locale, "부품 20종을 512×512 투명 이미지로 1:1 리뉴얼 · 선택 이미지 즉시 교체 · 이동/크기/배치/복구 작업 기록", "20 parts rebuilt as 512×512 transparent assets · instant preview replacement · movement/scale/place/undo history"), inline=False)
-            embed.add_field(name=_t(locale, "📊 정보 바로가기", "📊 Profile Quick Actions"), value=_t(locale, "복사형 텍스트 대신 지갑·게임·경제·세계지도·전체 명령 버튼 추가", "Replaced copy-only links with wallet, games, economy, world map and command buttons"), inline=False)
-            embed.add_field(name=_t(locale, "✨ 자동 이모지", "✨ Automatic Reactions"), value=_t(locale, "17종 프리셋 · 키워드 14종 · 메시지당 최대 7개 반응 · 기존 설정 보존", "17 presets · 14 keyword rules · up to 7 reactions per message · existing settings preserved"), inline=False)
-            embed.add_field(name=_t(locale, "🧪 신규 검수", "🧪 New Audits"), value="`!명령어전수검수 상세` · `!도시부품검수 상세` · `!1630통합검수 상세`", inline=False)
+            embed.add_field(name=_t(locale, "🎰 카지노 / 🎲 도박 분리", "🎰 Casino / 🎲 Gambling Split"), value=_t(locale, "BLACK CASINO·포커·블랙잭·바카라·슬롯은 카지노로, 경마·탐색·주파수·생존 룰렛은 도박으로 따로 노출합니다.", "Casino table games and poker are separated from racing and survival betting."), inline=False)
+            embed.add_field(name=_t(locale, "🧭 첫 화면 안내", "🧭 First-screen Guide"), value=_t(locale, "5개 큰 영역의 기능 설명과 카지노·도박 빠른 버튼을 첫 화면에 표시합니다.", "The first screen explains all five sections and exposes Casino/Gambling quick buttons."), inline=False)
+            embed.add_field(name=_t(locale, "🌱 신규 생존자 안내", "🌱 New Survivor Guide"), value=_t(locale, "서버 입장 환영 패널에 시즌 1 시작·전체 명령·카지노·도박 버튼과 카테고리 설명을 추가했습니다.", "Member-join panels now include story, command, casino and gambling buttons."), inline=False)
+            embed.add_field(name=_t(locale, "🏛️ 정부지원금", "🏛️ Government Relief"), value=_t(locale, "잔액 -10,000 이하일 때 24시간마다 최대 250,000 식량을 지원하며 지급 전후 변화를 기록합니다.", "Balances at -10,000 or below can receive up to 250,000 food every 24 hours with before/after records."), inline=False)
+            embed.add_field(name=_t(locale, "⛏️ 결과 변화 표시", "⛏️ Result Change Display"), value=_t(locale, "채집 결과 카드에 이번 획득, 소모·수치 변화, 누적 횟수를 분리 표시합니다.", "Gathering cards now separate gains, stat changes and total runs."), inline=False)
+            embed.add_field(name=_t(locale, "📚 전체 명령 보존", "📚 Full Command Preservation"), value=_t(locale, f"런타임 등록 명령 {len(entries):,}개 · 5개 영역 · 44개 기능군 · 검색·실행 버튼 유지", f"{len(entries):,} runtime commands · 5 sections · 44 groups · search and execute preserved"), inline=False)
+            embed.add_field(name=_t(locale, "🧪 신규 검수", "🧪 New Audits"), value="`!명령어전수검수 상세` · `!도박분류검수 상세` · `!1631통합검수 상세`", inline=False)
             embed.set_footer(text=_t(locale, "기존 명령 삭제 0건 · 기존 저장 데이터 유지 · 2026-08-05", "0 legacy commands removed · existing save data preserved · 2026-08-05"))
             await ctx.send(embed=embed)
 
         patch_command.callback = patch_notes_v1630
-        patch_command.help = "ABADDON v16.3.0 메인 RPG·전체 명령센터·도시 공방·자동 이모지 최신 패치노트입니다."
+        patch_command.help = "ABADDON v16.3.1 메인 RPG·전체 명령센터·도시 공방·자동 이모지 최신 패치노트입니다."
         patch_command.description = patch_command.help
         patch_command.extras = dict(getattr(patch_command, "extras", {}) or {})
         patch_command.extras["v1630_previous_callback"] = previous_patch
@@ -1134,6 +1396,10 @@ def register_v1630_core_rpg_command_city_overhaul(
                 ("정보 바로가기 버튼", info_source.is_file() and "ProfileQuickActionView" in info_source.read_text(encoding="utf-8"), "5 buttons"),
                 ("도시 부품 20종", len(list(CITY_COMPONENT_ROOT.glob("*.png"))) == 20, "512x512 PNG"),
                 ("도시 공방 행동 기록", neon_source.is_file() and "decor_history" in neon_source.read_text(encoding="utf-8"), "place/undo log"),
+                ("카지노·도박 분리", any(e.group == "casino" and e.qualified_name == "카지노" for e in entries) and any(e.group == "gambling" for e in entries), "separate groups"),
+                ("정부지원금", bot.get_command("정부지원금") is not None and any(e.group == "gambling" and e.qualified_name == "정부지원금" for e in entries), "-10,000 / 250,000"),
+                ("신규 생존자 안내", "V1631WelcomeQuickView" in Path(__file__).read_text(encoding="utf-8"), "join panel buttons"),
+                ("채집 획득·변화", "이번 획득" in (ASSET_ROOT.parent / "commands" / "v1620_living_legends.py").read_text(encoding="utf-8"), "gain/change rows"),
                 ("자동 이모지 확장", len(presets) >= 17 and len(rules) >= 14, "17 presets / 14 keywords"),
                 ("최신 패치노트", bot.get_command("패치노트") is not None, VERSION),
             )
@@ -1141,12 +1407,12 @@ def register_v1630_core_rpg_command_city_overhaul(
             embed = discord.Embed(title=f"🧪 ABADDON 최신 테스트 v{VERSION}", color=0x2ECC71 if ok else 0xE67E22)
             embed.description = "\n".join(f"{'✅' if passed else '❌'} **{name}** · {detail}" for name, passed, detail in checks)
             if mode.casefold() in {"상세", "detail", "detailed"}:
-                embed.add_field(name="최신 범위", value="메인 RPG 명령센터 · 도시 공방 · 정보 버튼 · 자동 이모지 · 패치노트", inline=False)
+                embed.add_field(name="최신 범위", value="메인 RPG 명령센터 · 카지노/도박 분리 · 신규 안내 · 정부지원금 · 채집 변화 표시 · 패치노트", inline=False)
                 embed.add_field(name="보존", value="기존 명령 삭제 0 · 저장 데이터 유지 · 기존 직접 명령 유지", inline=False)
             await ctx.send(embed=embed)
 
         test_command.callback = latest_test_v1630
-        test_command.help = "가장 최근 v16.3.0 메인 RPG 명령센터·도시 공방·정보 버튼·자동 이모지 범위를 검사합니다."
+        test_command.help = "가장 최근 v16.3.1 메인 RPG 명령센터·카지노/도박 분리·신규 안내·정부지원금·채집 결과 변화 범위를 검사합니다."
         test_command.description = test_command.help
         test_command.extras = dict(getattr(test_command, "extras", {}) or {})
         test_command.extras["v1630_previous_callback"] = previous_test
@@ -1168,6 +1434,9 @@ def register_v1630_core_rpg_command_city_overhaul(
             "시즌 4 노출": story_counts["story4"] > 0,
             "시즌 5 노출": story_counts["story5"] > 0,
             "드롭다운 25개 자동 분할": all(count <= PAGE_SIZE or group in group_overflow for group, count in ((g, sum(1 for e in entries if e.group == g)) for g in GROUP_INDEX)),
+            "카지노 직접 노출": any(e.group == "casino" and e.qualified_name == "카지노" for e in entries),
+            "도박 별도 기능군": any(e.group == "gambling" for e in entries),
+            "정부지원금 분류": any(e.group == "gambling" and e.qualified_name == "정부지원금" for e in entries),
             "명령 실행 브리지": callable(_invoke_command),
         }
         ok = all(checks.values())
@@ -1179,6 +1448,29 @@ def register_v1630_core_rpg_command_city_overhaul(
         if mode.casefold() in {"상세", "detail", "detailed"}:
             embed.add_field(name="페이지 분할 기능군", value=" · ".join(f"{_group_spec(group)[1]} {count}" for group, count in sorted(group_overflow.items()))[:1024] or "없음", inline=False)
             embed.add_field(name="누락", value=" · ".join(missing[:30]) or "없음", inline=False)
+        await ctx.send(embed=embed)
+
+    @bot.command(name="도박분류검수", aliases=["gamblingcategoryaudit", "casinoaudit1631"], help="카지노·비카지노 도박·정부지원금의 명령어 센터 분류와 빠른 이동을 검사합니다.")
+    async def gambling_category_audit(ctx: commands.Context, mode: str = "") -> None:
+        casino_rows = [e for e in entries if e.group == "casino"]
+        gambling_rows = [e for e in entries if e.group == "gambling"]
+        casino_names = {e.qualified_name for e in casino_rows}
+        gambling_names = {e.qualified_name for e in gambling_rows}
+        checks = {
+            "카지노 직접 명령 노출": "카지노" in casino_names,
+            "포커·테이블 게임 카지노 분류": any(any(t in name for t in ("홀덤", "포커", "블랙잭", "바카라")) for name in casino_names),
+            "비카지노 도박 별도 분류": any(name in gambling_names for name in ("탐색", "주파수", "룰렛", "도박잔액")),
+            "경마 도박 분류": any("경마" in name for name in gambling_names),
+            "정부지원금 도박 분류": "정부지원금" in gambling_names,
+            "빠른 이동 버튼": all(token in Path(__file__).read_text(encoding="utf-8") for token in ('"casino"', '"gambling"')),
+        }
+        ok = all(checks.values())
+        embed = discord.Embed(title=f"🎰 카지노·도박 분류 검수 v{VERSION}", color=0x2ECC71 if ok else 0xE67E22)
+        embed.description = "\n".join(f"{'✅' if value else '❌'} {name}" for name, value in checks.items())
+        embed.add_field(name="분류 수", value=f"카지노 **{len(casino_rows)}개** · 도박 **{len(gambling_rows)}개**", inline=False)
+        if mode.casefold() in {"상세", "detail", "detailed"}:
+            embed.add_field(name="카지노 예시", value=" · ".join(f"`!{x}`" for x in sorted(casino_names)[:18])[:1024] or "없음", inline=False)
+            embed.add_field(name="도박 예시", value=" · ".join(f"`!{x}`" for x in sorted(gambling_names)[:18])[:1024] or "없음", inline=False)
         await ctx.send(embed=embed)
 
     @bot.command(name="도시부품검수", aliases=["citypartaudit", "cityworkshopaudit"], help="도시 꾸미기 20종의 파일명·라벨·크기·투명도·공방 호환을 검사합니다.")
@@ -1262,8 +1554,8 @@ def register_v1630_core_rpg_command_city_overhaul(
         embed.add_field(name="예시", value="축하 → 🎉 🥳 🔥 👏\n보스 → 👹 ⚔️ 🔥 🛡️\n도시 → 🏙️ ✨ 🟣 🎨", inline=False)
         await ctx.send(embed=embed)
 
-    @bot.command(name="1630통합검수", aliases=["v1630audit", "1630audit"], help="v16.3.0 메인 RPG 명령센터·도시 공방·정보 버튼·자동 이모지 연결을 검사합니다.")
-    async def v1630_audit(ctx: commands.Context, mode: str = "") -> None:
+    @bot.command(name="1631통합검수", aliases=["v1631audit", "1631audit", "1630통합검수", "v1630audit", "1630audit"], help="v16.3.1 메인 RPG 명령센터·카지노/도박 분리·신규 안내·정부지원금·채집 결과 변화 연결을 검사합니다.")
+    async def v1631_audit(ctx: commands.Context, mode: str = "") -> None:
         info_source = ASSET_ROOT.parent / "commands" / "v1092_visual_status_horserace.py"
         neon_source = ASSET_ROOT.parent / "commands" / "v1500_neon_abyss.py"
         checks = {
@@ -1273,6 +1565,11 @@ def register_v1630_core_rpg_command_city_overhaul(
             "정보 바로가기 버튼": info_source.is_file() and "ProfileQuickActionView" in info_source.read_text(encoding="utf-8"),
             "도시 공방 행동 기록": neon_source.is_file() and "방금 한 행동" in neon_source.read_text(encoding="utf-8"),
             "도시 부품 20종": len(list(CITY_COMPONENT_ROOT.glob("*.png"))) == 20,
+            "카지노 직접 노출": any(e.group == "casino" and e.qualified_name == "카지노" for e in entries),
+            "도박 별도 분류": any(e.group == "gambling" for e in entries),
+            "정부지원금": bot.get_command("정부지원금") is not None and any(e.group == "gambling" and e.qualified_name == "정부지원금" for e in entries),
+            "신규 입장 안내 버튼": "V1631WelcomeQuickView" in Path(__file__).read_text(encoding="utf-8"),
+            "채집 획득·변화 표시": "이번 획득" in (ASSET_ROOT.parent / "commands" / "v1620_living_legends.py").read_text(encoding="utf-8"),
             "자동 이모지 17종 프리셋": len(presets) >= 17,
             "패치노트 명령": bot.get_command("패치노트") is not None,
         }
@@ -1289,3 +1586,6 @@ def register_v1630_core_rpg_command_city_overhaul(
         f"[ABADDON v{VERSION}] complete command center registered: commands={len(entries)} groups={len(GROUP_INDEX)} migrated_reaction_guilds={migrated_guilds}",
         flush=True,
     )
+
+
+register_v1631_casino_gambling_onboarding_overhaul = register_v1630_core_rpg_command_city_overhaul

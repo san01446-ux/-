@@ -685,17 +685,51 @@ def register_v1620_living_legends(
             }
             fx_message = await _staged_message(ctx, l, lines_by_mode.get(mode, lines_by_mode["field"]), fx_mode)
             ok, summary = False, ""
+            gained_text = _t(l, "없음", "None")
+            change_text = _t(l, "변화 없음", "No changes")
             if mode == "field" and base_gather_callback is not None:
-                before = json.dumps({"balance": user.get("balance"), "resources": user.get("resources", {}), "materials": user.get("materials", {}), "stamina": user.get("stamina")}, ensure_ascii=False, sort_keys=True, default=str)
+                before_state = {
+                    "balance": int(user.get("balance", 0) or 0),
+                    "resources": dict(user.get("resources", {}) or {}),
+                    "materials": dict(user.get("materials", {}) or {}),
+                    "stamina": int(user.get("stamina", 0) or 0),
+                }
                 await base_gather_callback(ctx)
-                after = json.dumps({"balance": user.get("balance"), "resources": user.get("resources", {}), "materials": user.get("materials", {}), "stamina": user.get("stamina")}, ensure_ascii=False, sort_keys=True, default=str)
-                ok = before != after; summary = _t(l, "기존 개인 채집 결과를 위 메시지에서 확인하세요.", "See the original field-gathering result above.")
+                after_state = {
+                    "balance": int(user.get("balance", 0) or 0),
+                    "resources": dict(user.get("resources", {}) or {}),
+                    "materials": dict(user.get("materials", {}) or {}),
+                    "stamina": int(user.get("stamina", 0) or 0),
+                }
+                ok = before_state != after_state
+                gains: List[str] = []
+                changes: List[str] = []
+                balance_delta = after_state["balance"] - before_state["balance"]
+                if balance_delta:
+                    (gains if balance_delta > 0 else changes).append(f"식량 {balance_delta:+,}")
+                for bucket_key, label in (("resources", _t(l, "자원", "resource")), ("materials", _t(l, "재료", "material"))):
+                    before_bucket = before_state[bucket_key]
+                    after_bucket = after_state[bucket_key]
+                    for key in sorted(set(before_bucket) | set(after_bucket)):
+                        delta = int(after_bucket.get(key, 0) or 0) - int(before_bucket.get(key, 0) or 0)
+                        if delta > 0:
+                            gains.append(f"{key} ×{delta}")
+                        elif delta < 0:
+                            changes.append(f"{label} {key} {delta}")
+                stamina_delta = after_state["stamina"] - before_state["stamina"]
+                if stamina_delta:
+                    changes.append(f"{_t(l, '스태미나', 'stamina')} {stamina_delta:+}")
+                gained_text = " · ".join(gains) or _t(l, "획득 항목 없음", "No acquired items")
+                change_text = " · ".join(changes) or _t(l, "수치 변화 없음", "No stat changes")
+                summary = _t(l, f"획득: {gained_text} · 변화: {change_text}", f"Gained: {gained_text} · Changes: {change_text}")
             elif mode == "city":
                 black = ensure_black_city_guild(black_root, int(ctx.guild.id), guild_name=str(ctx.guild.name))
                 result = black_city_gather(black, user, uid)
                 if result.get("ok"):
                     save_data(); ok = True
-                    summary = _t(l, f"`{result['resource']}` **{result['qty']}개** · 도시 직업 Lv.{result['level']}{' UP' if result.get('leveled') else ''}", f"`{result['resource']}` **x{result['qty']}** · City profession Lv.{result['level']}{' UP' if result.get('leveled') else ''}")
+                    gained_text = _t(l, f"{result['resource']} ×{result['qty']}", f"{result['resource']} ×{result['qty']}")
+                    change_text = _t(l, f"도시 직업 Lv.{result['level']}{' 상승' if result.get('leveled') else ' 유지'}", f"City profession Lv.{result['level']}{' up' if result.get('leveled') else ' unchanged'}")
+                    summary = _t(l, f"획득: {gained_text} · 변화: {change_text}", f"Gained: {gained_text} · Changes: {change_text}")
                     await ctx.send(embed=discord.Embed(title=_t(l, "🏙️ 도시 채집 완료", "🏙️ City Gathering Complete"), description=summary, color=0x9B59B6))
                 else:
                     summary = _t(l, f"도시 채집 실패: {result.get('message')}" + (f" · {result.get('remaining')}초" if result.get("remaining") else ""), f"City gathering failed: {result.get('message')}" + (f" · {result.get('remaining')}s" if result.get("remaining") else ""))
@@ -708,7 +742,10 @@ def register_v1620_living_legends(
                     resource = random.choice(["차원결정", "중력파편", "심연분진", "시간유리"])
                     qty = random.randint(1, 3) + max(0, int(neon.get("ship", {}).get("level", 1)) // 4)
                     ru["dimension_resources"][resource] = int(ru["dimension_resources"].get(resource, 0)) + qty
-                    ok = True; summary = _t(l, f"**{resource} ×{qty}** · {active.get('ko', active.get('id','차원'))}", f"**{resource} ×{qty}** · {active.get('en', active.get('id','Dimension'))}")
+                    ok = True
+                    gained_text = f"{resource} ×{qty}"
+                    change_text = _t(l, f"{active.get('ko', active.get('id','차원'))} 채집 기록 +1", f"{active.get('en', active.get('id','Dimension'))} gather record +1")
+                    summary = _t(l, f"획득: {gained_text} · 변화: {change_text}", f"Gained: {gained_text} · Changes: {change_text}")
                     save_data(); await ctx.send(embed=discord.Embed(title=_t(l, "🌌 차원 채집 완료", "🌌 Dimension Gathering Complete"), description=summary, color=0x8E44AD))
             elif mode == "crew":
                 neon = world_data.setdefault("neon_abyss_v1500", {}).setdefault("guilds", {}).setdefault(str(int(ctx.guild.id)), {})
@@ -718,7 +755,10 @@ def register_v1620_living_legends(
                 else:
                     name, crew = found; qty = random.randint(3, 8); crew["xp"] = int(crew.get("xp", 0)) + qty * 2
                     ru["crew_resources"]["공동부품"] = int(ru["crew_resources"].get("공동부품", 0)) + qty
-                    ok = True; summary = _t(l, f"**{name}** 공동부품 ×{qty} · 크루 XP +{qty*2}", f"**{name}** shared parts ×{qty} · Crew XP +{qty*2}")
+                    ok = True
+                    gained_text = _t(l, f"공동부품 ×{qty}", f"Shared parts ×{qty}")
+                    change_text = _t(l, f"{name} 크루 XP +{qty*2}", f"{name} Crew XP +{qty*2}")
+                    summary = _t(l, f"획득: {gained_text} · 변화: {change_text}", f"Gained: {gained_text} · Changes: {change_text}")
                     save_data(); await ctx.send(embed=discord.Embed(title=_t(l, "👥 크루 공동 채집 완료", "👥 Crew Gathering Complete"), description=summary, color=0x2980B9))
             elif mode == "companion":
                 companions = user.get("companions", {}) or user.get("pets", {}) or user.get("pet_collection", {})
@@ -728,14 +768,27 @@ def register_v1620_living_legends(
                 bonus = 1 if companions else 0
                 if bonus:
                     user["resources"][resource] += 1; qty += 1
-                ok = True; summary = _t(l, f"**{resource} ×{qty}** · 동료 지원 {'적용' if companions else '미적용'}", f"**{resource} ×{qty}** · Companion assist {'active' if companions else 'not active'}")
+                ok = True
+                gained_text = f"{resource} ×{qty}"
+                change_text = _t(l, f"동료 지원 {'보너스 +1 적용' if companions else '미적용'}", f"Companion assist {'bonus +1 applied' if companions else 'not active'}")
+                summary = _t(l, f"획득: {gained_text} · 변화: {change_text}", f"Gained: {gained_text} · Changes: {change_text}")
                 save_data(); await ctx.send(embed=discord.Embed(title=_t(l, "🐾 동료 지원 채집 완료", "🐾 Companion-assisted Gathering Complete"), description=summary, color=0x27AE60))
             if ok:
                 ru["last_gather_at"] = now; ru["gather_counts"][mode] = int(ru["gather_counts"].get(mode, 0)) + 1; row["stats"]["gathers"] = int(row["stats"].get("gathers", 0)) + 1
                 _record_chronicle(ru, "gather", f"{mode}: {summary}")
                 save_data()
                 try:
-                    card = _render_summary_card(_t(l, "채집 결과", "GATHERING RESULT"), _t(l, "통합 채집센터", "UNIFIED GATHERING HUB"), [(_t(l, "방식", "Mode"), mode), (_t(l, "결과", "Result"), summary), (_t(l, "누적", "Total"), str(ru["gather_counts"].get(mode, 0))), (_t(l, "운명 성향", "Fate"), _t(l, ALIGNMENTS[_dominant_alignment(ru)][0], ALIGNMENTS[_dominant_alignment(ru)][1]))])
+                    card = _render_summary_card(
+                        _t(l, "채집 결과", "GATHERING RESULT"),
+                        _t(l, "통합 채집센터 · 획득/변화 기록", "UNIFIED GATHERING HUB · GAINS/CHANGES"),
+                        [
+                            (_t(l, "방식", "Mode"), mode),
+                            (_t(l, "이번 획득", "Gained"), gained_text),
+                            (_t(l, "수치 변화", "Changes"), change_text),
+                            (_t(l, "누적 횟수", "Total Runs"), str(ru["gather_counts"].get(mode, 0))),
+                            (_t(l, "운명 성향", "Fate"), _t(l, ALIGNMENTS[_dominant_alignment(ru)][0], ALIGNMENTS[_dominant_alignment(ru)][1])),
+                        ],
+                    )
                     await ctx.send(file=discord.File(card, filename="abaddon_gather_result.png"))
                 except Exception:
                     pass
