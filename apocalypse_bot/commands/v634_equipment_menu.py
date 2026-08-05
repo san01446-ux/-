@@ -5,6 +5,8 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import discord
 from discord.ext import commands
 
+from apocalypse_bot.commands.v600_game_center import _safe_select_options, _safe_embed, _safe_view
+
 VERSION = "6.3.4"
 PAGE_SIZE = 5
 
@@ -68,7 +70,7 @@ class CategorySelect(discord.ui.Select):
             options.append(discord.SelectOption(label=f"슬롯 · {slot}", value=f"slot:{slot}", emoji=emoji))
         for tier, emoji in [("일반","⚪"),("고급","🟢"),("희귀","🔵"),("영웅","🟣"),("전설","🟠"),("신화","🔴"),("유일","🌈")]:
             options.append(discord.SelectOption(label=f"등급 · {tier}", value=f"tier:{tier}", emoji=emoji))
-        super().__init__(placeholder="장비 목록 분류를 선택하세요", options=options, min_values=1, max_values=1, row=0)
+        super().__init__(placeholder="장비 목록 분류를 선택하세요", options=_safe_select_options(options), min_values=1, max_values=1, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await self.menu.check_owner(interaction):
@@ -76,7 +78,15 @@ class CategorySelect(discord.ui.Select):
         self.menu.category = self.values[0]
         self.menu.page = 0
         self.menu.refresh_item_select()
-        await interaction.response.edit_message(embed=self.menu.build_embed(), view=self.menu)
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+            await interaction.edit_original_response(embed=_safe_embed(self.menu.build_embed()), view=_safe_view(self.menu))
+        except discord.NotFound:
+            try:
+                await interaction.followup.send("🫧 장비 메뉴가 만료되었습니다. `!장비`를 다시 열어주세요.", ephemeral=True)
+            except Exception:
+                pass
 
 
 class ItemSelect(discord.ui.Select):
@@ -103,7 +113,7 @@ class ItemSelect(discord.ui.Select):
                     description=f"{tier} · {self.menu.get_item_slot(name)}"[:100],
                 )
             )
-        self.options = opts
+        self.options = _safe_select_options(opts)
         self.disabled = False
 
     async def callback(self, interaction: discord.Interaction) -> None:

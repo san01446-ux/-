@@ -1,0 +1,117 @@
+{
+  "version": "16.6.1",
+  "title": "ABADDON RUNTIME INTERACTION HOTFIX AUDIT",
+  "generated_at": "2026-08-05T20:58:00+09:00",
+  "summary": {
+    "passed": 19,
+    "total": 19,
+    "python_files": 118,
+    "command_declarations": 1361,
+    "access_names": 3046,
+    "website_html_files": 9,
+    "legacy_command_deletions": 0,
+    "save_key_deletions": 0
+  },
+  "checks": [
+    {
+      "name": "Python source parse",
+      "passed": true,
+      "detail": "118 files"
+    },
+    {
+      "name": "Command declarations",
+      "passed": true,
+      "detail": "1361 declarations"
+    },
+    {
+      "name": "Command access names",
+      "passed": true,
+      "detail": "3046 names including literal aliases"
+    },
+    {
+      "name": "Missing cog sentinel guard",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Select option sanitizer",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Five-row component repack",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Embed payload guard",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Command center defer-first edit",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Equipment menu defer-first edit",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Casino safe route",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Compact latest test",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "v16.6.1 registration",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "New audit commands",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Korean/English runtime split",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Legacy deletion count",
+      "passed": true,
+      "detail": "0 commands / 0 save keys removed by patch"
+    },
+    {
+      "name": "Website v16.6.1 sync",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Website local references",
+      "passed": true,
+      "detail": "9 HTML files; missing=0"
+    },
+    {
+      "name": "Manifest version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Manifest counts",
+      "passed": true,
+      "detail": ""
+    }
+  ],
+  "runtime_limitations": [
+    "Discord.py is not installed in the build sandbox, so live Gateway/API execution was not simulated.",
+    "Real interaction token expiry, permissions, concurrent clicks, and Discord HTTP responses must be verified on the deployment server."
+  ],
+  "missing_website_references": []
+}

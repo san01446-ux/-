@@ -969,7 +969,10 @@ GAME_SECTION_VALIDATION = _validate_game_sections()
 class _SyntheticMessage:
     def __init__(self, interaction: discord.Interaction, content: str) -> None:
         self.id = int(interaction.id)
-        self.author = interaction.user
+        actor = getattr(interaction, "user", None)
+        if actor is None or actor is getattr(discord.utils, "MISSING", object()) or not hasattr(actor, "id"):
+            actor = getattr(getattr(interaction, "message", None), "author", None)
+        self.author = actor
         self.guild = interaction.guild
         self.channel = interaction.channel
         self.content = content
@@ -1009,7 +1012,10 @@ class InteractionCommandContext:
     def __init__(self, bot: commands.Bot, interaction: discord.Interaction, command: commands.Command, raw: str = "") -> None:
         self.bot = bot
         self.interaction = interaction
-        self.author = interaction.user
+        actor = getattr(interaction, "user", None)
+        if actor is None or actor is getattr(discord.utils, "MISSING", object()) or not hasattr(actor, "id"):
+            actor = getattr(getattr(interaction, "message", None), "author", None)
+        self.author = actor
         self.guild = interaction.guild
         self.channel = interaction.channel
         self.command = command
@@ -1023,8 +1029,11 @@ class InteractionCommandContext:
         self.args: List[Any] = []
         self.kwargs: Dict[str, Any] = {}
         self.message = _SyntheticMessage(interaction, f"!{command.qualified_name} {raw}".strip())
+        if self.author is not None:
+            self.message.author = self.author
         self.message.interaction = interaction
-        self.cog = command.cog
+        raw_cog = getattr(command, "cog", None)
+        self.cog = None if raw_cog is getattr(discord.utils, "MISSING", object()) else raw_cog
         self.current_parameter = None
         self.current_argument = None
 
@@ -1055,7 +1064,21 @@ class InteractionCommandContext:
     async def send(self, content: Optional[str] = None, **kwargs: Any) -> Any:
         kwargs.pop("ephemeral", None)
         kwargs.setdefault("wait", True)
-        return await self.interaction.followup.send(content=content, **kwargs)
+        if "embed" in kwargs:
+            kwargs["embed"] = _safe_embed(kwargs.get("embed"))
+        if "embeds" in kwargs:
+            kwargs["embeds"] = [_safe_embed(item) for item in list(kwargs.get("embeds") or [])[:10] if item is not None]
+        if "view" in kwargs:
+            kwargs["view"] = _safe_view(kwargs.get("view"))
+        if content is not None:
+            content = str(content)[:2000]
+        try:
+            return await self.interaction.followup.send(content=content, **kwargs)
+        except discord.HTTPException as exc:
+            # Last-resort delivery keeps the command usable even when a legacy embed/view is malformed.
+            print(f"[ABADDON UI payload fallback] {type(exc).__name__}: {exc}", flush=True)
+            safe_content = (content or "🫧 결과 화면 일부가 Discord 제한을 넘어 텍스트로 전환했습니다.")[:2000]
+            return await self.interaction.followup.send(content=safe_content, wait=True)
 
     async def reply(self, content: Optional[str] = None, **kwargs: Any) -> Any:
         kwargs.pop("mention_author", None)
@@ -1081,8 +1104,9 @@ class InteractionCommandContext:
         previous = self.command
         try:
             self.command = command
-            if command.cog is not None:
-                return await command.callback(command.cog, self, *args, **kwargs)
+            cog = getattr(command, "cog", None)
+            if cog is not None and cog is not getattr(discord.utils, "MISSING", object()):
+                return await command.callback(cog, self, *args, **kwargs)
             return await command.callback(self, *args, **kwargs)
         finally:
             self.command = previous
@@ -1096,6 +1120,142 @@ class InteractionCommandContext:
 
 class GameBridgeError(RuntimeError):
     pass
+
+
+def _clip_text(value: Any, limit: int, fallback: str = "") -> str:
+    text = str(value or fallback).strip()
+    return text[:limit]
+
+
+def _safe_select_options(options: Sequence[Any], fallback_label: str = "표시할 항목이 없습니다") -> List[Any]:
+    """Normalize select options to Discord API limits and remove duplicate/empty values."""
+    cleaned: List[Any] = []
+    seen: set[str] = set()
+    for index, option in enumerate(list(options)[:25]):
+        value = _clip_text(getattr(option, "value", ""), 100, f"option_{index}")
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        label = _clip_text(getattr(option, "label", ""), 100, f"항목 {index + 1}")
+        description_raw = getattr(option, "description", None)
+        description = _clip_text(description_raw, 100) if description_raw else None
+        emoji = getattr(option, "emoji", None)
+        kwargs = {
+            "label": label or f"항목 {index + 1}",
+            "value": value,
+            "description": description,
+            "default": bool(getattr(option, "default", False)),
+        }
+        try:
+            if emoji:
+                kwargs["emoji"] = emoji
+            cleaned.append(discord.SelectOption(**kwargs))
+        except (TypeError, ValueError):
+            kwargs.pop("emoji", None)
+            cleaned.append(discord.SelectOption(**kwargs))
+    if not cleaned:
+        cleaned.append(discord.SelectOption(label=_clip_text(fallback_label, 100, "항목 없음"), value="__empty__"))
+    # A single-value select may not contain more than one default option.
+    default_seen = False
+    for option in cleaned:
+        if bool(getattr(option, "default", False)):
+            if default_seen:
+                option.default = False
+            default_seen = True
+    return cleaned[:25]
+
+
+def _safe_embed(embed: Optional[discord.Embed]) -> Optional[discord.Embed]:
+    """Rebuild an embed inside Discord's per-field and 6000-character limits."""
+    if embed is None:
+        return None
+    title = _clip_text(getattr(embed, "title", ""), 256) or None
+    description = _clip_text(getattr(embed, "description", ""), 4096) or None
+    rebuilt = discord.Embed(
+        title=title,
+        description=description,
+        color=getattr(embed, "color", None),
+        url=getattr(embed, "url", None),
+        timestamp=getattr(embed, "timestamp", None),
+    )
+    budget = 6000 - len(title or "") - len(description or "")
+    author = getattr(embed, "author", None)
+    author_name = _clip_text(getattr(author, "name", ""), 256)
+    if author_name and budget > 0:
+        author_name = author_name[:budget]
+        rebuilt.set_author(name=author_name, url=getattr(author, "url", None), icon_url=getattr(author, "icon_url", None))
+        budget -= len(author_name)
+    for field in list(getattr(embed, "fields", []) or [])[:25]:
+        if budget <= 2:
+            break
+        name = _clip_text(getattr(field, "name", ""), min(256, budget), "-")
+        budget -= len(name)
+        value = _clip_text(getattr(field, "value", ""), min(1024, max(1, budget)), "-")
+        budget -= len(value)
+        rebuilt.add_field(name=name or "-", value=value or "-", inline=bool(getattr(field, "inline", False)))
+    footer = getattr(embed, "footer", None)
+    footer_text = _clip_text(getattr(footer, "text", ""), min(2048, max(0, budget)))
+    if footer_text:
+        rebuilt.set_footer(text=footer_text, icon_url=getattr(footer, "icon_url", None))
+    image = getattr(embed, "image", None)
+    image_url = str(getattr(image, "url", "") or "")
+    if image_url:
+        rebuilt.set_image(url=image_url)
+    thumbnail = getattr(embed, "thumbnail", None)
+    thumbnail_url = str(getattr(thumbnail, "url", "") or "")
+    if thumbnail_url:
+        rebuilt.set_thumbnail(url=thumbnail_url)
+    return rebuilt
+
+
+def _safe_view(view: Optional[discord.ui.View]) -> Optional[discord.ui.View]:
+    """Normalize legacy component payloads to Discord's five-row layout limits."""
+    if view is None:
+        return None
+    children = list(getattr(view, "children", []) or [])
+    prepared: List[Any] = []
+    for child in children[:25]:
+        if isinstance(child, discord.ui.Select):
+            child.options = _safe_select_options(list(getattr(child, "options", []) or []))
+            child.placeholder = _clip_text(getattr(child, "placeholder", ""), 150) or None
+        elif isinstance(child, discord.ui.Button):
+            if getattr(child, "label", None):
+                child.label = _clip_text(child.label, 80)
+        custom_id = getattr(child, "custom_id", None)
+        if custom_id and len(str(custom_id)) > 100:
+            child.custom_id = str(custom_id)[:100]
+        prepared.append(child)
+
+    # Repack the existing items so old views cannot exceed five action rows.
+    # A select occupies its whole row; buttons may share a row up to five items.
+    try:
+        for child in list(getattr(view, "children", []) or []):
+            view.remove_item(child)
+        row_kind: List[Optional[str]] = [None] * 5
+        row_count = [0] * 5
+        for child in prepared:
+            is_select = isinstance(child, discord.ui.Select)
+            target: Optional[int] = None
+            requested = getattr(child, "row", None)
+            candidates = ([requested] if isinstance(requested, int) and 0 <= requested <= 4 else []) + list(range(5))
+            for row in candidates:
+                if is_select:
+                    if row_kind[row] is None:
+                        target = row
+                        break
+                elif row_kind[row] in {None, "button"} and row_count[row] < 5:
+                    target = row
+                    break
+            if target is None:
+                continue
+            child.row = target
+            view.add_item(child)
+            row_kind[target] = "select" if is_select else "button"
+            row_count[target] += 1
+    except Exception as exc:
+        # Keep the sanitized original view if an exotic third-party item cannot be repacked.
+        print(f"[ABADDON UI layout sanitizer] {type(exc).__name__}: {exc}", flush=True)
+    return view
 
 
 def _unwrap_annotation(annotation: Any) -> Any:
@@ -1296,8 +1456,9 @@ async def _invoke_command(
         # v7.0.2 사용자 잠금·운영 통계가 버튼 실행에서도 유지되게 합니다.
         hook_attempted = True
         await command.call_before_hooks(ctx)  # type: ignore[arg-type]
-        if command.cog is not None:
-            await command.callback(command.cog, ctx, *args, **kwargs)
+        cog = getattr(command, "cog", None)
+        if cog is not None and cog is not getattr(discord.utils, "MISSING", object()):
+            await command.callback(cog, ctx, *args, **kwargs)
         else:
             await command.callback(ctx, *args, **kwargs)
         succeeded = True
@@ -1626,7 +1787,7 @@ class GameActionSelect(discord.ui.Select):
             placeholder=f"기능 선택 · {start + 1}-{end}/{len(specs)}",
             min_values=1,
             max_values=1,
-            options=options,
+            options=_safe_select_options(options),
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -1663,7 +1824,7 @@ class GameSpecListSelect(discord.ui.Select):
             discord.SelectOption(label=spec.label[:100], value=spec.key, description=f"!{spec.command} · {spec.description}"[:100])
             for spec in specs[:SELECT_PAGE_SIZE]
         ]
-        super().__init__(placeholder="추천 기능을 선택하세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="추천 기능을 선택하세요", min_values=1, max_values=1, options=_safe_select_options(options))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
@@ -1831,7 +1992,7 @@ class GameSectionSelect(discord.ui.Select):
             discord.SelectOption(label=title[:100], value=key, description=description[:100])
             for key, title, description, _keys in GAME_SECTIONS.get(category_key, ())
         ]
-        super().__init__(placeholder="먼저 하고 싶은 기능군을 선택하세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="먼저 하고 싶은 기능군을 선택하세요", min_values=1, max_values=1, options=_safe_select_options(options))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
@@ -1900,7 +2061,7 @@ class QuickPathSelect(discord.ui.Select):
             discord.SelectOption(label=title[:100], value=key, description=description[:100])
             for key, (title, description, _keys) in QUICK_PATHS.items()
         ]
-        super().__init__(placeholder="지금 원하는 목표를 선택하세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="지금 원하는 목표를 선택하세요", min_values=1, max_values=1, options=_safe_select_options(options))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
@@ -1951,7 +2112,7 @@ class GameCategorySelect(discord.ui.Select):
             )
             for key, (title, description, _actions) in GAME_CATEGORIES.items()
         ]
-        super().__init__(placeholder="익숙한 기능은 카테고리에서 찾으세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="익숙한 기능은 카테고리에서 찾으세요", min_values=1, max_values=1, options=_safe_select_options(options))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
@@ -2422,7 +2583,7 @@ class Season3ChoiceSelect(discord.ui.Select):
             discord.SelectOption(label=f"{index}. {choice['text']}"[:100], value=str(index), description=choice["result"][:100])
             for index, choice in enumerate(choices, start=1)
         ]
-        super().__init__(placeholder="시즌 3 선택지를 고르세요", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="시즌 3 선택지를 고르세요", min_values=1, max_values=1, options=_safe_select_options(options))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:

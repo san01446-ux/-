@@ -722,7 +722,20 @@ class CommandSearchModal(discord.ui.Modal):
             return
         view.set_special(results, _t(view.locale, f"🔎 검색 결과 · {self.query.value}", f"🔎 Search · {self.query.value}"))
         view.rebuild()
-        await interaction.response.edit_message(embed=view.current_embed(), view=view)
+        await _safe_component_edit(interaction, embed=view.current_embed(), view=view)
+
+
+async def _safe_component_edit(interaction: discord.Interaction, *, embed: Optional[discord.Embed] = None, view: Optional[discord.ui.View] = None) -> None:
+    """Acknowledge component interactions first, then edit to avoid token expiry/NotFound."""
+    try:
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        await interaction.edit_original_response(embed=_safe_embed(embed), view=_safe_view(view))
+    except discord.NotFound:
+        try:
+            await interaction.followup.send("🫧 이 메뉴가 만료되었습니다. `!명령어`를 다시 열어주세요.", ephemeral=True)
+        except Exception:
+            pass
 
 
 class SectionButton(discord.ui.Button):
@@ -741,7 +754,7 @@ class SectionButton(discord.ui.Button):
         view.page = 0
         view.group = view.first_group(self.key)
         view.rebuild()
-        await interaction.response.edit_message(embed=view.current_embed(), view=view)
+        await _safe_component_edit(interaction, embed=view.current_embed(), view=view)
 
 
 class GroupSelect(discord.ui.Select):
@@ -762,7 +775,7 @@ class GroupSelect(discord.ui.Select):
             ))
         if not options:
             options = [discord.SelectOption(label=_t(owner.locale, "기타·보존 명령", "Other Preserved Commands"), value="legacy", emoji="🗄️")]
-        super().__init__(placeholder=_t(owner.locale, "기능군을 선택하세요", "Choose a command group"), min_values=1, max_values=1, options=options[:25], row=1)
+        super().__init__(placeholder=_t(owner.locale, "기능군을 선택하세요", "Choose a command group"), min_values=1, max_values=1, options=_safe_select_options(options[:25]), row=1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.owner_view
@@ -772,7 +785,7 @@ class GroupSelect(discord.ui.Select):
         view.selected_index = None
         view.page = 0
         view.rebuild()
-        await interaction.response.edit_message(embed=view.current_embed(), view=view)
+        await _safe_component_edit(interaction, embed=view.current_embed(), view=view)
 
 
 class CommandSelect(discord.ui.Select):
@@ -794,7 +807,7 @@ class CommandSelect(discord.ui.Select):
         start = owner.page * PAGE_SIZE + 1
         end = owner.page * PAGE_SIZE + len(page_rows)
         total = len(owner.current_entries())
-        super().__init__(placeholder=_t(owner.locale, f"명령 선택 · {start}-{end}/{total}", f"Choose command · {start}-{end}/{total}"), min_values=1, max_values=1, options=options[:25], row=2)
+        super().__init__(placeholder=_t(owner.locale, f"명령 선택 · {start}-{end}/{total}", f"Choose command · {start}-{end}/{total}"), min_values=1, max_values=1, options=_safe_select_options(options[:25]), row=2)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.owner_view
@@ -807,7 +820,7 @@ class CommandSelect(discord.ui.Select):
             return
         view.selected_index = selected
         view.rebuild()
-        await interaction.response.edit_message(embed=view.current_embed(), view=view)
+        await _safe_component_edit(interaction, embed=view.current_embed(), view=view)
 
 
 class NavButton(discord.ui.Button):
@@ -922,11 +935,11 @@ class NavButton(discord.ui.Button):
         elif action == "close":
             for item in view.children:
                 item.disabled = True
-            await interaction.response.edit_message(view=view)
+            await _safe_component_edit(interaction, view=view)
             view.stop()
             return
         view.rebuild()
-        await interaction.response.edit_message(embed=view.current_embed(), view=view)
+        await _safe_component_edit(interaction, embed=view.current_embed(), view=view)
 
 
 class CompleteCommandCenterView(discord.ui.View):

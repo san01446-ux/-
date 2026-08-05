@@ -5973,6 +5973,13 @@ register_v1660_first_survival_live_qa(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V16.6.1: RUNTIME INTERACTION HOTFIX.
+# Discord.py MISSING cog sentinel, malformed component/embed payloads and expired select edits.
+from apocalypse_bot.commands.v1661_runtime_interaction_hotfix import register_v1661_runtime_interaction_hotfix
+register_v1661_runtime_interaction_hotfix(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
