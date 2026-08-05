@@ -1,4 +1,4 @@
-ABADDON v7.1.1 · 귀여운 인터랙션 패치
+ABADDON v7.1.2 · 귀여운 인터랙션 패치
 
 Discord 종말 생존 RPG ABADDON에 신규 멤버 새싹 표식과 전체 명령어 버튼 실행 UI를 추가했습니다.
 
