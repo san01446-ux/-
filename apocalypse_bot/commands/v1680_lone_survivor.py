@@ -20,7 +20,7 @@ import random
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 import discord
@@ -381,6 +381,19 @@ def _new_session(user: MutableMapping[str, Any], zone_key: str, difficulty_key: 
         "score": 0,
         "gear_power": _equipment_power(user),
     }
+    # v17.3: existing NPC bond strength directly improves matching expedition
+    # roles, so relationship progress is no longer only cosmetic.
+    companion_to_npc = {"scout":"doyun", "medic":"yoonseo", "engineer":"sera", "gunner":"kane", "negotiator":"ren"}
+    bond_root = user.get("npc_bonds_v1720", {}) if isinstance(user.get("npc_bonds_v1720"), Mapping) else {}
+    bond_rows = bond_root.get("npcs", {}) if isinstance(bond_root, Mapping) else {}
+    bond_bonus = 0
+    for companion in session["companions"]:
+        npc_id = companion_to_npc.get(str(companion))
+        row = bond_rows.get(npc_id, {}) if npc_id and isinstance(bond_rows, Mapping) else {}
+        if isinstance(row, Mapping):
+            bond_bonus += min(10, (int(row.get("trust", 10) or 10) + int(row.get("loyalty", 20) or 20)) // 15)
+    session["bond_bonus"] = min(20, bond_bonus)
+    session["gear_power"] = int(session.get("gear_power", 0) or 0) + session["bond_bonus"]
     return session
 
 
@@ -928,6 +941,20 @@ def _finalize(user: MutableMapping[str, Any], state: MutableMapping[str, Any], s
     records["best_score"] = max(_safe_int(records.get("best_score"), 0), _safe_int(session.get("score"), 0))
     records["total_food"] = _safe_int(records.get("total_food"), 0) + applied["food"]
     records["total_exp"] = _safe_int(records.get("total_exp"), 0) + applied["exp"]
+    linked = user.setdefault("connected_survival_v1730", {})
+    linked.setdefault("daily", {})["expedition_day"] = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")
+    linked.setdefault("history", []).append({"at": int(time.time()), "type": "expedition", "result": result, "detail": str(session.get("zone", "unknown"))})
+    linked["history"] = linked["history"][-100:]
+    # Successful shared-role expeditions strengthen the corresponding v17.2 NPC bond.
+    companion_to_npc = {"scout":"doyun", "medic":"yoonseo", "engineer":"sera", "gunner":"kane", "negotiator":"ren"}
+    bond_root = user.setdefault("npc_bonds_v1720", {}).setdefault("npcs", {})
+    for companion in session.get("companions", []):
+        npc_id = companion_to_npc.get(str(companion))
+        if not npc_id:
+            continue
+        bond = bond_root.setdefault(npc_id, {})
+        bond["affinity"] = min(100, int(bond.get("affinity", 0) or 0) + (3 if result == "victory" else 1))
+        bond["trust"] = min(100, int(bond.get("trust", 10) or 10) + (2 if result == "victory" else 1))
     zones = records.setdefault("zones", {})
     zone_key = str(session.get("zone"))
     zone_row = zones.setdefault(zone_key, {"runs": 0, "victories": 0, "best_score": 0})

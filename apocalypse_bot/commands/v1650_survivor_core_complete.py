@@ -213,6 +213,7 @@ def register_v1650_survivor_core_complete(
             ("정보", "내 정보", "Profile", "📊", discord.ButtonStyle.secondary),
             ("채집", "채집센터", "Gathering", "⛏️", discord.ButtonStyle.secondary),
             ("도시꾸미기", "도시 공방", "City Workshop", "🎨", discord.ButtonStyle.secondary),
+            ("연결허브", "연결 루프", "Connected Loop", "🔗", discord.ButtonStyle.primary),
             ("카지노", "카지노", "Casino", "🎰", discord.ButtonStyle.secondary),
             ("도박정보", "도박", "Gambling", "🎲", discord.ButtonStyle.secondary),
             ("정부지원금", "정부지원", "Relief", "🏛️", discord.ButtonStyle.secondary),

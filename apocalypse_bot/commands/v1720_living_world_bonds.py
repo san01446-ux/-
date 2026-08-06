@@ -390,6 +390,11 @@ def _apply_world_choice(state: MutableMapping[str, Any], user: MutableMapping[st
     while len(totals) < 3:
         totals.append(0)
     totals[option - 1] = int(totals[option - 1]) + 1
+    linked = user.setdefault("connected_survival_v1730", {})
+    daily = linked.setdefault("daily", {})
+    daily["world_event_day"] = day
+    linked.setdefault("history", []).append({"at": _now_ts(), "type": "world_event", "day": day, "option": option, "detail": str(event.get("id", "world"))})
+    linked["history"] = linked["history"][-100:]
     return True, {"balance_before": before, "balance_after": int(user["balance"]), "reward": reward}
 
 
@@ -780,6 +785,7 @@ class NPCBondView(discord.ui.View):
             embed.add_field(name=_t(self.locale,"획득","Gained"), value=f"{reward:,}", inline=True)
         _clamp_bond(row)
         _bond_root(user)["history"].append({"at":now,"npc":self.npc["id"],"type":"mission","result":result,"risk":risk})
+        linked=user.setdefault("connected_survival_v1730",{}); linked.setdefault("daily",{})["npc_mission_day"]=_today(); linked.setdefault("history",[]).append({"at":now,"type":"npc_mission","result":result,"detail":str(self.npc["id"])}); linked["history"]=linked["history"][-100:]
         _bond_root(user)["history"] = _bond_root(user)["history"][-100:]
         self.save_data()
         embed.add_field(name=_t(self.locale,"잔액 변화","Balance Change"), value=f"{balance:,} → {int(user['balance']):,}", inline=True)
@@ -942,7 +948,14 @@ def register_v1720_living_world_bonds(
         found=lookup.get(key)
         if not found:
             await ctx.send(_t(locale,"품목: 통조림 / 의약품 / 전자부품","Items: canned / medicine / parts")); return
-        ko_name,en_name,base=found; name=_t(locale,ko_name,en_name); price=max(100,round(base*int(state.get('market_index',100))/100/100)*100); user=_safe_user(get_user,ctx.author.id)
+        ko_name,en_name,base=found; name=_t(locale,ko_name,en_name)
+        city_root=world_data.get("neon_abyss_v1500",{}) if isinstance(world_data,Mapping) else {}
+        city_guilds=city_root.get("guilds",{}) if isinstance(city_root,Mapping) else {}
+        city_row=city_guilds.get(str(int(ctx.guild.id if ctx.guild else 0)),{}) if isinstance(city_guilds,Mapping) else {}
+        decors=city_row.get("decorations",[]) if isinstance(city_row,Mapping) else []
+        market_parts={"demon_market":4,"harbor":2,"neon_train":2}
+        city_discount=min(12,sum(market_parts.get(str(d.get("id","")),0) for d in decors if isinstance(d,Mapping))) if isinstance(decors,list) else 0
+        price=max(100,round((base*int(state.get('market_index',100))/100)*(100-city_discount)/100/100)*100); user=_safe_user(get_user,ctx.author.id)
         before=int(user.get("balance",0) or 0)
         if before<price:
             await ctx.send(_t(locale,f"식량이 부족합니다. 필요 {price:,}",f"Not enough food. Required {price:,}")); return
@@ -953,7 +966,7 @@ def register_v1720_living_world_bonds(
             user["inventory"] = inv
         inv[name] = int(inv.get(name, 0) or 0) + 1
         save_data()
-        await ctx.send(_t(locale,f"🛒 {name} ×1 구매 · {before:,} → {int(user['balance']):,}",f"🛒 Purchased {name} ×1 · {before:,} → {int(user['balance']):,}"))
+        await ctx.send(_t(locale,f"🛒 {name} ×1 구매 · 도시 할인 {city_discount}% · {before:,} → {int(user['balance']):,}",f"🛒 Purchased {name} ×1 · city discount {city_discount}% · {before:,} → {int(user['balance']):,}"))
 
     @bot.command(name="세계갱신", aliases=["refreshworld","worldrefresh"], help="관리자가 오늘의 살아 있는 세계 상태를 강제로 다시 생성합니다.")
     async def world_refresh(ctx: commands.Context) -> None:
@@ -1047,6 +1060,7 @@ def register_v1720_living_world_bonds(
             reward=max(10000,min(40000,12000+int(row.get('trust',0))*120+int(row.get('loyalty',0))*80)); user["balance"]=balance+reward; row["affinity"]+=5; row["trust"]+=5; row["loyalty"]+=4; row["fear"]-=2; result=_t(locale,f"🏁 {npc['ko']}와 동행 성공 · 획득 {reward:,}",f"🏁 Mission success with {npc['en']} · gained {reward:,}")
         _clamp_bond(row)
         root=_bond_root(user); root["history"].append({"at":now,"npc":npc["id"],"type":"mission","result":"betrayal" if roll<risk else "success","risk":risk}); root["history"]=root["history"][-100:]
+        linked=user.setdefault("connected_survival_v1730",{}); linked.setdefault("daily",{})["npc_mission_day"]=_today(); linked.setdefault("history",[]).append({"at":now,"type":"npc_mission","result":"betrayal" if roll<risk else "success","detail":str(npc["id"])}); linked["history"]=linked["history"][-100:]
         save_data(); await ctx.send(f"{result}\n💰 {balance:,} → {int(user['balance']):,} · ⚠️ {_betrayal_risk(row,state)}%")
 
     @bot.command(name="고백", aliases=["confess","romancenpc"], help="관계 조건을 충족한 NPC에게 고백해 연인 루트를 시작합니다.")

@@ -108,6 +108,7 @@ GROUP_SPECS: Dict[str, Tuple[Tuple[str, str, str, str, str, str], ...]] = {
         ("exploration", "생존 탐험·원정·사건", "Survival Exploration", "지역 정찰, 원정, 사건, 수사와 유물", "Scouting, expeditions, incidents, investigation and relics", "🧭"),
         ("base", "기지·대피소·세계 진행", "Base, Shelter & World Progress", "기지 성장, 대피소, 개척, 복구와 세계 순환", "Base growth, shelter, frontier, recovery and world cycle", "🏕️"),
         ("codex", "도감·연대기·진행 확인", "Codex, Chronicle & Progress", "발견 기록, 도감, 진행판과 다음 행동", "Discovery records, codices, progress and next actions", "📚"),
+        ("connections", "연결 생존 루프", "Connected Survival Loop", "스토리·세계·원정·NPC·제작·도시를 다음 행동으로 연결", "Connect story, world, expedition, NPC, crafting and city through guided actions", "🔗"),
     ),
     "play": (
         ("life", "생활·채집·파밍", "Life, Gathering & Farming", "채집, 낚시, 벌목, 광산, 파밍과 생활 숙련", "Gathering, fishing, logging, mining, farming and mastery", "⛏️"),
@@ -230,6 +231,13 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         if _has(blob, "검수", "테스트", "패치노트", "audit"):
             return "system", "audit"
         return "system", "legacy"
+
+    if module == "v1730_connected_survival_loop":
+        if _has(blob, "연결허브", "연결목표", "연결보상", "연결기록", "재료용도", "도시효과", "connectedhub", "connectedreward", "materialuses", "cityeffects"):
+            return "main", "connections"
+        if _has(blob, "검수", "테스트", "패치노트", "audit"):
+            return "system", "audit"
+        return "main", "connections"
 
     content_blob = " ".join((qname, aliases, help_text)).casefold()
     if _has(content_blob, "시즌 1", "시즌1", "검은 주파수") and not _has(content_blob, "슬롯"):
@@ -912,6 +920,8 @@ class NavButton(discord.ui.Button):
             view.quick_page = 3
         elif action == "quick_more4":
             view.quick_page = 4
+        elif action == "quick_more5":
+            view.quick_page = 5
         elif action == "quick_back4":
             view.quick_page = 3
         elif action == "quick_back3":
@@ -988,6 +998,30 @@ class NavButton(discord.ui.Button):
                 return
         elif action == "npc_list":
             command = view.bot.get_command("NPC목록") or view.bot.get_command("npclist")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "connected_hub":
+            command = view.bot.get_command("연결허브") or view.bot.get_command("connectedhub")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "connected_goals":
+            command = view.bot.get_command("연결목표") or view.bot.get_command("connectedobjectives")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "connected_reward":
+            command = view.bot.get_command("연결보상") or view.bot.get_command("connectedreward")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "city_effects":
+            command = view.bot.get_command("도시효과") or view.bot.get_command("cityeffects")
             if command is not None:
                 await interaction.response.defer(thinking=True, ephemeral=True)
                 await _invoke_command(view.bot, interaction, command.qualified_name)
@@ -1195,11 +1229,17 @@ class CompleteCommandCenterView(discord.ui.View):
                 self.add_item(NavButton(self, "custom_event", "사용자 사건", "Community Events", "🎭", row=4))
                 self.add_item(NavButton(self, "runtime_clean", "17.2 점검", "v17.2 Audit", "🧹", row=4))
                 self.add_item(NavButton(self, "quick_more4", "살아 있는 세계", "Living World", "➡️", discord.ButtonStyle.primary, row=4))
-            else:
+            elif self.quick_page == 4:
                 self.add_item(NavButton(self, "living_world", "살아 있는 세계", "Living World", "🌍", discord.ButtonStyle.success, row=4))
                 self.add_item(NavButton(self, "world_event", "오늘의 사건", "World Event", "📻", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "bonds", "NPC 인연", "NPC Bonds", "💞", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "npc_list", "NPC 목록", "NPC Roster", "🧑‍🤝‍🧑", row=4))
+                self.add_item(NavButton(self, "quick_more5", "연결 루프", "Connected Loop", "➡️", discord.ButtonStyle.primary, row=4))
+            else:
+                self.add_item(NavButton(self, "connected_hub", "연결 허브", "Connected Hub", "🔗", discord.ButtonStyle.success, row=4))
+                self.add_item(NavButton(self, "connected_goals", "연결 목표", "Connected Goals", "🎯", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "connected_reward", "연결 보상", "Connected Reward", "🏁", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "city_effects", "도시 효과", "City Effects", "🏙️", row=4))
                 self.add_item(NavButton(self, "quick_back", "기본 메뉴", "Main Shortcuts", "⬅️", row=4))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

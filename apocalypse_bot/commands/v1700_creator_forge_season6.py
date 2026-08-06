@@ -800,7 +800,7 @@ def register_v1700_creator_forge_season6(
         save_data()
         await ctx.send(embed=_season_embed(locale,state), view=_safe_view(Season6View(bot, world_data, save_data, int(ctx.guild.id if ctx.guild else 0), locale)))
 
-    @bot.command(name="시즌6", aliases=["season6", "검은태양", "blacksun"], help="시즌 6 현재 장면·투표·도시 지표와 공동 결말 진행을 확인합니다.")
+    @bot.group(name="시즌6", aliases=["season6", "검은태양", "blacksun"], invoke_without_command=True, case_insensitive=True, help="시즌 6 현재 장면·투표·도시 지표와 공동 결말 진행을 확인합니다.")
     async def season6(ctx: commands.Context) -> None:
         locale = _ctx_locale(bot, ctx)
         state = _season_state(world_data, int(ctx.guild.id if ctx.guild else 0))
@@ -829,8 +829,43 @@ def register_v1700_creator_forge_season6(
         if sum(counts) <= 0 and option not in {1,2,3}:
             await ctx.send(_t(locale,"아직 투표가 없습니다. 번호를 지정하거나 투표를 기다려주세요.","No votes yet. Specify an option or wait for votes.")); return
         chosen, choice, before = _resolve_chapter(state, option)
-        save_data()
+        gid = int(ctx.guild.id if ctx.guild else 0)
         after = state["stats"]
+        # v17.3: immediately echo the server decision into the living world and
+        # participating survivors' NPC relationships instead of waiting for a
+        # disconnected next-day refresh.
+        try:
+            living_root = world_data.setdefault("living_world_v1710", {}).setdefault("guilds", {})
+            living = living_root.get(str(gid))
+            if isinstance(living, MutableMapping):
+                metrics = living.setdefault("metrics", {})
+                metrics["hope"] = max(0, min(100, int(metrics.get("hope", 50) or 50) + int(choice.effects.get("hope", 0))))
+                metrics["order"] = max(0, min(100, int(metrics.get("order", 50) or 50) + int(choice.effects.get("order", 0))))
+                metrics["power"] = max(0, min(100, int(metrics.get("power", 50) or 50) + int(choice.effects.get("survival", 0))))
+                metrics["tension"] = max(0, min(100, int(metrics.get("tension", 40) or 40) + int(choice.effects.get("abyss", 0))))
+            guild_links = world_data.setdefault("connected_survival_v1730", {}).setdefault("guilds", {}).setdefault(str(gid), {})
+            guild_links.setdefault("history", []).append({"at": _now(), "type": "season6_echo", "chapter": int(state.get("chapter", 0)), "choice": chosen + 1, "effects": dict(choice.effects)})
+            guild_links["history"] = guild_links["history"][-100:]
+            guild_links["season_echo"] = {"choice": chosen + 1, "effects": dict(choice.effects), "at": _now()}
+            for participant_id in list(state.get("participants", []))[-500:]:
+                survivor = _safe_user(get_user, int(participant_id))
+                if not survivor:
+                    continue
+                link = survivor.setdefault("connected_survival_v1730", {})
+                link.setdefault("history", []).append({"at": _now(), "type": "season6_echo", "detail": _t("ko", choice.unlock_ko, choice.unlock_en)})
+                link["history"] = link["history"][-100:]
+                bonds = survivor.setdefault("npc_bonds_v1720", {}).setdefault("npcs", {})
+                if int(choice.effects.get("hope", 0)) > 0:
+                    for npc_id in ("yoonseo", "mira"):
+                        row = bonds.setdefault(npc_id, {}); row["affinity"] = min(100, int(row.get("affinity", 0) or 0) + 2); row["trust"] = min(100, int(row.get("trust", 10) or 10) + 1)
+                if int(choice.effects.get("order", 0)) > 0:
+                    row = bonds.setdefault("kane", {}); row["loyalty"] = min(100, int(row.get("loyalty", 20) or 20) + 2)
+                if int(choice.effects.get("abyss", 0)) > 0:
+                    for npc_id in ("eve", "nox"):
+                        row = bonds.setdefault(npc_id, {}); row["affinity"] = min(100, int(row.get("affinity", 0) or 0) + 2)
+        except Exception as exc:
+            print(f"[ABADDON v17.3] season6 connection echo skipped: {type(exc).__name__}: {exc}", flush=True)
+        save_data()
         result = discord.Embed(title=_t(locale,"⚖️ 서버 결정 확정","⚖️ Server Decision Resolved"), description=_t(locale,choice.result_ko,choice.result_en), color=0xE67E22)
         result.add_field(name=_t(locale,"🗳️ 확정 선택","🗳️ Chosen Option"), value=f"**{chosen+1}.** {_t(locale,choice.ko,choice.en)} · {counts[chosen]} votes", inline=False)
         changes=[]
@@ -883,6 +918,28 @@ def register_v1700_creator_forge_season6(
         if isinstance(titles,list) and title not in titles: titles.append(title)
         state["claims"].append(uid); save_data()
         await ctx.send(_t(locale,f"🎁 시즌 6 보상: 식량 +150,000 · EXP +500 · 칭호 **{title}**",f"🎁 Season 6 reward: Food +150,000 · EXP +500 · title **{title}**"))
+
+    # v17.2.1: real Korean/English Season 6 command group while preserving all
+    # existing top-level commands and aliases.
+    @season6.command(name="시작", aliases=["start"])
+    async def season6_group_start(ctx: commands.Context) -> None:
+        await ctx.invoke(season6_start)
+
+    @season6.command(name="투표", aliases=["vote"])
+    async def season6_group_vote(ctx: commands.Context, option: int) -> None:
+        await ctx.invoke(season6_vote, option=option)
+
+    @season6.command(name="결정", aliases=["resolve"])
+    async def season6_group_resolve(ctx: commands.Context, option: int = 0) -> None:
+        await ctx.invoke(season6_resolve, option=option)
+
+    @season6.command(name="기록", aliases=["history"])
+    async def season6_group_history(ctx: commands.Context) -> None:
+        await ctx.invoke(season6_history)
+
+    @season6.command(name="보상", aliases=["reward"])
+    async def season6_group_reward(ctx: commands.Context) -> None:
+        await ctx.invoke(season6_reward)
 
     @bot.command(name="권리증명", aliases=["ownerproof", "copyrightvault"], hidden=True, help="봇 소유자만 내부 프로젝트 소유권 증명 정보를 확인합니다.")
     async def owner_proof(ctx: commands.Context) -> None:
