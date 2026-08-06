@@ -1,0 +1,19 @@
+{
+  "version": "16.7.1",
+  "generated_at": "2026-08-05T21:36:00+09:00",
+  "summary": "Command center NameError hotfix",
+  "checks": {
+    "v1630 imports _safe_select_options": true,
+    "v1630 imports _safe_embed": true,
+    "v1630 imports _safe_view": true,
+    "v1671 module registered": true,
+    "patch notes updated": true,
+    "Korean and English policy preserved": true,
+    "legacy removals": true
+  },
+  "passed": 7,
+  "total": 7,
+  "python_compile": "passed",
+  "runtime_gateway_test": "not run: Discord package/token unavailable in build environment",
+  "removed_commands": 0
+}

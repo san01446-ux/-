@@ -1,0 +1,18 @@
+{
+  "project": "ABADDON Discord RPG Bot",
+  "release": "v17.3.0",
+  "generated_at": "2026-08-06T16:20:38.377575+09:00",
+  "sha256": {
+    "apocalypse_bot/commands/v1730_connected_survival_loop.py": "bdafd9d2acbc01d3b93ec2c6e1c784d673d64005162224496dc2d020ff0921f0",
+    "apocalypse_bot/commands/v1700_creator_forge_season6.py": "8db4e0eb0ff221d15c33a48ebb1c33de2ab6cf96f61e69bee37b89c4e661ee35",
+    "apocalypse_bot/commands/v1720_living_world_bonds.py": "cd9569391ea8f5d190043559723aee654f8704998f57e1b666f6d0854b3db704",
+    "apocalypse_bot/commands/v1680_lone_survivor.py": "222de2b4f10c34403d2ea5506ccc89e125fb633dba4a2241df5afd39f2a7f1c9",
+    "apocalypse_bot/commands/v1630_core_rpg_command_city_overhaul.py": "dd3c69e13ff3ccb029934c7b2c5753b4cfcb3728c4d9f963c672ed24ae1155f8",
+    "apocalypse_bot/commands/v1650_survivor_core_complete.py": "476c0a91d32f2424889faacb35fa83740503a15a7bfb35624b0a2a8a7b60700c",
+    "apocalypse_bot/core/bot.py": "9160c13fbb7cc67689523c3959f14caf084060829a70d60e0677941ad0d7ccd5",
+    "ABADDON_COMMAND_MANIFEST_v17.3.0.json": "82355d0cdb44ada8887cbf64a13687c5cb13c2e4e9aea714f6e567455077afd4",
+    "ABADDON_v17.3.0_COMMAND_CATEGORY_AUDIT.csv": "46472646ea46541037c70369a5cacf302b62c1dd41d0fd2e61de753d89fa9904",
+    "ABADDON_v17.3.0_PATCH_NOTES_KO.txt": "ae5cd8ae0785f85b8bab384a3f5ac8f389a006c9a12bfbf658207cd96d06eab8",
+    "ABADDON_v17.3.0_CONNECTED_SURVIVAL_SPEC_KO.md": "0fa2937039bdbf8b5037fc4fa762c2353da995ad015ccd3ed054bd950e426eae"
+  }
+}

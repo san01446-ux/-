@@ -1,0 +1,19 @@
+ABADDON v7.1.2 Render 배포·확인 가이드
+
+1. ABADDON_BOT_v7.1.2_WELCOME_THEME_HOTFIX.zip을 Render 소스에 반영합니다.
+2. requirements.txt와 기존 Start Command를 유지하고 재배포합니다.
+3. 로그에서 아래 오류가 더 이상 나타나지 않는지 확인합니다.
+   CommandRegistrationError: The alias 데이터백업 is already an existing command or alias
+4. 봇이 Gateway에 연결된 뒤 다음 명령을 확인합니다.
+   !시스템점검
+   !데이터백업
+   !백업생성
+5. 환영 테마를 설정합니다.
+   !환영테마
+   또는 !환영테마 아포칼립스
+6. !환영테마 미리보기 명령으로 색상과 문구를 확인합니다.
+7. 테스트 계정을 서버에 다시 입장시켜 선택한 테마만 출력되는지 확인합니다.
+8. 역할 아이콘이 안 보이면 봇에 역할 관리 권한을 부여하고 봇 역할을 신규 멤버 역할보다 위에 둡니다.
+9. 홈페이지 ZIP을 업로드한 뒤 Ctrl+F5로 v7.1.2 표시와 환영 테마 섹션을 확인합니다.
+
+문제가 생기면 이전 데이터 파일을 삭제하지 말고 Render 로그와 !오류현황 사건 번호를 함께 보관하세요.

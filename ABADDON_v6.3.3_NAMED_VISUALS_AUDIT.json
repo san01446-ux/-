@@ -1,0 +1,870 @@
+{
+  "version": "6.3.3-named-visuals",
+  "summary": {
+    "equipment_images": 70,
+    "treasure_images": 20,
+    "total_named_images": 90,
+    "unique_sha256": 90,
+    "python_files": 43,
+    "all_pass": true
+  },
+  "checks": [
+    {
+      "name": "equipment_manifest_exact",
+      "pass": true,
+      "expected": 70,
+      "actual": 70
+    },
+    {
+      "name": "equipment_asset:몽둥이",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/001.webp"
+    },
+    {
+      "name": "equipment_asset:손전등",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/002.webp"
+    },
+    {
+      "name": "equipment_asset:녹슨파이프",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/003.webp"
+    },
+    {
+      "name": "equipment_asset:작업용장갑",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/004.webp"
+    },
+    {
+      "name": "equipment_asset:등산가방",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/005.webp"
+    },
+    {
+      "name": "equipment_asset:낡은헬멧",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/006.webp"
+    },
+    {
+      "name": "equipment_asset:주방칼",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/007.webp"
+    },
+    {
+      "name": "equipment_asset:신호탄",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/008.webp"
+    },
+    {
+      "name": "equipment_asset:방수우의",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/009.webp"
+    },
+    {
+      "name": "equipment_asset:구급주머니",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/010.webp"
+    },
+    {
+      "name": "equipment_asset:철근조각",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/011.webp"
+    },
+    {
+      "name": "equipment_asset:녹슨권총",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/012.webp"
+    },
+    {
+      "name": "equipment_asset:소방도끼",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/013.webp"
+    },
+    {
+      "name": "equipment_asset:야구보호대",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/014.webp"
+    },
+    {
+      "name": "equipment_asset:수제석궁",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/015.webp"
+    },
+    {
+      "name": "equipment_asset:경찰방패",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/016.webp"
+    },
+    {
+      "name": "equipment_asset:군용나이프",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/017.webp"
+    },
+    {
+      "name": "equipment_asset:방독면",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/018.webp"
+    },
+    {
+      "name": "equipment_asset:응급키트",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/019.webp"
+    },
+    {
+      "name": "equipment_asset:경량방탄복",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/020.webp"
+    },
+    {
+      "name": "equipment_asset:전술샷건",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/021.webp"
+    },
+    {
+      "name": "equipment_asset:군용방탄조끼",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/022.webp"
+    },
+    {
+      "name": "equipment_asset:쇠크로스보우",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/023.webp"
+    },
+    {
+      "name": "equipment_asset:전기충격봉",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/024.webp"
+    },
+    {
+      "name": "equipment_asset:소음권총",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/025.webp"
+    },
+    {
+      "name": "equipment_asset:강화전술복",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/026.webp"
+    },
+    {
+      "name": "equipment_asset:열감지스코프",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/027.webp"
+    },
+    {
+      "name": "equipment_asset:전투드론",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/028.webp"
+    },
+    {
+      "name": "equipment_asset:감염차단주사",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/029.webp"
+    },
+    {
+      "name": "equipment_asset:개조소총",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/030.webp"
+    },
+    {
+      "name": "equipment_asset:야간투시경",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/031.webp"
+    },
+    {
+      "name": "equipment_asset:전술방패",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/032.webp"
+    },
+    {
+      "name": "equipment_asset:폭발화살석궁",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/033.webp"
+    },
+    {
+      "name": "equipment_asset:대물저격총",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/034.webp"
+    },
+    {
+      "name": "equipment_asset:고주파검",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/035.webp"
+    },
+    {
+      "name": "equipment_asset:중장갑외골격",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/036.webp"
+    },
+    {
+      "name": "equipment_asset:EMP수류탄",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/037.webp"
+    },
+    {
+      "name": "equipment_asset:플라즈마권총",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/038.webp"
+    },
+    {
+      "name": "equipment_asset:생체탐지기",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/039.webp"
+    },
+    {
+      "name": "equipment_asset:재생갑옷",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/040.webp"
+    },
+    {
+      "name": "equipment_asset:화염방사기",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/041.webp"
+    },
+    {
+      "name": "equipment_asset:파워조준경",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/042.webp"
+    },
+    {
+      "name": "equipment_asset:전술경장갑",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/043.webp"
+    },
+    {
+      "name": "equipment_asset:레일건",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/044.webp"
+    },
+    {
+      "name": "equipment_asset:썬더해머",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/045.webp"
+    },
+    {
+      "name": "equipment_asset:드래곤브레스",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/046.webp"
+    },
+    {
+      "name": "equipment_asset:블랙팬텀슈트",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/047.webp"
+    },
+    {
+      "name": "equipment_asset:타이탄캐논",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/048.webp"
+    },
+    {
+      "name": "equipment_asset:심연의낫",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/049.webp"
+    },
+    {
+      "name": "equipment_asset:불사조장갑",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/050.webp"
+    },
+    {
+      "name": "equipment_asset:종말의검",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/051.webp"
+    },
+    {
+      "name": "equipment_asset:천벌의창",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/052.webp"
+    },
+    {
+      "name": "equipment_asset:아크리액터갑옷",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/053.webp"
+    },
+    {
+      "name": "equipment_asset:공허포식자",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/054.webp"
+    },
+    {
+      "name": "equipment_asset:시간왜곡장치",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/055.webp"
+    },
+    {
+      "name": "equipment_asset:불멸자의가면",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/056.webp"
+    },
+    {
+      "name": "equipment_asset:신경동기화드론",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/057.webp"
+    },
+    {
+      "name": "equipment_asset:오메가레일건",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/058.webp"
+    },
+    {
+      "name": "equipment_asset:세계수혈청",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/059.webp"
+    },
+    {
+      "name": "equipment_asset:아포칼립스코어",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/060.webp"
+    },
+    {
+      "name": "equipment_asset:루시퍼의대검",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/061.webp"
+    },
+    {
+      "name": "equipment_asset:창세의방패",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/062.webp"
+    },
+    {
+      "name": "equipment_asset:절대영도포",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/063.webp"
+    },
+    {
+      "name": "equipment_asset:차원절단기",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/064.webp"
+    },
+    {
+      "name": "equipment_asset:메시아의왕관",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/065.webp"
+    },
+    {
+      "name": "equipment_asset:판도라의심장",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/066.webp"
+    },
+    {
+      "name": "equipment_asset:심판자의낫",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/067.webp"
+    },
+    {
+      "name": "equipment_asset:천공요새코어",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/068.webp"
+    },
+    {
+      "name": "equipment_asset:태초의유전자",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/069.webp"
+    },
+    {
+      "name": "equipment_asset:종말통제키",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "equipment/070.webp"
+    },
+    {
+      "name": "treasure_manifest_exact",
+      "pass": true,
+      "expected": 20,
+      "actual": 20
+    },
+    {
+      "name": "treasure_asset:녹슨 생존자 배지",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/001.webp"
+    },
+    {
+      "name": "treasure_asset:금이 간 기념주화",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/002.webp"
+    },
+    {
+      "name": "treasure_asset:낡은 방공호 열쇠",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/003.webp"
+    },
+    {
+      "name": "treasure_asset:찌그러진 군번표",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/004.webp"
+    },
+    {
+      "name": "treasure_asset:군용 나침반",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/005.webp"
+    },
+    {
+      "name": "treasure_asset:봉인된 탄피함",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/006.webp"
+    },
+    {
+      "name": "treasure_asset:오래된 회중시계",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/007.webp"
+    },
+    {
+      "name": "treasure_asset:구호대 완장",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/008.webp"
+    },
+    {
+      "name": "treasure_asset:지휘관 인장",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/009.webp"
+    },
+    {
+      "name": "treasure_asset:감염 연구 표본",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/010.webp"
+    },
+    {
+      "name": "treasure_asset:은빛 데이터칩",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/011.webp"
+    },
+    {
+      "name": "treasure_asset:피난선 항로도",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/012.webp"
+    },
+    {
+      "name": "treasure_asset:황금 방공호 열쇠",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/013.webp"
+    },
+    {
+      "name": "treasure_asset:왕좌의 파편",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/014.webp"
+    },
+    {
+      "name": "treasure_asset:푸른 핵 수정",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/015.webp"
+    },
+    {
+      "name": "treasure_asset:검은 통신 지휘봉",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/016.webp"
+    },
+    {
+      "name": "treasure_asset:아바돈의 검은 성배",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/017.webp"
+    },
+    {
+      "name": "treasure_asset:종말 전쟁 깃발",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/018.webp"
+    },
+    {
+      "name": "treasure_asset:최초 생존자의 인장",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/019.webp"
+    },
+    {
+      "name": "treasure_asset:봉인된 왕좌 코어",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ],
+      "file": "treasures/020.webp"
+    },
+    {
+      "name": "all_named_images_unique_sha256",
+      "pass": true,
+      "count": 90,
+      "unique": 90
+    },
+    {
+      "name": "python_ast_all",
+      "pass": true,
+      "count": 43,
+      "errors": []
+    },
+    {
+      "name": "work_failure_safe_replacement_unique",
+      "pass": true,
+      "size": [
+        1280,
+        720
+      ]
+    },
+    {
+      "name": "pillow_dependency",
+      "pass": true
+    },
+    {
+      "name": "no_unwanted_runtime_files",
+      "pass": true,
+      "files": []
+    }
+  ],
+  "runtime_not_tested": [
+    "Discord login",
+    "Render deployment",
+    "actual button/modal clicks",
+    "message attachment replacement"
+  ]
+}
