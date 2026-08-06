@@ -203,20 +203,11 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         return "main", "story4"
     if module == "v900_faction_world_state" and _has(blob, "시즌5", "연합전선", "세계상태", "세계연대기", "season5"):
         return "main", "story5"
-    if _has(blob, "시즌 1", "시즌1", "검은 주파수") and not _has(blob, "슬롯"):
-        return "main", "story1"
-    if _has(blob, "시즌 2", "시즌2", "백색 방주"):
-        return "main", "story2"
-    if _has(blob, "시즌 3", "시즌3", "종말의 왕좌"):
-        return "main", "story3"
-    if _has(blob, "시즌 4", "시즌4", "황혼의 종착역", "황혼선"):
-        return "main", "story4"
-    if _has(blob, "시즌 5", "시즌5", "잿빛 연합전선"):
-        return "main", "story5"
-
-    # v17.0 season story and creator forge.
+    # v17.0 must be classified before generic story keyword checks.
+    # Its module filename contains ``season6``; using the full source blob in the
+    # generic checks used to misclassify every Creator Forge command as Story 6.
     if module == "v1700_creator_forge_season6":
-        if _has(blob, "시즌6", "검은 태양", "season6", "black sun"):
+        if _has(blob, "시즌6", "검은 태양", "season6", "black sun") and not _has(blob, "콘텐츠", "사용자사건", "creator", "communityevent", "eventforge"):
             return "main", "story6"
         if _has(blob, "콘텐츠", "사용자사건", "creator", "communityevent", "eventforge"):
             return "world", "creator"
@@ -227,6 +218,30 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         if _has(blob, "검수", "테스트", "패치노트", "audit", "runtime"):
             return "system", "audit"
         return "system", "legacy"
+
+    # v17.1~17.2 living world and NPC bond layer.
+    if module == "v1720_living_world_bonds":
+        if _has(blob, "콘텐츠공방", "creatorforge", "창작공방"):
+            return "world", "creator"
+        if _has(blob, "살아있는세계", "세계속보", "지역위험", "오늘의세계", "세계참여", "세계시장", "livingworld", "worldbulletin", "worldevent", "worldmarket"):
+            return "world", "world_misc"
+        if _has(blob, "인연", "npc", "동행", "고백", "배신", "선물", "bond", "bondmission", "confess"):
+            return "social", "npc"
+        if _has(blob, "검수", "테스트", "패치노트", "audit"):
+            return "system", "audit"
+        return "system", "legacy"
+
+    content_blob = " ".join((qname, aliases, help_text)).casefold()
+    if _has(content_blob, "시즌 1", "시즌1", "검은 주파수") and not _has(content_blob, "슬롯"):
+        return "main", "story1"
+    if _has(content_blob, "시즌 2", "시즌2", "백색 방주"):
+        return "main", "story2"
+    if _has(content_blob, "시즌 3", "시즌3", "종말의 왕좌"):
+        return "main", "story3"
+    if _has(content_blob, "시즌 4", "시즌4", "황혼의 종착역", "황혼선"):
+        return "main", "story4"
+    if _has(content_blob, "시즌 5", "시즌5", "잿빛 연합전선"):
+        return "main", "story5"
 
     # v16.8 solo roguelite remains visible in the main RPG exploration route.
     if module == "v1680_lone_survivor":
@@ -895,6 +910,10 @@ class NavButton(discord.ui.Button):
             view.quick_page = 2
         elif action == "quick_more3":
             view.quick_page = 3
+        elif action == "quick_more4":
+            view.quick_page = 4
+        elif action == "quick_back4":
+            view.quick_page = 3
         elif action == "quick_back3":
             view.quick_page = 2
         elif action == "quick_back2":
@@ -944,10 +963,34 @@ class NavButton(discord.ui.Button):
                 await _invoke_command(view.bot, interaction, command.qualified_name)
                 return
         elif action == "runtime_clean":
-            command = view.bot.get_command("1700통합검수") or view.bot.get_command("v1700audit")
+            command = view.bot.get_command("1720통합검수") or view.bot.get_command("v1720audit") or view.bot.get_command("1700통합검수")
             if command is not None:
                 await interaction.response.defer(thinking=True, ephemeral=True)
                 await _invoke_command(view.bot, interaction, command.qualified_name, "상세")
+                return
+        elif action == "living_world":
+            command = view.bot.get_command("살아있는세계") or view.bot.get_command("livingworld")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "world_event":
+            command = view.bot.get_command("오늘의세계사건") or view.bot.get_command("worldevent")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "bonds":
+            command = view.bot.get_command("인연") or view.bot.get_command("bonds")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "npc_list":
+            command = view.bot.get_command("NPC목록") or view.bot.get_command("npclist")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
                 return
         elif action == "story_continue":
             command = view.bot.get_command("스토리나침반") or view.bot.get_command("storycompass")
@@ -1146,11 +1189,17 @@ class CompleteCommandCenterView(discord.ui.View):
                 self.add_item(NavButton(self, "expedition_codex", "원정 도감", "Expedition Codex", "📚", row=4))
                 self.add_item(NavButton(self, "expedition_record", "원정 기록", "Expedition Records", "🏆", row=4))
                 self.add_item(NavButton(self, "quick_more3", "시즌 6·공방", "Season 6 & Forge", "➡️", discord.ButtonStyle.primary, row=4))
-            else:
+            elif self.quick_page == 3:
                 self.add_item(NavButton(self, "season6", "시즌 6", "Season 6", "☀️", discord.ButtonStyle.success, row=4))
                 self.add_item(NavButton(self, "creator_forge", "콘텐츠 공방", "Creator Forge", "🧩", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "custom_event", "사용자 사건", "Community Events", "🎭", row=4))
-                self.add_item(NavButton(self, "runtime_clean", "17.0 점검", "v17 Audit", "🧹", row=4))
+                self.add_item(NavButton(self, "runtime_clean", "17.2 점검", "v17.2 Audit", "🧹", row=4))
+                self.add_item(NavButton(self, "quick_more4", "살아 있는 세계", "Living World", "➡️", discord.ButtonStyle.primary, row=4))
+            else:
+                self.add_item(NavButton(self, "living_world", "살아 있는 세계", "Living World", "🌍", discord.ButtonStyle.success, row=4))
+                self.add_item(NavButton(self, "world_event", "오늘의 사건", "World Event", "📻", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "bonds", "NPC 인연", "NPC Bonds", "💞", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "npc_list", "NPC 목록", "NPC Roster", "🧑‍🤝‍🧑", row=4))
                 self.add_item(NavButton(self, "quick_back", "기본 메뉴", "Main Shortcuts", "⬅️", row=4))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

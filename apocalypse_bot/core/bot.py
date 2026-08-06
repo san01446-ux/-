@@ -6008,6 +6008,13 @@ register_v1700_creator_forge_season6(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V17.2.0: LIVING WORLD & BROKEN OATHS.
+# V17.0.1 Creator Forge group repair, V17.1 daily living world, and V17.2 NPC bonds/romance/betrayal.
+from apocalypse_bot.commands.v1720_living_world_bonds import register_v1720_living_world_bonds
+register_v1720_living_world_bonds(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
