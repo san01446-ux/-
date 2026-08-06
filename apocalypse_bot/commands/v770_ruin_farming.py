@@ -1671,7 +1671,7 @@ def register_v770_ruin_farming(
         embed.set_footer(text="!계약수락 번호 → !납품 · 완료 계약은 당일 다시 제출할 수 없습니다")
         await ctx.send(embed=embed)
 
-    @bot.command(name="계약수락", aliases=["의뢰수락", "납품계약"], help="오늘의 납품 계약 하나를 수락합니다.")
+    @bot.command(name="계약수락", aliases=["납품계약"], help="오늘의 납품 계약 하나를 수락합니다.")
     async def contract_accept(ctx: commands.Context, 번호: int = 0) -> None:
         user, profile = await require_user(ctx)
         if user is None or profile is None:

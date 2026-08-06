@@ -6022,6 +6022,13 @@ register_v1730_connected_survival_loop(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V17.4.0: SYSTEM FUSION.
+# Consolidates story/world/contracts/expedition/NPC/production/city into guided hubs.
+from apocalypse_bot.commands.v1740_system_fusion import register_v1740_system_fusion
+register_v1740_system_fusion(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

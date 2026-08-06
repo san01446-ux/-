@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""ABADDON v16.3.1 core-RPG navigation, city workshop and reaction expansion.
+"""ABADDON v17.4.0 core-RPG navigation, system fusion, city workshop and reaction expansion.
 
 Additive patch goals:
 - classify every runtime command exactly once instead of relying on the manually
@@ -30,7 +30,7 @@ from apocalypse_bot.commands.v600_game_center import (
     _safe_view,
 )
 
-VERSION = "16.6.0"
+VERSION = "17.4.0"
 EXPECTED_DECLARATIONS = 1346
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets"
 CITY_COMPONENT_ROOT = ASSET_ROOT / "v1500" / "city" / "components"
@@ -97,6 +97,8 @@ SECTION_SPECS: Tuple[Tuple[str, str, str, str], ...] = (
 # key, Korean label, English label, Korean description, English description, emoji
 GROUP_SPECS: Dict[str, Tuple[Tuple[str, str, str, str, str, str], ...]] = {
     "main": (
+        ("terminal", "생존단말기·통합 허브", "Survivor Terminal & Hubs", "현재 상황에서 스토리·의뢰·원정·생산·NPC로 이어지는 통합 진입점", "Unified entry points connecting current state to story, contracts, expedition, production and NPCs", "📡"),
+        ("contracts", "생존 의뢰소·일일 목표", "Survival Contracts & Daily Goals", "살아 있는 세계 기반 일일·주간 의뢰와 결과·기록", "Living-world daily and weekly contracts, results and history", "📜"),
         ("story1", "시즌 1 · 검은 주파수", "Season 1 · Black Frequency", "메인 스토리 시작·선택·기록·재시작", "Main story start, choices, history and restart", "📻"),
         ("story2", "시즌 2 · 백색 방주", "Season 2 · White Ark", "두 번째 이야기와 장면·엔딩·계승", "Second story, scenes, endings and legacy", "🚢"),
         ("story3", "시즌 3 · 종말의 왕좌", "Season 3 · Throne of the End", "세 번째 이야기의 선택과 엔딩", "Third story choices and endings", "👑"),
@@ -111,6 +113,7 @@ GROUP_SPECS: Dict[str, Tuple[Tuple[str, str, str, str, str, str], ...]] = {
         ("connections", "연결 생존 루프", "Connected Survival Loop", "스토리·세계·원정·NPC·제작·도시를 다음 행동으로 연결", "Connect story, world, expedition, NPC, crafting and city through guided actions", "🔗"),
     ),
     "play": (
+        ("production", "생산센터·재료 흐름", "Production Center & Materials", "채집·가방·제작·재료 사용처·도시 배치를 한 흐름으로 연결", "Connect gathering, inventory, crafting, material uses and city placement", "⚙️"),
         ("life", "생활·채집·파밍", "Life, Gathering & Farming", "채집, 낚시, 벌목, 광산, 파밍과 생활 숙련", "Gathering, fishing, logging, mining, farming and mastery", "⛏️"),
         ("gear", "상점·장비·강화·제작", "Shop, Gear, Enhance & Craft", "아이템 구매, 장착, 강화, 제작과 공방", "Buy, equip, enhance and craft items", "🛠️"),
         ("combat", "전투·보스·던전", "Combat, Boss & Dungeon", "일반 전투, 결투, 던전, 보스와 공격대", "Combat, duels, dungeons, bosses and raids", "⚔️"),
@@ -231,6 +234,19 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         if _has(blob, "검수", "테스트", "패치노트", "audit"):
             return "system", "audit"
         return "system", "legacy"
+
+    if module == "v1740_system_fusion":
+        if _has(blob, "생존단말기", "survivalterminal", "terminalhub", "fusionhub"):
+            return "main", "terminal"
+        if _has(blob, "의뢰소", "의뢰수락", "의뢰진행", "의뢰포기", "의뢰기록", "contractoffice", "contractaccept", "contractprogress", "contracthistory"):
+            return "main", "contracts"
+        if _has(blob, "생산센터", "productioncenter", "productionhub", "craftinghub"):
+            return "play", "production"
+        if _has(blob, "세력평판", "factionreputation", "reputationboard"):
+            return "world", "factions"
+        if _has(blob, "검수", "테스트", "패치노트", "audit"):
+            return "system", "audit"
+        return "main", "terminal"
 
     if module == "v1730_connected_survival_loop":
         if _has(blob, "연결허브", "연결목표", "연결보상", "연결기록", "재료용도", "도시효과", "connectedhub", "connectedreward", "materialuses", "cityeffects"):
@@ -922,6 +938,8 @@ class NavButton(discord.ui.Button):
             view.quick_page = 4
         elif action == "quick_more5":
             view.quick_page = 5
+        elif action == "quick_more6":
+            view.quick_page = 6
         elif action == "quick_back4":
             view.quick_page = 3
         elif action == "quick_back3":
@@ -1022,6 +1040,30 @@ class NavButton(discord.ui.Button):
                 return
         elif action == "city_effects":
             command = view.bot.get_command("도시효과") or view.bot.get_command("cityeffects")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "survival_terminal":
+            command = view.bot.get_command("생존단말기") or view.bot.get_command("survivalterminal")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "contract_office":
+            command = view.bot.get_command("의뢰소") or view.bot.get_command("contractoffice")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "production_center":
+            command = view.bot.get_command("생산센터") or view.bot.get_command("productioncenter")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "faction_reputation":
+            command = view.bot.get_command("세력평판") or view.bot.get_command("factionreputation")
             if command is not None:
                 await interaction.response.defer(thinking=True, ephemeral=True)
                 await _invoke_command(view.bot, interaction, command.qualified_name)
@@ -1235,11 +1277,17 @@ class CompleteCommandCenterView(discord.ui.View):
                 self.add_item(NavButton(self, "bonds", "NPC 인연", "NPC Bonds", "💞", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "npc_list", "NPC 목록", "NPC Roster", "🧑‍🤝‍🧑", row=4))
                 self.add_item(NavButton(self, "quick_more5", "연결 루프", "Connected Loop", "➡️", discord.ButtonStyle.primary, row=4))
-            else:
+            elif self.quick_page == 5:
                 self.add_item(NavButton(self, "connected_hub", "연결 허브", "Connected Hub", "🔗", discord.ButtonStyle.success, row=4))
                 self.add_item(NavButton(self, "connected_goals", "연결 목표", "Connected Goals", "🎯", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "connected_reward", "연결 보상", "Connected Reward", "🏁", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "city_effects", "도시 효과", "City Effects", "🏙️", row=4))
+                self.add_item(NavButton(self, "quick_more6", "시스템 융합", "System Fusion", "➡️", discord.ButtonStyle.primary, row=4))
+            else:
+                self.add_item(NavButton(self, "survival_terminal", "생존단말기", "Survivor Terminal", "📡", discord.ButtonStyle.success, row=4))
+                self.add_item(NavButton(self, "contract_office", "의뢰소", "Contract Office", "📜", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "production_center", "생산센터", "Production Center", "⚙️", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "faction_reputation", "세력 평판", "Faction Reputation", "🏴", row=4))
                 self.add_item(NavButton(self, "quick_back", "기본 메뉴", "Main Shortcuts", "⬅️", row=4))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
