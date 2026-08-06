@@ -555,6 +555,8 @@ def register_v710_growth_loop(
             return
         try:
             user = get_user(ctx.author.id)
+            if not isinstance(user, MutableMapping):
+                return
             before = getattr(ctx, "_v710_activity_fingerprint", None)
             after = _activity_fingerprint(user, category)
             # 운세·퀴즈·브리핑 같은 확인형 명령은 성공 종료 자체를 활동으로 인정합니다.

@@ -1,0 +1,17 @@
+{
+  "project": "ABADDON Discord RPG Bot",
+  "project_uuid": "abaddon-7be56c88-2026-17-black-sun",
+  "owner": "정태민",
+  "release": "v17.0.0",
+  "proof_scope": [
+    "original project planning and feature selection",
+    "original season story and world-building",
+    "source-code selection, modification, integration and arrangement",
+    "original UI text, documentation and release history",
+    "edited and integrated visual assets"
+  ],
+  "notice": "Private internal ownership evidence. Not presented in normal user-facing bot screens.",
+  "created_at": "2026-08-06T09:55:00+09:00",
+  "hash_ledger": "ABADDON_OWNER_FILE_HASHES_v17.0.0.json",
+  "hash_ledger_sha256": "eb444dfba4d3d0eeb6ef1d857da6e4c3233c9b79a0d537ffdd335d2323578ea5"
+}

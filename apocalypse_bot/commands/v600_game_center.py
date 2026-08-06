@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import os
 import shlex
@@ -20,6 +21,46 @@ VERSION = "10.6.0"
 MENU_TIMEOUT = 300
 SELECT_PAGE_SIZE = 25
 STORY3_START_NODE = "eclipse_signal"
+
+
+def _real_cog(command: commands.Command) -> Optional[commands.Cog]:
+    """Return only an actual Cog instance; discord.py MISSING sentinels are never contexts."""
+    cog = getattr(command, "cog", None)
+    return cog if isinstance(cog, commands.Cog) else None
+
+
+def _schedule_delete(message: Any, delay: Any) -> None:
+    try:
+        seconds = float(delay)
+    except (TypeError, ValueError):
+        return
+    if seconds <= 0 or message is None or not hasattr(message, "delete"):
+        return
+
+    async def _delete() -> None:
+        await asyncio.sleep(seconds)
+        try:
+            await message.delete()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException, AttributeError):
+            pass
+
+    try:
+        asyncio.create_task(_delete())
+    except RuntimeError:
+        pass
+
+
+_UI_FAILURE_NOTICE: Dict[Tuple[int, str], float] = {}
+
+def _allow_failure_notice(user_id: int, command_name: str, *, window: float = 3.0) -> bool:
+    now = datetime.now(timezone.utc).timestamp()
+    key = (int(user_id), str(command_name))
+    previous = float(_UI_FAILURE_NOTICE.get(key, 0.0) or 0.0)
+    _UI_FAILURE_NOTICE[key] = now
+    for old_key, old_time in list(_UI_FAILURE_NOTICE.items()):
+        if now - old_time > 30:
+            _UI_FAILURE_NOTICE.pop(old_key, None)
+    return now - previous > window
 
 
 # =========================================================
@@ -1032,8 +1073,7 @@ class InteractionCommandContext:
         if self.author is not None:
             self.message.author = self.author
         self.message.interaction = interaction
-        raw_cog = getattr(command, "cog", None)
-        self.cog = None if raw_cog is getattr(discord.utils, "MISSING", object()) else raw_cog
+        self.cog = _real_cog(command)
         self.current_parameter = None
         self.current_argument = None
 
@@ -1063,6 +1103,7 @@ class InteractionCommandContext:
 
     async def send(self, content: Optional[str] = None, **kwargs: Any) -> Any:
         kwargs.pop("ephemeral", None)
+        delete_after = kwargs.pop("delete_after", None)
         kwargs.setdefault("wait", True)
         if "embed" in kwargs:
             kwargs["embed"] = _safe_embed(kwargs.get("embed"))
@@ -1073,12 +1114,16 @@ class InteractionCommandContext:
         if content is not None:
             content = str(content)[:2000]
         try:
-            return await self.interaction.followup.send(content=content, **kwargs)
+            message = await self.interaction.followup.send(content=content, **kwargs)
+            _schedule_delete(message, delete_after)
+            return message
         except discord.HTTPException as exc:
             # Last-resort delivery keeps the command usable even when a legacy embed/view is malformed.
             print(f"[ABADDON UI payload fallback] {type(exc).__name__}: {exc}", flush=True)
             safe_content = (content or "🫧 결과 화면 일부가 Discord 제한을 넘어 텍스트로 전환했습니다.")[:2000]
-            return await self.interaction.followup.send(content=safe_content, wait=True)
+            message = await self.interaction.followup.send(content=safe_content, wait=True)
+            _schedule_delete(message, delete_after)
+            return message
 
     async def reply(self, content: Optional[str] = None, **kwargs: Any) -> Any:
         kwargs.pop("mention_author", None)
@@ -1104,8 +1149,8 @@ class InteractionCommandContext:
         previous = self.command
         try:
             self.command = command
-            cog = getattr(command, "cog", None)
-            if cog is not None and cog is not getattr(discord.utils, "MISSING", object()):
+            cog = _real_cog(command)
+            if cog is not None:
                 return await command.callback(cog, self, *args, **kwargs)
             return await command.callback(self, *args, **kwargs)
         finally:
@@ -1456,8 +1501,8 @@ async def _invoke_command(
         # v7.0.2 사용자 잠금·운영 통계가 버튼 실행에서도 유지되게 합니다.
         hook_attempted = True
         await command.call_before_hooks(ctx)  # type: ignore[arg-type]
-        cog = getattr(command, "cog", None)
-        if cog is not None and cog is not getattr(discord.utils, "MISSING", object()):
+        cog = _real_cog(command)
+        if cog is not None:
             await command.callback(cog, ctx, *args, **kwargs)
         else:
             await command.callback(ctx, *args, **kwargs)
@@ -1486,11 +1531,12 @@ async def _invoke_command(
         ctx.command_failed = True
         incident = f"UI-{int(interaction.id) % 100000000:08d}"
         print(f"[버튼 명령 오류:{incident}] command={command_name} {type(exc).__name__}: {exc}", flush=True)
-        await interaction.followup.send(
-            f"🫧 버튼 실행 중 문제가 생겼어요. 기존 `!{command_name}` 방식도 사용할 수 있어요.\n"
-            f"사건 번호: `{incident}`",
-            ephemeral=True,
-        )
+        if _allow_failure_notice(int(interaction.user.id), command_name):
+            await interaction.followup.send(
+                f"🫧 버튼 실행 중 문제가 생겼어요. 기존 `!{command_name}` 방식도 사용할 수 있어요.\n"
+                f"사건 번호: `{incident}`",
+                ephemeral=True,
+            )
     finally:
         if hook_attempted:
             try:

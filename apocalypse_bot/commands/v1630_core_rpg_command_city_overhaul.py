@@ -102,6 +102,7 @@ GROUP_SPECS: Dict[str, Tuple[Tuple[str, str, str, str, str, str], ...]] = {
         ("story3", "시즌 3 · 종말의 왕좌", "Season 3 · Throne of the End", "세 번째 이야기의 선택과 엔딩", "Third story choices and endings", "👑"),
         ("story4", "시즌 4 · 황혼의 종착역", "Season 4 · Twilight Terminal", "황혼선 이야기·여정·유산", "Twilight Line story, journey and legacy", "🚂"),
         ("story5", "시즌 5 · 잿빛 연합전선", "Season 5 · Ashen Front", "세계 상태·서버 투표·결정·연대기", "World state, server votes, decisions and chronicle", "📡"),
+        ("story6", "시즌 6 · 검은 태양의 귀환", "Season 6 · Return of the Black Sun", "서버 공동 투표·도시 지표·분기 결말", "Server-wide votes, city metrics and branching endings", "☀️"),
         ("onboarding", "가입·프로필·초보 안내", "Onboarding & Profile", "가입, 정보, 직업, 튜토리얼과 복귀 안내", "Registration, profile, jobs, tutorial and return guide", "🌱"),
         ("quests", "퀘스트·성장·업적", "Quests, Growth & Achievements", "오늘 할 일, 퀘스트, 레벨, 미션과 보상", "Daily tasks, quests, levels, missions and rewards", "🎯"),
         ("exploration", "생존 탐험·원정·사건", "Survival Exploration", "지역 정찰, 원정, 사건, 수사와 유물", "Scouting, expeditions, incidents, investigation and relics", "🧭"),
@@ -212,6 +213,20 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
         return "main", "story4"
     if _has(blob, "시즌 5", "시즌5", "잿빛 연합전선"):
         return "main", "story5"
+
+    # v17.0 season story and creator forge.
+    if module == "v1700_creator_forge_season6":
+        if _has(blob, "시즌6", "검은 태양", "season6", "black sun"):
+            return "main", "story6"
+        if _has(blob, "콘텐츠", "사용자사건", "creator", "communityevent", "eventforge"):
+            return "world", "creator"
+        if _has(blob, "스토리나침반", "storycompass"):
+            return "main", "codex"
+        if _has(blob, "권리증명", "ownerproof", "copyrightvault"):
+            return "system", "admin"
+        if _has(blob, "검수", "테스트", "패치노트", "audit", "runtime"):
+            return "system", "audit"
+        return "system", "legacy"
 
     # v16.8 solo roguelite remains visible in the main RPG exploration route.
     if module == "v1680_lone_survivor":
@@ -498,7 +513,7 @@ def _build_registry(bot: commands.Bot) -> List[CommandEntry]:
             is_group=isinstance(command, commands.Group),
         ))
 
-    story_rank = {"story1": 0, "story2": 1, "story3": 2, "story4": 3, "story5": 4}
+    story_rank = {"story1": 0, "story2": 1, "story3": 2, "story4": 3, "story5": 4, "story6": 5}
     rows.sort(key=lambda e: (
         0 if e.section == "main" else 1,
         story_rank.get(e.group, 10),
@@ -592,7 +607,7 @@ def _search(entries: Sequence[CommandEntry], query: str) -> List[CommandEntry]:
 
 def _story_route(entries: Sequence[CommandEntry]) -> List[CommandEntry]:
     priorities = ("상태", "시작", "선택", "장면", "기록", "도감", "수집", "여정", "유산", "재시작", "투표", "결정")
-    groups = ("story1", "story2", "story3", "story4", "story5")
+    groups = ("story1", "story2", "story3", "story4", "story5", "story6")
     result: List[CommandEntry] = []
     for group in groups:
         group_rows = [e for e in entries if e.group == group]
@@ -859,7 +874,7 @@ class NavButton(discord.ui.Button):
             await interaction.response.send_modal(CommandSearchModal(view))
             return
         elif action == "story":
-            view.set_special(_story_route(view.entries), _t(view.locale, "📖 메인 스토리 · 시즌 1→5", "📖 Main Story · Season 1→5"))
+            view.set_special(_story_route(view.entries), _t(view.locale, "📖 메인 스토리 · 시즌 1→6", "📖 Main Story · Season 1→6"))
         elif action == "casino":
             view.section, view.group = "play", "casino"
             view.special_entries = None; view.special_title = None; view.selected_index = None; view.page = 0
@@ -877,6 +892,10 @@ class NavButton(discord.ui.Button):
         elif action == "quick_more":
             view.quick_page = 1
         elif action == "quick_more2":
+            view.quick_page = 2
+        elif action == "quick_more3":
+            view.quick_page = 3
+        elif action == "quick_back3":
             view.quick_page = 2
         elif action == "quick_back2":
             view.quick_page = 1
@@ -906,13 +925,37 @@ class NavButton(discord.ui.Button):
                 await interaction.response.defer(thinking=True, ephemeral=True)
                 await _invoke_command(view.bot, interaction, command.qualified_name)
                 return
+        elif action == "season6":
+            command = view.bot.get_command("시즌6") or view.bot.get_command("season6")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "creator_forge":
+            command = view.bot.get_command("콘텐츠공방") or view.bot.get_command("creatorforge")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "custom_event":
+            command = view.bot.get_command("사용자사건") or view.bot.get_command("communityevent")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "runtime_clean":
+            command = view.bot.get_command("1700통합검수") or view.bot.get_command("v1700audit")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name, "상세")
+                return
         elif action == "story_continue":
             command = view.bot.get_command("스토리나침반") or view.bot.get_command("storycompass")
             if command is not None:
                 await interaction.response.defer(thinking=True, ephemeral=True)
                 await _invoke_command(view.bot, interaction, command.qualified_name)
                 return
-            view.set_special(_story_route(view.entries), _t(view.locale, "📖 메인 스토리 · 시즌 1→5", "📖 Main Story · Season 1→5"))
+            view.set_special(_story_route(view.entries), _t(view.locale, "📖 메인 스토리 · 시즌 1→6", "📖 Main Story · Season 1→6"))
         elif action == "survivor":
             command = view.bot.get_command("생존허브") or view.bot.get_command("survivorhub")
             if command is not None:
@@ -1072,7 +1115,7 @@ class CompleteCommandCenterView(discord.ui.View):
         prev = NavButton(self, "prev", "이전", "Previous", "◀️", row=3)
         nxt = NavButton(self, "next", "다음", "Next", "▶️", row=3)
         search = NavButton(self, "search", "전체 검색", "Search All", "🔎", discord.ButtonStyle.primary, row=3)
-        story = NavButton(self, "story", "시즌 1→5", "Season 1→5", "📖", discord.ButtonStyle.success, row=3)
+        story = NavButton(self, "story", "시즌 1→6", "Season 1→6", "📖", discord.ButtonStyle.success, row=3)
         prev.disabled = self.page <= 0
         nxt.disabled = self.page >= self.max_page()
         for item in (home, prev, nxt, search, story):
@@ -1097,11 +1140,17 @@ class CompleteCommandCenterView(discord.ui.View):
                 self.add_item(NavButton(self, "survivor", "생존 허브", "Survivor Hub", "👤", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "city", "도시 공방", "City Workshop", "🎨", row=4))
                 self.add_item(NavButton(self, "quick_more2", "솔로 원정", "Solo Expedition", "➡️", discord.ButtonStyle.primary, row=4))
-            else:
+            elif self.quick_page == 2:
                 self.add_item(NavButton(self, "lone_expedition", "솔로 원정", "Lone Survivor", "🌑", discord.ButtonStyle.success, row=4))
                 self.add_item(NavButton(self, "weekly_expedition", "주간 변이", "Weekly Mutation", "⚡", row=4))
                 self.add_item(NavButton(self, "expedition_codex", "원정 도감", "Expedition Codex", "📚", row=4))
                 self.add_item(NavButton(self, "expedition_record", "원정 기록", "Expedition Records", "🏆", row=4))
+                self.add_item(NavButton(self, "quick_more3", "시즌 6·공방", "Season 6 & Forge", "➡️", discord.ButtonStyle.primary, row=4))
+            else:
+                self.add_item(NavButton(self, "season6", "시즌 6", "Season 6", "☀️", discord.ButtonStyle.success, row=4))
+                self.add_item(NavButton(self, "creator_forge", "콘텐츠 공방", "Creator Forge", "🧩", discord.ButtonStyle.primary, row=4))
+                self.add_item(NavButton(self, "custom_event", "사용자 사건", "Community Events", "🎭", row=4))
+                self.add_item(NavButton(self, "runtime_clean", "17.0 점검", "v17 Audit", "🧹", row=4))
                 self.add_item(NavButton(self, "quick_back", "기본 메뉴", "Main Shortcuts", "⬅️", row=4))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -1428,7 +1477,7 @@ def register_v1630_core_rpg_command_city_overhaul(
             embed.add_field(name=_t(locale, "🌱 신규 생존자 안내", "🌱 New Survivor Guide"), value=_t(locale, "서버 입장 환영 패널에 시즌 1 시작·전체 명령·카지노·도박 버튼과 카테고리 설명을 추가했습니다.", "Member-join panels now include story, command, casino and gambling buttons."), inline=False)
             embed.add_field(name=_t(locale, "🏛️ 정부지원금", "🏛️ Government Relief"), value=_t(locale, "잔액 -10,000 이하일 때 24시간마다 최대 250,000 식량을 지원하며 지급 전후 변화를 기록합니다.", "Balances at -10,000 or below can receive up to 250,000 food every 24 hours with before/after records."), inline=False)
             embed.add_field(name=_t(locale, "⛏️ 결과 변화 표시", "⛏️ Result Change Display"), value=_t(locale, "채집 결과 카드에 이번 획득, 소모·수치 변화, 누적 횟수를 분리 표시합니다.", "Gathering cards now separate gains, stat changes and total runs."), inline=False)
-            embed.add_field(name=_t(locale, "📚 전체 명령 보존", "📚 Full Command Preservation"), value=_t(locale, f"런타임 등록 명령 {len(entries):,}개 · 5개 영역 · 44개 기능군 · 검색·실행 버튼 유지", f"{len(entries):,} runtime commands · 5 sections · 44 groups · search and execute preserved"), inline=False)
+            embed.add_field(name=_t(locale, "📚 전체 명령 보존", "📚 Full Command Preservation"), value=_t(locale, f"런타임 등록 명령 {len(entries):,}개 · 5개 영역 · 45개 기능군 · 검색·실행 버튼 유지", f"{len(entries):,} runtime commands · 5 sections · 44 groups · search and execute preserved"), inline=False)
             embed.add_field(name=_t(locale, "🧪 신규 검수", "🧪 New Audits"), value="`!명령어전수검수 상세` · `!도박분류검수 상세` · `!1631통합검수 상세`", inline=False)
             embed.set_footer(text=_t(locale, "기존 명령 삭제 0건 · 기존 저장 데이터 유지 · 2026-08-05", "0 legacy commands removed · existing save data preserved · 2026-08-05"))
             await ctx.send(embed=embed)
@@ -1479,7 +1528,7 @@ def register_v1630_core_rpg_command_city_overhaul(
         classified = sum(1 for e in entries if e.group in GROUP_INDEX)
         missing = [e.qualified_name for e in entries if e.group not in GROUP_INDEX]
         duplicate_names = len(entries) - len({e.qualified_name for e in entries})
-        story_counts = {group: sum(1 for e in entries if e.group == group) for group in ("story1", "story2", "story3", "story4", "story5")}
+        story_counts = {group: sum(1 for e in entries if e.group == group) for group in ("story1", "story2", "story3", "story4", "story5", "story6")}
         group_overflow = {group: count for group, count in ((g, sum(1 for e in entries if e.group == g)) for g in GROUP_INDEX) if count > PAGE_SIZE}
         checks = {
             "전체 등록 명령 분류": classified == len(entries),
@@ -1490,6 +1539,7 @@ def register_v1630_core_rpg_command_city_overhaul(
             "시즌 3 노출": story_counts["story3"] > 0,
             "시즌 4 노출": story_counts["story4"] > 0,
             "시즌 5 노출": story_counts["story5"] > 0,
+            "시즌 6 노출": story_counts.get("story6", 0) > 0,
             "드롭다운 25개 자동 분할": all(count <= PAGE_SIZE or group in group_overflow for group, count in ((g, sum(1 for e in entries if e.group == g)) for g in GROUP_INDEX)),
             "카지노 직접 노출": any(e.group == "casino" and e.qualified_name == "카지노" for e in entries),
             "도박 별도 기능군": any(e.group == "gambling" for e in entries),

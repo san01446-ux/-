@@ -17,7 +17,7 @@ import re
 import discord
 from discord.ext import commands
 
-from apocalypse_bot.commands.v600_game_center import _safe_embed, _safe_view
+from apocalypse_bot.commands.v600_game_center import _real_cog, _safe_embed, _safe_view
 from apocalypse_bot.commands import v1630_core_rpg_command_city_overhaul as hub
 
 VERSION = "16.6.1"
@@ -37,8 +37,8 @@ def _locale(ctx: commands.Context) -> str:
 
 
 async def _call_command_callback(command: commands.Command, ctx: commands.Context, *args: Any, **kwargs: Any) -> Any:
-    cog = getattr(command, "cog", None)
-    if cog is not None and cog is not getattr(discord.utils, "MISSING", object()):
+    cog = _real_cog(command)
+    if cog is not None:
         return await command.callback(cog, ctx, *args, **kwargs)
     return await command.callback(ctx, *args, **kwargs)
 

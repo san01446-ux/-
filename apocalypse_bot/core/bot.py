@@ -6001,6 +6001,13 @@ register_v1680_lone_survivor(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V17.0.0: BLACK SUN CREATOR ERA.
+# Runtime clean sweep, bilingual creator forge, community events, Season 6 branching server story and private owner proof.
+from apocalypse_bot.commands.v1700_creator_forge_season6 import register_v1700_creator_forge_season6
+register_v1700_creator_forge_season6(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 

@@ -22,7 +22,7 @@ from typing import Any, Callable, Deque, Dict, List, Mapping, MutableMapping, Op
 import discord
 from discord.ext import commands
 
-from apocalypse_bot.commands.v600_game_center import _safe_embed, _safe_view
+from apocalypse_bot.commands.v600_game_center import _real_cog, _safe_embed, _safe_view
 from apocalypse_bot.commands import v1630_core_rpg_command_city_overhaul as hub
 
 VERSION = "16.7.0"
@@ -77,9 +77,8 @@ async def _invoke(bot: commands.Bot, ctx: commands.Context, command_name: str, *
     previous = getattr(ctx, "command", None)
     try:
         ctx.command = command
-        cog = getattr(command, "cog", None)
-        missing = getattr(discord.utils, "MISSING", object())
-        if cog is not None and cog is not missing:
+        cog = _real_cog(command)
+        if cog is not None:
             result = command.callback(cog, ctx, *args)
         else:
             result = command.callback(ctx, *args)
