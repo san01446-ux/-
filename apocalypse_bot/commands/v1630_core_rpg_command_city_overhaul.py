@@ -213,6 +213,10 @@ def _classify(command: commands.Command) -> Tuple[str, str]:
     if _has(blob, "시즌 5", "시즌5", "잿빛 연합전선"):
         return "main", "story5"
 
+    # v16.8 solo roguelite remains visible in the main RPG exploration route.
+    if module == "v1680_lone_survivor":
+        return "main", "exploration"
+
     # World expansions and the city workshop.
     if module == "v1500_neon_abyss":
         if _has(blob, "도시꾸미", "도시부품", "도시사진", "도시전경", "연출설정", "연출도감", "지역보기", "citydecor", "citypart"):
@@ -872,8 +876,36 @@ class NavButton(discord.ui.Button):
             view.set_special(rows, _t(view.locale, "🌱 신규 생존자 첫걸음", "🌱 New Survivor Start"))
         elif action == "quick_more":
             view.quick_page = 1
+        elif action == "quick_more2":
+            view.quick_page = 2
+        elif action == "quick_back2":
+            view.quick_page = 1
         elif action == "quick_back":
             view.quick_page = 0
+        elif action == "lone_expedition":
+            command = view.bot.get_command("솔로원정") or view.bot.get_command("lonesurvivor")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "weekly_expedition":
+            command = view.bot.get_command("주간변이지역") or view.bot.get_command("weeklyanomaly")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "expedition_codex":
+            command = view.bot.get_command("원정도감") or view.bot.get_command("expeditioncodex")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
+        elif action == "expedition_record":
+            command = view.bot.get_command("솔로원정기록") or view.bot.get_command("loneexpeditionrecord")
+            if command is not None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await _invoke_command(view.bot, interaction, command.qualified_name)
+                return
         elif action == "story_continue":
             command = view.bot.get_command("스토리나침반") or view.bot.get_command("storycompass")
             if command is not None:
@@ -1059,11 +1091,17 @@ class CompleteCommandCenterView(discord.ui.View):
                 self.add_item(NavButton(self, "gambling", "도박", "Gambling", "🎲", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "favorites", "즐겨찾기", "Favorites", "⭐", row=4))
                 self.add_item(NavButton(self, "quick_more", "더보기", "More", "➡️", row=4))
-            else:
+            elif self.quick_page == 1:
                 self.add_item(NavButton(self, "story_continue", "스토리 계속", "Continue Story", "📖", discord.ButtonStyle.success, row=4))
                 self.add_item(NavButton(self, "today", "오늘 할 일", "Today", "🎯", row=4))
                 self.add_item(NavButton(self, "survivor", "생존 허브", "Survivor Hub", "👤", discord.ButtonStyle.primary, row=4))
                 self.add_item(NavButton(self, "city", "도시 공방", "City Workshop", "🎨", row=4))
+                self.add_item(NavButton(self, "quick_more2", "솔로 원정", "Solo Expedition", "➡️", discord.ButtonStyle.primary, row=4))
+            else:
+                self.add_item(NavButton(self, "lone_expedition", "솔로 원정", "Lone Survivor", "🌑", discord.ButtonStyle.success, row=4))
+                self.add_item(NavButton(self, "weekly_expedition", "주간 변이", "Weekly Mutation", "⚡", row=4))
+                self.add_item(NavButton(self, "expedition_codex", "원정 도감", "Expedition Codex", "📚", row=4))
+                self.add_item(NavButton(self, "expedition_record", "원정 기록", "Expedition Records", "🏆", row=4))
                 self.add_item(NavButton(self, "quick_back", "기본 메뉴", "Main Shortcuts", "⬅️", row=4))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

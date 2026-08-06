@@ -5994,6 +5994,13 @@ register_v1671_command_center_nameerror_hotfix(
     bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
 )
 
+# V16.8.0: LONE SURVIVOR.
+# Solo roguelite expedition with deterministic seeds, weekly mutations, NPC party, codex, resume and rescue.
+from apocalypse_bot.commands.v1680_lone_survivor import register_v1680_lone_survivor
+register_v1680_lone_survivor(
+    bot, get_user, check_registered, save_data, world_data, user_data, COMMAND_GUIDE_CATEGORIES,
+)
+
 from apocalypse_bot.core.slash_setup import register_grouped_slash_commands
 register_grouped_slash_commands(bot)
 
