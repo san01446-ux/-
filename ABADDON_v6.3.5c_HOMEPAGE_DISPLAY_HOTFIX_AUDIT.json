@@ -1,7 +1,0 @@
-{
-  "version": "6.3.5c",
-  "homepage_mining_image_fixed": true,
-  "hero_shortened": true,
-  "weather_command_present": false,
-  "weather_note": "No !날씨 command or external weather integration found in current bot source."
-}
