@@ -1,0 +1,11 @@
+{
+  "version": "6.3.7a",
+  "fixed_error": "NameError: name 'ebp' is not defined",
+  "fixed_file": "apocalypse_bot/commands/v633_equipment_crafting.py",
+  "removed_line": "ebp(image)",
+  "python_files_checked": 49,
+  "compile_errors": [],
+  "v633_top_level_call_expressions": [],
+  "discord_runtime_import": "not executed in build container because discord.py is not installed",
+  "standalone_ebp_image_lines": []
+}

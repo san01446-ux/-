@@ -1,0 +1,158 @@
+{
+  "version": "6.4.1",
+  "scope": "stabilization + text-first + server themes",
+  "python": {
+    "files": 53,
+    "compile_errors": [],
+    "ebp_calls": []
+  },
+  "storage_test": {
+    "passed": true,
+    "backup_recovery": true,
+    "invalid_payload_preserved": true
+  },
+  "command_guide": {
+    "categories": 17,
+    "limit": 25,
+    "ids_unique": true,
+    "category_ids": [
+      "start",
+      "life",
+      "shop",
+      "battle",
+      "frontier_ops",
+      "trade",
+      "casino",
+      "hardcore_arcade",
+      "interactive_arcade",
+      "story",
+      "pet",
+      "guild_party",
+      "quest",
+      "base",
+      "talk",
+      "stability_theme",
+      "server"
+    ],
+    "guide_tokens": 277,
+    "recent_expected": 52,
+    "recent_missing": []
+  },
+  "commands_static": {
+    "top_level_decorated_records": 478,
+    "tokens": 661,
+    "duplicate_tokens_before_replacement": [
+      "감염선물",
+      "랜덤이벤트도감",
+      "레버리지",
+      "선물거래",
+      "인카운트도감",
+      "조우도감"
+    ],
+    "intentional_replacement_tokens": [
+      "감염선물",
+      "랜덤이벤트도감",
+      "레버리지",
+      "선물거래",
+      "인카운트도감",
+      "조우도감"
+    ],
+    "unresolved_duplicate_tokens": [],
+    "replacement_evidence": {
+      "encounter_codex": "v632_life_visuals.py removes the v631 인카운트도감 command before replacement",
+      "futures_trade": "v640_interactive_arcade.py gets and removes the old 선물거래 command before replacement"
+    }
+  },
+  "text_first": {
+    "modules": {
+      "v631_life_visuals.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v632_life_visuals.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v633_equipment_crafting.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v634_equipment_menu.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v634_pet_visuals.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v635_visuals.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v39_casino.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v432_forge_live.py": {
+        "exists": true,
+        "marker": true
+      },
+      "v639_frontier_operations.py": {
+        "exists": true,
+        "marker": true
+      }
+    },
+    "all_marked": true,
+    "worldboss_images_preserved": 10,
+    "website_img_tags": 0
+  },
+  "website": {
+    "html": {
+      "commands.html": {
+        "parsed": true,
+        "img_tags": 0
+      },
+      "index.html": {
+        "parsed": true,
+        "img_tags": 0
+      },
+      "updates.html": {
+        "parsed": true,
+        "img_tags": 0
+      }
+    },
+    "local_missing": [],
+    "javascript_syntax_ok": true,
+    "javascript_detail": "syntax ok"
+  },
+  "runtime_limitations": "discord.py and a live Discord connection are unavailable in this build environment; actual buttons, permissions, DM and concurrent interactions require deployment smoke tests.",
+  "release": {
+    "zips": {
+      "ABADDON_v6.4.1_STABILITY_TEXT_FIRST_FULL_BOT.zip": {
+        "size_bytes": 1801806,
+        "entries": 123,
+        "testzip": null,
+        "forbidden_entries": []
+      },
+      "ABADDON_v6.4.1_STABILITY_TEXT_FIRST_PATCH_ONLY.zip": {
+        "size_bytes": 154827,
+        "entries": 15,
+        "testzip": null,
+        "forbidden_entries": []
+      },
+      "ABADDON_OFFICIAL_SITE_v6.4.1_STABILITY_TEXT_FIRST_UPLOAD.zip": {
+        "size_bytes": 76506,
+        "entries": 40,
+        "testzip": null,
+        "forbidden_entries": []
+      },
+      "ABADDON_OFFICIAL_SITE_v6.4.1_STABILITY_TEXT_FIRST_PATCH_ONLY.zip": {
+        "size_bytes": 39272,
+        "entries": 6,
+        "testzip": null,
+        "forbidden_entries": []
+      }
+    },
+    "all_zip_tests_passed": true
+  }
+}

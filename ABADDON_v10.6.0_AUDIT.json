@@ -1,0 +1,173 @@
+{
+  "version": "10.6.0",
+  "generated_at_kst": "2026-08-03T16:29:14+09:00",
+  "summary": {
+    "total": 31,
+    "passed": 31,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "Python AST parse",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "name": "Python compileall",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Pure rule tests",
+      "status": "PASS",
+      "detail": ".........                                                                [100%]\n9 passed in 0.07s"
+    },
+    {
+      "name": "Legacy card-rule smoke test",
+      "status": "PASS",
+      "detail": "V1050_RULE_TESTS=PASS"
+    },
+    {
+      "name": "v10.6 incremental command collisions",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "name": "New commands declared",
+      "status": "PASS",
+      "detail": "['게임진행검수', '섯다', '카드게임룰']"
+    },
+    {
+      "name": "16 authentic card modes",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Go-Stop real turn UI",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Go-Stop events",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Poker staged streets",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Holdem blinds",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Seotda staged engine",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Standard Baccarat engine",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Negative chip storage",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Uncapped debt betting",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Uncapped hwatu settlement",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "v10.6 before English sync",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "AI wiring all authentic sessions",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Direct AI commands rebound",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Three-player Go-Stop AI fill",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Website HTML parse",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "English HTML Hangul leakage",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Korean/English version sync",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Website 16 modes and commands",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Website internal links",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Website JavaScript syntax",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "JSON parse",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Existing bot files preserved",
+      "status": "PASS",
+      "detail": "missing=0 []"
+    },
+    {
+      "name": "Existing website files preserved",
+      "status": "PASS",
+      "detail": "missing=0 []"
+    },
+    {
+      "name": "Bot ZIP integrity",
+      "status": "PASS",
+      "detail": "581 files; ZipFile.testzip returned no corrupt member"
+    },
+    {
+      "name": "Website ZIP integrity",
+      "status": "PASS",
+      "detail": "286 files; ZipFile.testzip returned no corrupt member"
+    }
+  ],
+  "runtime_limitations": [
+    "discord.py is unavailable in the offline build container.",
+    "No Discord token or test guild was available, so live interactions must follow the deployment guide."
+  ],
+  "pytest_output": ".........                                                                [100%]\n9 passed in 0.07s",
+  "command_manifest": "ABADDON_COMMAND_MANIFEST_v10.6.0.json",
+  "packaged_at_kst": "2026-08-03T16:29:57+09:00"
+}

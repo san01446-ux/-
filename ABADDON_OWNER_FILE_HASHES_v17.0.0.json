@@ -1,0 +1,72 @@
+{
+  "project": "ABADDON Discord RPG Bot",
+  "release": "v17.0.0",
+  "project_uuid": "abaddon-7be56c88-2026-17-black-sun",
+  "files": [
+    {
+      "path": "apocalypse_bot/commands/v1700_creator_forge_season6.py",
+      "bytes": 67736,
+      "sha256": "12dbb98b81841aa59918281b819c08f5396fd674497288d9066ef383ddbfe863"
+    },
+    {
+      "path": "apocalypse_bot/commands/v600_game_center.py",
+      "bytes": 198865,
+      "sha256": "5877fe773e4eb0e3fb863db553807bf2dc978d9ade0176866ddb9462de6561b1"
+    },
+    {
+      "path": "apocalypse_bot/commands/v1670_live_ops_polish.py",
+      "bytes": 40184,
+      "sha256": "b59c03f2ef0f3d20e0614002e28531a760cc3c3b2fbf8b8bf58cee834b7ca288"
+    },
+    {
+      "path": "apocalypse_bot/commands/v1661_runtime_interaction_hotfix.py",
+      "bytes": 13414,
+      "sha256": "bab493db6ae4f64749bf9634fe98339755662a90a2346350be86c02294d4be31"
+    },
+    {
+      "path": "apocalypse_bot/commands/v710_growth_loop.py",
+      "bytes": 43494,
+      "sha256": "1e5ed0003a7e74119248d21c1556477000d0faae6279e80c3f35da3265761c49"
+    },
+    {
+      "path": "apocalypse_bot/commands/v1630_core_rpg_command_city_overhaul.py",
+      "bytes": 108638,
+      "sha256": "48032b92630f585ef919fd5f73f8e3ee4f8e8243082175eae14f925a1dd951e1"
+    },
+    {
+      "path": "apocalypse_bot/core/bot.py",
+      "bytes": 264098,
+      "sha256": "c1812684cef91990e523598fd79ee3ba2ba9efbdb500756e9d488443a25550ee"
+    },
+    {
+      "path": "ABADDON_COMMAND_MANIFEST_v17.0.0.json",
+      "bytes": 405202,
+      "sha256": "cb719e19b9374a229fc87faf4d33c6a417866e46b96cea4ece6b775b4133b24b"
+    },
+    {
+      "path": "ABADDON_v17.0.0_COMMAND_CATEGORY_AUDIT.csv",
+      "bytes": 155188,
+      "sha256": "a375122225b6fa8a64716986ad0f7f8165a9e8b686f7e0b91d93cd06893f611e"
+    },
+    {
+      "path": "ABADDON_v17.0.0_AUDIT.json",
+      "bytes": 1635,
+      "sha256": "8d3422636ffc4928428325b249dc08e723b915e2422cb82cb304238ccda66f0d"
+    },
+    {
+      "path": "ABADDON_v17.0.0_PATCH_NOTES_KO.txt",
+      "bytes": 2228,
+      "sha256": "03293fc99e7189969091be081e8c606642dcb3fcbbfbd6aa19d6dbbc907e0e86"
+    },
+    {
+      "path": "ABADDON_v17.0.0_DEPLOY_TEST_GUIDE_KO.txt",
+      "bytes": 1637,
+      "sha256": "82c226d602e881859f8cf741eaee53cb07c075c65db1ba2e1883e38b945627ea"
+    },
+    {
+      "path": "ABADDON_v17.0.0_BLACK_SUN_CREATOR_SPEC_KO.md",
+      "bytes": 1711,
+      "sha256": "e93719f96f559b9ad86d1f26de3e29f1b6a8abb1be2ae13098de6c3b1ef78932"
+    }
+  ]
+}

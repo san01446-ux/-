@@ -1,0 +1,7 @@
+Copyright © 2026 정태민.
+ABADDON original project planning, story, code integration, UI text,
+documentation, original and edited assets. All rights reserved.
+
+This private notice does not claim ownership of third-party platforms,
+user content, generic game rules, public-domain material, or separately
+licensed components.

@@ -1,0 +1,28 @@
+ABADDON v6.3.3 — 이름 기반 장비·보물 이미지 패치
+
+[장비]
+- 현재 ITEM_DB의 장비 70종 전체를 직접 읽어 이름별 전용 1280x720 이미지 생성
+- 장비 이름, 등급, 설명, 전투력과 장비 유형이 카드에 표시
+- 장비 획득/장착/정보/외형/제작/강화 성공·실패 결과에서 실제 해당 장비 이미지 사용
+- 강화 +5/+7/+10/+12/+15/+18/+20 단계에 따라 이미지 프레임·오라·입자·광륜 증가
+- 제작 실패는 해당 장비 이미지에 붉은 불안정 효과와 균열 적용
+
+[보물]
+- 보물 감정 시스템의 E~A 보물 20종 전체를 이름별 전용 이미지로 제작
+- 감정 완료 시 실제 감정된 보물 이름의 이미지 표시
+- 미감정 발견 단계에서는 같은 보물 이미지를 어둡게 봉인 처리하여 정체를 숨김
+- 감정사, 감정 확률, 가치, 등급 상승, 매입 배율은 변경하지 않음
+
+[잘림 수정]
+- 위쪽 인물이 잘리던 알바 실패 이미지 1장을 안전 구도의 작업 사고 이미지로 교체
+- 신규 장비·보물 이미지는 모두 1280x720, 상하좌우 안전 여백 적용
+
+[변경 파일]
+- apocalypse_bot/commands/v633_equipment_crafting.py
+- apocalypse_bot/commands/v432_forge_live.py
+- apocalypse_bot/assets/v633/equipment/* (70장)
+- apocalypse_bot/assets/v633/treasures/* (20장)
+- apocalypse_bot/assets/v633/equipment_manifest.json
+- apocalypse_bot/assets/v633/treasure_manifest.json
+- apocalypse_bot/assets/v631/activities/work/failure/01.jpg
+- requirements.txt (Pillow 추가)

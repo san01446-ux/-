@@ -1,0 +1,249 @@
+{
+  "project": "ABADDON Discord RPG Bot",
+  "version": "17.4.0",
+  "release": "SYSTEM FUSION",
+  "generated_at": "2026-08-06T23:14:20.114918+09:00",
+  "summary": {
+    "checks_total": 43,
+    "checks_passed": 43,
+    "checks_failed": 0,
+    "python_files": 125,
+    "source_command_declarations": 1330,
+    "unique_access_names": 3084,
+    "raw_access_tokens": 3171,
+    "new_declared_commands": 8,
+    "factions": 5,
+    "daily_contracts": 3,
+    "weekly_contracts": 1,
+    "legacy_command_deletions": 0,
+    "legacy_save_deletions": 0
+  },
+  "checks": [
+    {
+      "name": "Python syntax",
+      "ok": true,
+      "detail": "125 files"
+    },
+    {
+      "name": "v17.4 registration",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 생존단말기",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 의뢰소",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 의뢰수락",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 의뢰진행",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 생산센터",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 세력평판",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 1740융합검수",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "feature token 1740통합검수",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub \"terminal\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub \"contracts\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub \"production\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub quick_more6",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub survival_terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub contract_office",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub production_center",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "command hub faction_reputation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "legacy contract alias preserved safely",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "manifest version",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "manifest command count",
+      "ok": true,
+      "detail": "1330"
+    },
+    {
+      "name": "new command collisions",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "index.html v17.4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "index.html duplicate ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "index.html local refs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/index.html v17.4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/index.html duplicate ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/index.html local refs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "commands.html v17.4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "commands.html duplicate ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "commands.html local refs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/commands.html v17.4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/commands.html duplicate ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/commands.html local refs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "updates.html v17.4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "updates.html duplicate ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "updates.html local refs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/updates.html v17.4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/updates.html duplicate ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "en/updates.html local refs",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "KO config version",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "EN config version",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "v17.4 pure logic smoke",
+      "ok": true,
+      "detail": "root/faction tiers/deterministic 3+1 contract board"
+    }
+  ],
+  "runtime_limitations": [
+    "No live Discord Gateway login was performed.",
+    "No real Discord button payload, permissions, concurrent clicks, or interaction expiry was exercised.",
+    "Restart persistence was not executed against a production DATA_FILE.",
+    "Existing historical alias collisions outside the v17.4 namespace remain guarded by the v13.3 registry guard."
+  ],
+  "notes": [
+    "The historical !계약수락 command remains available with !납품계약; the generic !의뢰수락 name is assigned to the unified contract office.",
+    "The preserved !단말기/!생존단말기 and !평판/!세력평판 command objects are upgraded in place, so legacy entry points remain valid.",
+    "Korean and English presentation branches remain separated by the existing locale resolver."
+  ]
+}

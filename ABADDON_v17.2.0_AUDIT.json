@@ -1,0 +1,74 @@
+{
+  "version": "17.2.0",
+  "generated_at": "2026-08-06T06:37:22.980234+00:00",
+  "summary": {
+    "passed": 34,
+    "total": 34,
+    "commands": 1274,
+    "access_names": 3046,
+    "python_files": 123,
+    "new_alias_conflicts": 0,
+    "source_command_decorators": 1308,
+    "command_decorator_delta_vs_v17_0": 23
+  },
+  "checks": {
+    "python_compile_all": true,
+    "v1720_loader_registered": true,
+    "creator_group_conversion": true,
+    "creator_classification_before_generic": true,
+    "command_hub_quick_page_5": true,
+    "all_new_commands_declared": true,
+    "living_world_daily_state": true,
+    "faction_conflict_and_broadcast": true,
+    "season6_echo": true,
+    "six_regions": true,
+    "eight_npcs": true,
+    "relationship_stats": true,
+    "romance_route": true,
+    "betrayal_system": true,
+    "ko_en_separation": true,
+    "no_new_alias_conflicts": true,
+    "legacy_season6_preserved": true,
+    "legacy_lone_survivor_preserved": true,
+    "ko_config_v1720": true,
+    "ko_v1720_section": true,
+    "ko_v1720_updates": true,
+    "ko_duplicate_ids": true,
+    "en_config_v1720": true,
+    "en_v1720_section": true,
+    "en_v1720_updates": true,
+    "en_duplicate_ids": true,
+    "pure_function_smoke": true,
+    "source_python_compile_all": true,
+    "v1700_source_files_preserved": true,
+    "command_decorators_additive": true,
+    "site_all_local_refs_exist": true,
+    "site_all_html_ids_unique": true,
+    "release_docs_present": true,
+    "private_owner_proof_excluded_from_site": true
+  },
+  "compile_errors": [],
+  "new_alias_conflicts": [],
+  "limitations": [
+    "No Discord token/Gateway available in the build environment.",
+    "Button interactions, permissions, concurrent users, restart persistence and actual Discord payload delivery require deployment-server checks."
+  ],
+  "source_comparison": {
+    "v17.0_command_decorators": 1285,
+    "v17.2_command_decorators": 1308,
+    "delta": 23,
+    "removed_command_source_files": [],
+    "added_command_source_files": [
+      "v1720_living_world_bonds.py"
+    ]
+  },
+  "runtime_smoke": {
+    "passed": true,
+    "stdout": "PURE_SMOKE_OK clear power 8",
+    "stderr": ""
+  },
+  "site_validation": {
+    "missing_local_refs": [],
+    "duplicate_id_pages": []
+  }
+}
